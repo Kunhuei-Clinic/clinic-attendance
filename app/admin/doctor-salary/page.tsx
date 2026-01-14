@@ -1,0 +1,387 @@
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import { createClient } from '@supabase/supabase-js';
+import { Stethoscope, Settings, Printer, Save, X, Trash2, Lock, Unlock, FileEdit, Landmark, PenLine, Sparkles, ShieldAlert, ChevronLeft, ChevronRight } from 'lucide-react';
+import PayslipModal from './PayslipModal';
+
+const supabaseUrl = 'https://ucpkvptnhgbtmghqgbof.supabase.co';
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVjcGt2cHRuaGdidG1naHFnYm9mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUzNDg5MTAsImV4cCI6MjA4MDkyNDkxMH0.zdLx86ey-QywuGD-S20JJa7ZD6xHFRalAMRN659bbuo';
+const supabase = createClient(supabaseUrl, supabaseKey);
+
+type Item = { id: number; name: string; amount: number; rate?: number };
+
+const DEFAULT_BASE_PAY = {
+    mode: 'guarantee', licenseFee: 0, guarantee: 0, hourlyRate: 0,
+    actualHours: 0, standardHours: 0, workPay: 0, adjustment: 0,
+    insurance: 0, finalBase: 0, insurance_labor: 0, insurance_health: 0
+};
+
+const DoctorSettingsModal = ({ doctor, onClose, onUpdate }: any) => {
+    const [form, setForm] = useState({ ...doctor });
+    const handleSave = async () => {
+        await supabase.from('staff').update({
+            doctor_base_mode: form.doctor_base_mode, doctor_license_fee: form.doctor_license_fee,
+            doctor_guarantee_salary: form.doctor_guarantee_salary, doctor_hourly_rate: form.doctor_hourly_rate,
+            doctor_nhi_rate: form.doctor_nhi_rate, doctor_hours_per_shift: form.doctor_hours_per_shift,
+            insurance_labor: form.insurance_labor, insurance_health: form.insurance_health
+        }).eq('id', doctor.id);
+        onUpdate(); onClose();
+    };
+    return (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
+                <div className="bg-teal-700 text-white p-4 flex justify-between items-center"><h3 className="font-bold flex items-center gap-2"><Settings size={18} /> 參數設定</h3><button onClick={onClose}><X size={20} /></button></div>
+                <div className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
+                    <div className="bg-slate-50 p-3 rounded border"><label className="text-xs font-bold text-slate-500 block mb-2">計算模式</label><div className="flex gap-2"><button onClick={() => setForm({ ...form, doctor_base_mode: 'guarantee' })} className={`flex-1 py-1.5 rounded text-sm font-bold border ${form.doctor_base_mode !== 'license' ? 'bg-teal-600 text-white border-teal-600' : 'bg-white text-slate-500'}`}>保底 +/- 時數</button><button onClick={() => setForm({ ...form, doctor_base_mode: 'license' })} className={`flex-1 py-1.5 rounded text-sm font-bold border ${form.doctor_base_mode === 'license' ? 'bg-teal-600 text-white border-teal-600' : 'bg-white text-slate-500'}`}>掛牌費 + 時薪</button></div></div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="col-span-2"><label className="text-xs font-bold text-slate-500">{form.doctor_base_mode === 'license' ? '每月掛牌費' : '每月保障薪'}</label><input type="number" value={form.doctor_base_mode === 'license' ? form.doctor_license_fee : form.doctor_guarantee_salary} onChange={e => setForm({ ...form, [form.doctor_base_mode === 'license' ? 'doctor_license_fee' : 'doctor_guarantee_salary']: Number(e.target.value) })} className="w-full border p-2 rounded text-right font-bold text-blue-700" /></div>
+                        <div><label className="text-xs font-bold text-slate-500">計算時薪</label><input type="number" value={form.doctor_hourly_rate} onChange={e => setForm({ ...form, doctor_hourly_rate: Number(e.target.value) })} className="w-full border p-2 rounded text-right" /></div>
+                        <div><label className="text-xs font-bold text-slate-500">每診標準時數</label><input type="number" value={form.doctor_hours_per_shift} onChange={e => setForm({ ...form, doctor_hours_per_shift: Number(e.target.value) })} className="w-full border p-2 rounded text-right" /></div>
+                        <div><label className="text-xs font-bold text-slate-500">健保抽成率</label><input type="number" step="0.01" value={form.doctor_nhi_rate} onChange={e => setForm({ ...form, doctor_nhi_rate: Number(e.target.value) })} className="w-full border p-2 rounded text-right" /></div>
+                    </div>
+                    <div className="border-t pt-4 grid grid-cols-2 gap-4"><div><label className="text-xs font-bold text-slate-500">勞保自付</label><input type="number" value={form.insurance_labor} onChange={e => setForm({ ...form, insurance_labor: Number(e.target.value) })} className="w-full border p-2 rounded text-right text-red-500" /></div><div><label className="text-xs font-bold text-slate-500">健保自付</label><input type="number" value={form.insurance_health} onChange={e => setForm({ ...form, insurance_health: Number(e.target.value) })} className="w-full border p-2 rounded text-right text-red-500" /></div></div>
+                    <button onClick={handleSave} className="w-full bg-teal-600 text-white py-3 rounded-xl font-bold hover:bg-teal-700 mt-4">儲存設定</button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+export default function DoctorSalaryPage() {
+    const [currentMonth, setCurrentMonth] = useState(new Date().toISOString().slice(0, 7));
+    const [ppfTargetMonth, setPpfTargetMonth] = useState('');
+    const [doctors, setDoctors] = useState<any[]>([]);
+    const [selectedDoctorId, setSelectedDoctorId] = useState<number | null>(null);
+    const [rosterList, setRosterList] = useState<any[]>([]);
+    const [basePayData, setBasePayData] = useState<any>(DEFAULT_BASE_PAY);
+    
+    const [ppfData, setPpfData] = useState({ 
+        patient_count: 0, nhi_points: 0, reg_fee_deduction: 0, 
+        clinic_days: 0, transfer_amount: 0, 
+        self_pay_items: [] as Item[], 
+        extra_items: [] as Item[], 
+        past_base_salary: 0,
+        status: 'draft' 
+    });
+
+    const [isSaving, setIsSaving] = useState(false);
+    const [showSettings, setShowSettings] = useState(false);
+    const [showPayslip, setShowPayslip] = useState(false);
+
+    useEffect(() => { const d = new Date(currentMonth); d.setMonth(d.getMonth() - 2); setPpfTargetMonth(d.toISOString().slice(0, 7)); }, [currentMonth]);
+    useEffect(() => { fetchDoctors(); }, []);
+    useEffect(() => { if (selectedDoctorId && currentMonth && ppfTargetMonth) { calculateBasePay(); fetchPpfRecord(); } }, [selectedDoctorId, currentMonth, ppfTargetMonth]);
+
+    const fetchDoctors = async () => { const { data } = await supabase.from('staff').select('*').eq('role', '醫師').order('id'); if (data) { setDoctors(data); if (data.length > 0 && !selectedDoctorId) setSelectedDoctorId(data[0].id); } };
+
+    const calculateBasePay = async () => {
+        if (!selectedDoctorId) return;
+        const doctor = doctors.find(d => d.id === selectedDoctorId);
+        if (!doctor) return;
+        const start = `${currentMonth}-01`;
+        const [y, m] = currentMonth.split('-').map(Number);
+        const nextMonth = new Date(y, m, 1).toISOString();
+        const { data: roster } = await supabase.from('doctor_roster').select('*').eq('doctor_id', selectedDoctorId).gte('date', start).lt('date', nextMonth).order('date');
+        setRosterList(roster || []);
+        let actualHours = 0;
+        roster?.forEach((r: any) => {
+            if (r.start_time && r.end_time) {
+                const [sh, sm] = r.start_time.split(':').map(Number); const [eh, em] = r.end_time.split(':').map(Number);
+                actualHours += Math.max(0, (eh * 60 + em) - (sh * 60 + sm)) / 60;
+            } else actualHours += (Number(doctor.doctor_hours_per_shift) || 3.5);
+        });
+        
+        const insurance_labor = (Number(doctor.insurance_labor) || 0);
+        const insurance_health = (Number(doctor.insurance_health) || 0);
+        const hourlyRate = Number(doctor.doctor_hourly_rate) || 0;
+        
+        const newData = {
+            mode: doctor.doctor_base_mode || 'guarantee',
+            licenseFee: Number(doctor.doctor_license_fee) || 0,
+            guarantee: Number(doctor.doctor_guarantee_salary) || 0,
+            hourlyRate,
+            actualHours,
+            standardHours: 0,
+            workPay: 0,
+            adjustment: 0,
+            finalBase: 0,
+            insurance_labor, 
+            insurance_health
+        };
+
+        if (doctor.doctor_base_mode === 'license') {
+            newData.workPay = Math.round(actualHours * hourlyRate);
+            newData.finalBase = newData.licenseFee + newData.workPay;
+        } else {
+            const weeklyShifts = Number(doctor.doctor_shifts_per_week) || 0;
+            newData.standardHours = (weeklyShifts * (Number(doctor.doctor_hours_per_shift) || 3.5) / 7) * 30;
+            newData.adjustment = Math.round((actualHours - newData.standardHours) * hourlyRate);
+            newData.finalBase = newData.guarantee + newData.adjustment;
+        }
+        setBasePayData(newData);
+    };
+
+    const fetchPpfRecord = async () => {
+        if (!selectedDoctorId || !ppfTargetMonth) return;
+        const doctor = doctors.find(d => d.id === selectedDoctorId);
+        
+        const { data } = await supabase.from('doctor_ppf').select('*').eq('doctor_id', selectedDoctorId).eq('target_month', ppfTargetMonth).single();
+        
+        let historicalBasePay = 0;
+        const { data: historyData } = await supabase.from('doctor_ppf').select('actual_base_pay').eq('doctor_id', selectedDoctorId).eq('paid_in_month', ppfTargetMonth).single();
+        if (historyData) historicalBasePay = Number(historyData.actual_base_pay);
+        else historicalBasePay = Number(doctor?.doctor_guarantee_salary) || 0;
+
+        if (data) {
+            setPpfData({ 
+                patient_count: Number(data.patient_count) || 0, nhi_points: Number(data.nhi_points) || 0, reg_fee_deduction: Number(data.reg_fee_deduction) || 0, 
+                clinic_days: Number(data.clinic_days) || 0, transfer_amount: Number(data.transfer_amount) || 0, 
+                self_pay_items: Array.isArray(data.self_pay_items) ? data.self_pay_items : [], 
+                extra_items: Array.isArray(data.extra_items) ? data.extra_items : [], 
+                past_base_salary: data.base_salary_at_time !== null ? Number(data.base_salary_at_time) : historicalBasePay, 
+                status: data.status || 'draft'
+            });
+        } else {
+            let templateItems: Item[] = [];
+            if (doctor?.doctor_self_pay_template) {
+                templateItems = doctor.doctor_self_pay_template.map((t: any) => ({ id: Date.now() + Math.random(), name: t.name, amount: 0, rate: t.rate }));
+            }
+            setPpfData({ 
+                patient_count: 0, nhi_points: 0, reg_fee_deduction: 0, 
+                clinic_days: 0, transfer_amount: 0, 
+                self_pay_items: templateItems, extra_items: [], 
+                past_base_salary: historicalBasePay, 
+                status: 'draft'
+            });
+        }
+    };
+
+    const updateItem = (listName: 'self_pay_items'|'extra_items', i: number, f: string, v: any) => { const n = [...ppfData[listName]] as any[]; n[i] = { ...n[i], [f]: v }; setPpfData(p => ({ ...p, [listName]: n })); };
+    const removeItem = (listName: 'self_pay_items'|'extra_items', i: number) => { setPpfData(p => ({ ...p, [listName]: p[listName].filter((_, x) => x !== i) })); };
+    const addItem = (listName: 'self_pay_items'|'extra_items') => { setPpfData(p => ({ ...p, [listName]: [...p[listName], { id: Date.now(), name: listName==='extra_items'?'項目':'自費', amount: 0, rate: listName==='self_pay_items'?30:undefined }] })); };
+
+    // 切換月份函數
+    const changeMonth = (direction: 'prev' | 'next') => {
+        const [year, month] = currentMonth.split('-').map(Number);
+        const date = new Date(year, month - 1, 1);
+        if (direction === 'prev') {
+            date.setMonth(date.getMonth() - 1);
+        } else {
+            date.setMonth(date.getMonth() + 1);
+        }
+        const newMonth = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        setCurrentMonth(newMonth);
+    };
+
+    const calculatePPF = () => {
+        const doctor = doctors.find(d => d.id === selectedDoctorId);
+        const nhiRate = Number(doctor?.doctor_nhi_rate) || 0.8;
+        const nhiTotal = (ppfData.nhi_points * nhiRate) - ppfData.reg_fee_deduction;
+        const selfPayTotal = ppfData.self_pay_items.reduce((s: number, i: any) => s + (Number(i.amount) * (Number(i.rate) / 100)), 0);
+        const extraTotal = ppfData.extra_items.reduce((s: number, i: any) => s + Number(i.amount), 0);
+        
+        // 🟢 修正：totalPerformance 只包含健保 PPF，不包含自費項目
+        const totalPerformance = Math.round(nhiTotal);
+        // 🟢 修正：bonus 只比較健保 PPF 與保障薪
+        const bonus = Math.max(0, totalPerformance - ppfData.past_base_salary);
+        return { nhiTotal, selfPayTotal, extraTotal, totalPerformance, bonus, nhiRate };
+    };
+
+    const ppfResult = calculatePPF();
+    const currentDoctor = doctors.find(d => d.id === selectedDoctorId);
+    const isLocked = ppfData.status === 'locked';
+
+    // 🟢 最終實領計算 (即時算出來供顯示與儲存)
+    // 🟢 修正：自費項目 (selfPayTotal) 現在加在特殊費用中，不參與 PPF bonus 計算
+    const finalNetPay = (basePayData.finalBase || 0) + ppfResult.bonus + ppfResult.selfPayTotal + ppfResult.extraTotal - (basePayData.insurance_labor || 0) - (basePayData.insurance_health || 0);
+    const remainingCash = finalNetPay - ppfData.transfer_amount;
+
+    const saveData = async (status: 'draft' | 'locked') => {
+        if (!selectedDoctorId) return alert("請先選擇醫師");
+        setIsSaving(true);
+        const { error } = await supabase.from('doctor_ppf').upsert({ 
+            doctor_id: selectedDoctorId, target_month: ppfTargetMonth, 
+            patient_count: ppfData.patient_count, nhi_points: ppfData.nhi_points, reg_fee_deduction: ppfData.reg_fee_deduction, 
+            clinic_days: ppfData.clinic_days, transfer_amount: ppfData.transfer_amount, 
+            actual_base_pay: basePayData.finalBase, 
+            self_pay_items: ppfData.self_pay_items, extra_items: ppfData.extra_items,
+            total_performance: ppfResult.totalPerformance, 
+            base_salary_at_time: ppfData.past_base_salary, 
+            final_ppf_bonus: ppfResult.bonus, paid_in_month: currentMonth, status: status,
+            // 🟢 關鍵修正：這裡把算好的 net_pay 和 cash_amount 寫入資料庫
+            net_pay: finalNetPay,
+            cash_amount: remainingCash
+        }, { onConflict: 'doctor_id, target_month' });
+        setIsSaving(false);
+        if (!error) { 
+            if (status === 'locked') { const tmpl = ppfData.self_pay_items.map(i => ({ name: i.name, rate: i.rate })); await supabase.from('staff').update({ doctor_self_pay_template: tmpl }).eq('id', selectedDoctorId); }
+            setPpfData(prev => ({ ...prev, status }));
+            alert(status === 'locked' ? '✅ 已結算並封存！' : '💾 草稿已暫存'); 
+        } else alert('儲存失敗: ' + error.message);
+    };
+
+    return (
+        <div className="w-full animate-fade-in p-4 pb-24">
+            <div className="flex justify-between items-center mb-6 bg-white p-4 rounded-xl shadow-sm border">
+                <h2 className="text-xl font-bold flex items-center gap-2 text-slate-800"><Stethoscope className="text-teal-600" /> 醫師薪資結算</h2>
+                <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-lg border">
+                    <button 
+                        onClick={() => changeMonth('prev')} 
+                        className="p-1.5 hover:bg-slate-200 rounded transition-colors flex items-center justify-center"
+                        title="上個月"
+                    >
+                        <ChevronLeft size={18} className="text-slate-600" />
+                    </button>
+                    <span className="text-sm font-bold text-slate-500">發薪月份:</span>
+                    <input 
+                        type="month" 
+                        value={currentMonth} 
+                        onChange={(e) => setCurrentMonth(e.target.value)} 
+                        className="bg-transparent font-bold text-slate-700 outline-none min-w-[140px]" 
+                    />
+                    <button 
+                        onClick={() => changeMonth('next')} 
+                        className="p-1.5 hover:bg-slate-200 rounded transition-colors flex items-center justify-center"
+                        title="下個月"
+                    >
+                        <ChevronRight size={18} className="text-slate-600" />
+                    </button>
+                </div>
+            </div>
+            <div className="flex gap-2 overflow-x-auto pb-4 mb-2 items-center">{doctors.map(d => (<button key={d.id} onClick={() => setSelectedDoctorId(d.id)} className={`px-4 py-2 rounded-full font-bold whitespace-nowrap transition ${selectedDoctorId === d.id ? 'bg-teal-600 text-white shadow-lg' : 'bg-white text-slate-500 border hover:bg-slate-50'}`}>{d.name}</button>))}{selectedDoctorId && (<><div className="w-px h-6 bg-slate-300 mx-2"></div><button onClick={() => setShowSettings(true)} className="flex items-center gap-1 px-3 py-1.5 rounded-full border border-slate-300 text-slate-600 text-xs font-bold hover:bg-slate-100"><Settings size={14} /> 參數</button><button onClick={() => setShowPayslip(true)} className={`flex items-center gap-1 px-3 py-1.5 rounded-full border text-xs font-bold ${basePayData ? 'border-blue-300 text-blue-600 hover:bg-blue-50' : 'border-gray-200 text-gray-300 cursor-not-allowed'}`}><Printer size={14} /> 薪資單</button></>)}</div>
+
+            {showSettings && currentDoctor && <DoctorSettingsModal doctor={currentDoctor} onClose={() => setShowSettings(false)} onUpdate={() => { fetchDoctors(); calculateBasePay(); }} />}
+
+            {showPayslip && currentDoctor && (
+                <PayslipModal
+                    data={{
+                        doctorName: currentDoctor.name,
+                        baseAmount: basePayData.mode === 'license' ? basePayData.licenseFee : basePayData.guarantee,
+                        workAmount: basePayData.mode === 'license' ? basePayData.workPay : basePayData.adjustment,
+                        ppfBonus: ppfResult.bonus,
+                        extraTotal: ppfResult.extraTotal,
+                        insLabor: basePayData.insurance_labor || 0, 
+                        insHealth: basePayData.insurance_health || 0,
+                        netPay: finalNetPay, // 即時計算的 Net Pay
+                        hourlyRate: basePayData.hourlyRate,
+                        actualHours: basePayData.actualHours,
+                        standardHours: basePayData.standardHours,
+                        grossBasePay: basePayData.finalBase,
+                        transfer_amount: ppfData.transfer_amount,
+                        cash_amount: remainingCash
+                    }}
+                    roster={rosterList}
+                    ppfDetails={{
+                        ...ppfData,
+                        target_month: ppfTargetMonth,
+                        selfPayTotal: ppfResult.selfPayTotal,
+                        nhiRate: ppfResult.nhiRate,
+                        base_salary_at_time: ppfData.past_base_salary,
+                        totalPerformance: ppfResult.totalPerformance 
+                    }}
+                    month={currentMonth}
+                    onClose={() => setShowPayslip(false)}
+                />
+            )}
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+                
+                {/* 1. 左側：本月保障薪 */}
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-fit">
+                    <h3 className="font-bold text-lg text-slate-700 mb-4 border-b pb-2 flex justify-between"><span>1. 當月保障薪 ({currentMonth})</span><span className="text-xs bg-slate-100 text-slate-500 px-2 py-1 rounded">{basePayData?.mode === 'license' ? '掛牌費模式' : '固定保障模式'}</span></h3>
+                    <div className="space-y-4 text-sm">
+                        <div className="flex justify-between"><span className="text-slate-500">{basePayData.mode === 'license' ? '掛牌費' : '保障薪'}</span><span className="font-bold text-lg">${(basePayData.mode === 'license' ? basePayData.licenseFee : basePayData.guarantee).toLocaleString()}</span></div>
+                        <div className="bg-slate-50 p-3 rounded space-y-2 border">
+                            {basePayData.mode !== 'license' && <div className="flex justify-between text-xs text-slate-500"><span>標準工時</span><span>{basePayData.standardHours.toFixed(1)} hr</span></div>}
+                            <div className="flex justify-between text-xs"><span>實際工時</span><span className="font-bold">{basePayData.actualHours.toFixed(1)} hr</span></div>
+                            <div className="flex justify-between border-t border-slate-200 pt-2"><span className="text-slate-500">工時調整/時薪</span><span className={`font-bold ${basePayData.mode === 'license' ? 'text-green-600' : (basePayData.adjustment < 0 ? 'text-red-500' : 'text-green-600')}`}>${(basePayData.mode === 'license' ? basePayData.workPay : basePayData.adjustment).toLocaleString()}</span></div>
+                        </div>
+                        <div className="border-t pt-3 flex justify-between items-center"><span className="font-bold text-slate-700">保障薪毛額 (A)</span><span className="text-2xl font-extrabold text-teal-700">${basePayData.finalBase.toLocaleString()}</span></div>
+                        <div className="text-xs text-slate-400 text-center">*勞健保將於特殊費用欄位統一扣除</div>
+                    </div>
+                </div>
+
+                {/* 右側 */}
+                <div className="space-y-6">
+                    
+                    {/* 2. PPF */}
+                    <div className={`bg-white rounded-xl shadow-sm border overflow-hidden ${isLocked ? 'border-gray-300' : 'border-slate-200'}`}>
+                        <div className={`p-6 space-y-4 text-sm ${isLocked ? 'opacity-70 pointer-events-none grayscale bg-gray-50' : ''}`}>
+                            <h3 className="font-bold text-lg text-slate-700 border-b pb-2 flex justify-between items-center">
+                                <div className="flex items-center gap-2"><span>2. PPF 業績結算</span>{isLocked ? <span className="bg-gray-600 text-white text-[10px] px-2 py-0.5 rounded flex items-center gap-1"><Lock size={10}/> 已封存</span> : <span className="bg-blue-100 text-blue-600 text-[10px] px-2 py-0.5 rounded flex items-center gap-1"><FileEdit size={10}/> 編輯中</span>}</div>
+                                <div className="flex items-center gap-1 text-xs font-normal"><span>結算:</span><input type="month" value={ppfTargetMonth} onChange={(e) => setPpfTargetMonth(e.target.value)} className="border rounded p-1 bg-slate-50" /></div>
+                            </h3>
+                            <div className="grid grid-cols-2 gap-4 bg-teal-50/50 p-3 rounded border border-teal-100">
+                                <div><label className="text-xs font-bold text-slate-500 block mb-1">看診人數</label><input type="number" value={ppfData.patient_count} onChange={(e) => setPpfData(p => ({ ...p, patient_count: Number(e.target.value) }))} className="w-full border p-2 rounded text-right font-bold" /></div>
+                                <div><label className="text-xs font-bold text-slate-500 block mb-1">健保點數</label><input type="number" value={ppfData.nhi_points} onChange={(e) => setPpfData(p => ({ ...p, nhi_points: Number(e.target.value) }))} className="w-full border p-2 rounded text-right font-bold text-blue-700" /></div>
+                            </div>
+                            <div className="flex items-center gap-2"><label className="text-xs font-bold text-slate-500">看診天數:</label><input type="number" value={ppfData.clinic_days} onChange={(e) => setPpfData(p => ({ ...p, clinic_days: Number(e.target.value) }))} className="w-20 border-b border-teal-200 text-right font-bold outline-none" /><span className="text-xs text-slate-400">天</span></div>
+                            <div className="flex items-center justify-between text-xs text-slate-500 px-1"><span>健保診察費抽成率: {(ppfResult.nhiRate * 100).toFixed(0)}%</span><div className="flex items-center gap-1"><span className="text-red-400">掛號費減免扣除額:</span><input type="number" value={ppfData.reg_fee_deduction} onChange={(e) => setPpfData(p => ({ ...p, reg_fee_deduction: Number(e.target.value) }))} className="w-20 border-b border-red-200 text-right text-red-500 outline-none bg-transparent" /></div></div>
+                        </div>
+                        <div className="bg-slate-800 text-white p-4">
+                            <div className="flex justify-between text-sm opacity-80"><span>健保總產值</span><span>${ppfResult.totalPerformance.toLocaleString()}</span></div>
+                            <div className="flex justify-between text-sm opacity-80 items-center"><span className="flex items-center gap-1">扣除: {ppfTargetMonth} 實領保障薪</span><div className="relative"><input type="number" value={ppfData.past_base_salary} onChange={(e) => setPpfData(p => ({ ...p, past_base_salary: Number(e.target.value) }))} className="w-24 text-right border-b border-slate-500 bg-transparent rounded px-2 py-0.5 text-white outline-none focus:border-yellow-400 transition" /><PenLine size={12} className="absolute right-1 top-1.5 text-slate-400 pointer-events-none opacity-50"/></div></div>
+                            <div className="flex justify-between pt-3 border-t border-slate-600 font-bold text-yellow-400 text-lg"><span>PPF 超額獎金 (B)</span><span>${ppfResult.bonus.toLocaleString()}</span></div>
+                        </div>
+                    </div>
+
+                    {/* 3. 特殊費用 */}
+                    <div className={`bg-white p-6 rounded-xl shadow-sm border border-slate-200 ${isLocked ? 'opacity-70 pointer-events-none grayscale' : ''}`}>
+                        <h3 className="font-bold text-lg text-slate-700 mb-4 border-b pb-2 flex justify-between items-center"><span>3. 特殊費用 / 扣除額</span><span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">不參與 PPF 扣抵</span></h3>
+                        <div className="space-y-2 mb-4">
+                            <div className="flex justify-between items-center bg-red-50 p-2 rounded border border-red-100 text-xs">
+                                <span className="font-bold text-red-800 flex items-center gap-1"><ShieldAlert size={12}/> 勞保自付 (固定)</span>
+                                <span className="font-mono font-bold text-red-600">-${basePayData.insurance_labor.toLocaleString()}</span>
+                            </div>
+                            <div className="flex justify-between items-center bg-red-50 p-2 rounded border border-red-100 text-xs">
+                                <span className="font-bold text-red-800 flex items-center gap-1"><ShieldAlert size={12}/> 健保自付 (固定)</span>
+                                <span className="font-mono font-bold text-red-600">-${basePayData.insurance_health.toLocaleString()}</span>
+                            </div>
+                        </div>
+                        {/* 🟢 修正：自費項目移到特殊費用區塊 */}
+                        <div className="border-t pt-4 mb-4">
+                            <div className="flex justify-between items-center mb-2">
+                                <label className="font-bold text-slate-600">自費項目 (另行計算)</label>
+                                <span className="text-xs text-purple-600 font-bold">總計: ${ppfResult.selfPayTotal.toLocaleString()}</span>
+                            </div>
+                            {ppfData.self_pay_items.map((item: any, idx: number) => (
+                                <div key={item.id} className="flex gap-2 mb-2 items-center">
+                                    <input value={item.name} onChange={(e) => updateItem('self_pay_items', idx, 'name', e.target.value)} className="w-1/3 border p-1 rounded text-xs" placeholder="項目名稱"/>
+                                    <input type="number" value={item.amount} onChange={(e) => updateItem('self_pay_items', idx, 'amount', Number(e.target.value))} className="w-1/4 border p-1 rounded text-xs text-right" placeholder="金額"/>
+                                    <div className="flex items-center gap-1 w-1/4">
+                                        <input type="number" value={item.rate} onChange={(e) => updateItem('self_pay_items', idx, 'rate', Number(e.target.value))} className="w-full border p-1 rounded text-xs text-center" placeholder="抽成"/>
+                                        <span className="text-xs">%</span>
+                                    </div>
+                                    <button onClick={() => removeItem('self_pay_items', idx)} className="text-red-300 hover:text-red-500"><Trash2 size={16} /></button>
+                                </div>
+                            ))}
+                            <button onClick={() => addItem('self_pay_items')} className="w-full border border-dashed border-purple-200 text-purple-600 p-1 rounded text-xs hover:bg-purple-50">+ 新增自費項目</button>
+                        </div>
+                        {ppfData.extra_items.map((item: any, idx: number) => (
+                            <div key={item.id} className="flex gap-2 mb-2 items-center"><input value={item.name} onChange={(e) => updateItem('extra_items', idx, 'name', e.target.value)} className="w-2/3 border p-1 rounded text-xs" placeholder="例如：車馬費"/><input type="number" value={item.amount} onChange={(e) => updateItem('extra_items', idx, 'amount', Number(e.target.value))} className="w-1/3 border p-1 rounded text-xs text-right" placeholder="+/-"/><button onClick={() => removeItem('extra_items', idx)} className="text-red-300 hover:text-red-500"><Trash2 size={16} /></button></div>
+                        ))}
+                        <button onClick={() => addItem('extra_items')} className="w-full border border-dashed border-purple-200 text-purple-600 p-1 rounded text-xs hover:bg-purple-50">+ 新增特殊費用</button>
+                    </div>
+
+                </div>
+            </div>
+
+            <div className="fixed bottom-0 left-0 w-full bg-white border-t p-4 shadow-[0_-5px_15px_rgba(0,0,0,0.05)] z-40">
+                <div className="max-w-[1600px] mx-auto flex justify-between items-center">
+                    <div className="flex items-center gap-8">
+                        <div><span className="block text-xs text-slate-400">本月實領總額 (Net Pay)</span><span className="text-3xl font-extrabold text-slate-800">${finalNetPay.toLocaleString()}</span></div>
+                        <div className="flex items-center gap-4 bg-slate-100 p-2 rounded-lg border border-slate-200">
+                            <div className="flex items-center gap-1"><Landmark size={16} className="text-slate-500"/><span className="text-xs font-bold text-slate-600">匯款:</span><input type="number" value={ppfData.transfer_amount} onChange={(e) => setPpfData(p => ({...p, transfer_amount: Number(e.target.value)}))} className="w-24 border-b border-slate-300 bg-transparent text-right font-bold text-slate-800 focus:outline-none focus:border-blue-500" disabled={isLocked} /></div>
+                            <div className="w-px h-4 bg-slate-300"></div>
+                            <div className="flex items-center gap-1"><span className="text-xs font-bold text-slate-600">現金:</span><span className="font-bold text-green-600">${remainingCash.toLocaleString()}</span></div>
+                        </div>
+                    </div>
+                    <div className="flex gap-4">
+                        {isLocked ? <button onClick={() => saveData('draft')} className="border border-red-200 text-red-600 px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-red-50 transition" disabled={isSaving}><Unlock size={18}/> 解除封存</button> : <><button onClick={() => saveData('draft')} className="border border-blue-200 text-blue-600 px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-blue-50 transition" disabled={isSaving}><Save size={18}/> 暫存草稿</button><button onClick={() => saveData('locked')} className="bg-slate-900 hover:bg-black text-white px-8 py-3 rounded-xl font-bold flex items-center gap-2 transition shadow-lg" disabled={isSaving}><Lock size={18}/> 結算並封存</button></>}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
