@@ -45,20 +45,31 @@ export async function GET(request: NextRequest) {
       const { data: docs } = await query;
 
       docs?.forEach((d: any) => {
-        const extraTotal = Array.isArray(d.extra_items)
-          ? d.extra_items.reduce((sum: number, item: any) => sum + Number(item.amount), 0)
-          : 0;
-        const insuranceDeduction = (d.staff?.insurance_labor || 0) + (d.staff?.insurance_health || 0);
-        const basePay = d.actual_base_pay || 0;
-        const bonus = (d.final_ppf_bonus || 0) + extraTotal;
-        const netTotal = basePay + bonus - insuranceDeduction;
+        // 🟢 修正：直接使用資料庫中已計算好的 net_pay，與 doctor-salary/page.tsx 的計算邏輯一致
+        // 計算公式：finalNetPay = actual_base_pay + final_ppf_bonus + selfPayTotal + extraTotal - insurance_labor - insurance_health
+        // 如果 net_pay 不存在，則手動計算（向後兼容）
+        let netTotal = d.net_pay;
+        
+        if (netTotal === null || netTotal === undefined) {
+          // 向後兼容：手動計算（與 doctor-salary/page.tsx 的邏輯一致）
+          const selfPayTotal = Array.isArray(d.self_pay_items)
+            ? d.self_pay_items.reduce((sum: number, item: any) => sum + (Number(item.amount || 0) * (Number(item.rate || 0) / 100)), 0)
+            : 0;
+          const extraTotal = Array.isArray(d.extra_items)
+            ? d.extra_items.reduce((sum: number, item: any) => sum + Number(item.amount || 0), 0)
+            : 0;
+          const insuranceDeduction = (d.staff?.insurance_labor || 0) + (d.staff?.insurance_health || 0);
+          const basePay = d.actual_base_pay || 0;
+          const bonus = d.final_ppf_bonus || 0;
+          netTotal = basePay + bonus + selfPayTotal + extraTotal - insuranceDeduction;
+        }
 
         data.push({
           type: 'doctor',
           displayType: '醫師',
           name: d.staff?.name,
           month: d.paid_in_month,
-          total: netTotal,
+          total: netTotal || 0,
           details: `PPF:${d.target_month}`
         });
       });
