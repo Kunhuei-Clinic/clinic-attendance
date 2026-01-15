@@ -83,23 +83,7 @@ export default function AdminPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-6 text-slate-800">
-      <div className="max-w-[1600px] mx-auto flex gap-6">
-        {/* 左側待辦事項標籤 */}
-        <div className="w-48 shrink-0">
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 sticky top-4">
-            <h3 className="text-sm font-bold text-slate-500 mb-3">待辦事項</h3>
-            <button
-              onClick={() => setActiveTab('tasks')}
-              className={`w-full px-4 py-3 rounded-lg text-sm font-bold flex items-center gap-2 transition ${
-                activeTab === 'tasks'
-                  ? 'bg-teal-100 text-teal-700 border-2 border-teal-300'
-                  : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border-2 border-transparent'
-              }`}
-            >
-              <CheckCircle size={18}/> 待審核案件
-            </button>
-          </div>
-        </div>
+      <div className="max-w-[1600px] mx-auto">
 
         {/* 右側主要內容區 */}
         <div className="flex-1">
@@ -109,6 +93,19 @@ export default function AdminPage() {
                 診所管理中樞 V29.5
                 {authLevel === 'manager' && <span className="text-xs bg-gray-200 text-gray-600 px-2 py-1 rounded-full">排班模式</span>}
               </h1>
+              {authLevel === 'boss' && (
+                <button
+                  onClick={() => setActiveTab('tasks')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition ${
+                    activeTab === 'tasks'
+                      ? 'bg-teal-100 text-teal-700 border border-teal-300'
+                      : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-transparent'
+                  }`}
+                  title="待審核案件"
+                >
+                  <CheckCircle size={14}/> 待審核
+                </button>
+              )}
               <button
                 onClick={handleLogout}
                 className="px-4 py-2 bg-red-50 text-red-600 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-red-100 transition"

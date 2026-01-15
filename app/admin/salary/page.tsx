@@ -2,6 +2,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { DollarSign, Calendar, Save, Archive, RefreshCw, CloudLightning, History, ChevronLeft, ChevronRight } from 'lucide-react';
 import { addMonths, format, subMonths } from 'date-fns';
 
@@ -13,6 +14,7 @@ import { calculateStaffSalary } from './salaryEngine';
 type Entity = { id: string; name: string };
 
 export default function SalaryPage() {
+  const router = useRouter();
   const [viewMode, setViewMode] = useState<'calculator' | 'history'>('calculator');
   const [selectedMonth, setSelectedMonth] = useState(format(new Date(), 'yyyy-MM'));
   const [staffList, setStaffList] = useState<any[]>([]);
@@ -22,20 +24,46 @@ export default function SalaryPage() {
   const [settingModalStaffId, setSettingModalStaffId] = useState<number | null>(null);
   const [printReport, setPrintReport] = useState<any | null>(null);
   const [entityList, setEntityList] = useState<Entity[]>([]);
+  const [authChecked, setAuthChecked] = useState(false);
+
+  // 認證檢查（雙重保護）
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const response = await fetch('/api/auth/check', { method: 'GET' });
+        if (response.ok) {
+          const data = await response.json();
+          if (!data.authenticated || data.authLevel !== 'boss') {
+            // 未登入或不是 boss 權限，重定向到登入頁
+            router.push('/login?redirect=/admin/salary');
+            return;
+          }
+        } else {
+          router.push('/login?redirect=/admin/salary');
+          return;
+        }
+        setAuthChecked(true);
+      } catch (error) {
+        console.error('Auth check error:', error);
+        router.push('/login?redirect=/admin/salary');
+      }
+    };
+    checkAuth();
+  }, [router]);
 
   useEffect(() => { 
+    if (!authChecked) return;
     fetchSystemSettings(); 
     fetchStaffSettings();
-  }, []);
+  }, [authChecked]);
   
   useEffect(() => {
-    if (selectedMonth) {
-      fetchAdjustments();
-      checkIfArchived();
-      if (viewMode === 'calculator') performCalculation();
-      else loadHistory();
-    }
-  }, [selectedMonth, viewMode]);
+    if (!authChecked || !selectedMonth) return;
+    fetchAdjustments();
+    checkIfArchived();
+    if (viewMode === 'calculator') performCalculation();
+    else loadHistory();
+  }, [selectedMonth, viewMode, authChecked]);
 
   // 當員工資料變動或手動調整變動時，重新試算
   useEffect(() => {
@@ -288,6 +316,15 @@ export default function SalaryPage() {
       const newDate = delta > 0 ? addMonths(current, 1) : subMonths(current, 1);
       setSelectedMonth(format(newDate, 'yyyy-MM'));
   };
+
+  // 未認證時不顯示內容
+  if (!authChecked) {
+    return (
+      <div className="w-full flex items-center justify-center py-20">
+        <div className="text-slate-400">檢查權限中...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full animate-fade-in relative space-y-6">
