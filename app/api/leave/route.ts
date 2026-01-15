@@ -141,6 +141,54 @@ export async function POST(request: NextRequest) {
 }
 
 /**
+ * PATCH /api/leave
+ * 更新請假紀錄狀態
+ * 
+ * Request Body:
+ *   {
+ *     id: number,
+ *     status: 'pending' | 'approved' | 'rejected'
+ *   }
+ */
+export async function PATCH(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { id, status } = body;
+
+    if (!id || !status) {
+      return NextResponse.json(
+        { success: false, message: '缺少必要參數' },
+        { status: 400 }
+      );
+    }
+
+    const { error } = await supabaseAdmin
+      .from('leave_requests')
+      .update({ status })
+      .eq('id', Number(id));
+
+    if (error) {
+      console.error('Update leave request error:', error);
+      return NextResponse.json(
+        { success: false, message: `更新失敗: ${error.message}` },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: '更新成功'
+    });
+  } catch (error: any) {
+    console.error('Leave PATCH API Error:', error);
+    return NextResponse.json(
+      { success: false, message: `處理失敗: ${error.message}` },
+      { status: 500 }
+    );
+  }
+}
+
+/**
  * DELETE /api/leave
  * 刪除請假紀錄
  * 

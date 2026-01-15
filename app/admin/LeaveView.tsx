@@ -251,7 +251,15 @@ export default function LeaveView() {
   const calculateSettleAmount = () => {
     if (!selectedStaffForSettle) return 0;
     const baseSalary = selectedStaffForSettle.base_salary || 0;
-    return Math.round((baseSalary / 30) * settleForm.days * 100) / 100;
+    const salaryMode = selectedStaffForSettle.salary_mode || 'hourly';
+    
+    if (salaryMode === 'monthly') {
+      // 月薪制：底薪 / 30 * 天數
+      return Math.round((baseSalary / 30) * settleForm.days * 100) / 100;
+    } else {
+      // 時薪制：時薪 * 8小時 * 天數
+      return Math.round((baseSalary * 8) * settleForm.days * 100) / 100;
+    }
   };
 
   return (
@@ -547,7 +555,14 @@ export default function LeaveView() {
                   ${calculateSettleAmount().toLocaleString()}
                 </div>
                 <div className="text-xs text-blue-600 mt-1">
-                  計算公式: (底薪 ${selectedStaffForSettle.base_salary?.toLocaleString() || 0} / 30) × {settleForm.days} 天
+                  {selectedStaffForSettle.salary_mode === 'monthly' ? (
+                    <>計算公式: (月薪 ${selectedStaffForSettle.base_salary?.toLocaleString() || 0} ÷ 30) × {settleForm.days} 天</>
+                  ) : (
+                    <>計算公式: (時薪 ${selectedStaffForSettle.base_salary?.toLocaleString() || 0} × 8小時) × {settleForm.days} 天</>
+                  )}
+                </div>
+                <div className="text-[10px] text-blue-500 mt-1 opacity-80">
+                  薪資模式: {selectedStaffForSettle.salary_mode === 'monthly' ? '月薪制' : '時薪制'}
                 </div>
               </div>
               

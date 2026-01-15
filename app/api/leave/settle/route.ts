@@ -40,10 +40,10 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // 1. 取得員工資料 (需要 base_salary)
+    // 1. 取得員工資料 (需要 base_salary 和 salary_mode)
     const { data: staff, error: staffError } = await supabaseAdmin
       .from('staff')
-      .select('id, name, base_salary')
+      .select('id, name, base_salary, salary_mode')
       .eq('id', Number(staff_id))
       .single();
     
@@ -54,9 +54,18 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // 2. 計算結算金額：底薪 / 30 * 天數
+    // 2. 根據薪資模式計算結算金額
     const baseSalary = Number(staff.base_salary) || 0;
-    const amount = Math.round((baseSalary / 30) * days * 100) / 100; // 保留兩位小數
+    const salaryMode = staff.salary_mode || 'hourly';
+    let amount = 0;
+    
+    if (salaryMode === 'monthly') {
+      // 月薪制：底薪 / 30 * 天數
+      amount = Math.round((baseSalary / 30) * days * 100) / 100;
+    } else {
+      // 時薪制：時薪 * 8小時 * 天數
+      amount = Math.round((baseSalary * 8) * days * 100) / 100;
+    }
     
     // 3. 檢查剩餘特休是否足夠
     // 直接計算特休統計（避免外部 API 調用）

@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { CheckCircle, Calendar, Stethoscope, BookOpen, DollarSign, Lock, Settings, FileText, Calculator, FileSpreadsheet } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { CheckCircle, Calendar, Stethoscope, BookOpen, DollarSign, Settings, FileText, Calculator, FileSpreadsheet, LogOut } from 'lucide-react';
 
 import StaffRosterView from './StaffRoster';
 import DoctorRosterView from './DoctorRoster';
@@ -11,66 +12,113 @@ import SalaryPage from './salary/page';
 import SettingsView from './SettingsView'; 
 import LeaveView from './LeaveView';
 import DoctorSalaryPage from './doctor-salary/page';
-import SalaryReportView from './SalaryReport'; 
+import SalaryReportView from './SalaryReport';
+import TasksView from './TasksView'; 
 
 export default function AdminPage() {
-  const [authLevel, setAuthLevel] = useState<'none' | 'boss' | 'manager'>('none');
-  const [inputPasscode, setInputPasscode] = useState('');
-  const [activeTab, setActiveTab] = useState<'attendance' | 'staff_roster' | 'doctor_roster' | 'labor_rules' | 'salary' | 'settings' | 'leave' | 'doctor_salary' | 'salary_report'>('attendance');
-  const [isClient, setIsClient] = useState(false);
+  const router = useRouter();
+  const [authLevel, setAuthLevel] = useState<'boss' | 'manager' | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'tasks' | 'attendance' | 'staff_roster' | 'doctor_roster' | 'labor_rules' | 'salary' | 'settings' | 'leave' | 'doctor_salary' | 'salary_report'>('tasks');
 
-  useEffect(() => { setIsClient(true); }, []);
+  // 檢查認證狀態
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const response = await fetch('/api/auth/check', { method: 'GET' });
+        if (response.ok) {
+          const data = await response.json();
+          if (data.authenticated && data.authLevel) {
+            setAuthLevel(data.authLevel);
+            setActiveTab(data.authLevel === 'boss' ? 'tasks' : 'staff_roster');
+          } else {
+            // 未登入，重定向到登入頁
+            router.push('/login');
+          }
+        } else {
+          router.push('/login');
+        }
+      } catch (error) {
+        console.error('Auth check error:', error);
+        router.push('/login');
+      } finally {
+        setLoading(false);
+      }
+    };
+    checkAuth();
+  }, [router]);
 
-  const handleLogin = async () => {
+  // 登出處理
+  const handleLogout = async () => {
+    if (!confirm('確定要登出嗎？')) return;
+
     try {
-      const response = await fetch('/api/auth/login', {
+      const response = await fetch('/api/auth/logout', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ passcode: inputPasscode }),
       });
 
       const data = await response.json();
-
-      if (data.success && data.authLevel) {
-        setAuthLevel(data.authLevel);
-        setActiveTab(data.authLevel === 'boss' ? 'attendance' : 'staff_roster');
+      if (data.success) {
+        router.push('/login');
       } else {
-        alert(data.message || '密碼錯誤');
-        setInputPasscode('');
+        alert('登出失敗');
       }
     } catch (error) {
-      console.error('Login error:', error);
-      alert('登入失敗，請稍後再試');
-      setInputPasscode('');
+      console.error('Logout error:', error);
+      alert('登出失敗');
     }
   };
 
-  if (!isClient) return null;
-
-  if (authLevel === 'none') {
+  if (loading) {
     return (
-      <div className="min-h-screen bg-slate-100 flex items-center justify-center p-6">
-        <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-sm text-center">
-          <div className="bg-slate-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"><Lock className="w-8 h-8 text-slate-500" /></div>
-          <h2 className="text-xl font-bold text-slate-800 mb-2">後台登入</h2>
-          <input type="password" placeholder="Passcode" className="w-full p-3 border rounded-xl text-center text-lg tracking-widest mb-4 outline-none" value={inputPasscode} onChange={(e) => setInputPasscode(e.target.value)} />
-          <button onClick={handleLogin} className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold">解鎖</button>
-        </div>
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="text-slate-400">載入中...</div>
       </div>
     );
   }
 
+  if (!authLevel) {
+    return null; // 會重定向到登入頁
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-6 text-slate-800">
-      <div className="max-w-[1600px] mx-auto mb-6 flex flex-col md:flex-row justify-between items-center gap-4">
-        <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-          診所管理中樞 V29.5
-          {authLevel === 'manager' && <span className="text-xs bg-gray-200 text-gray-600 px-2 py-1 rounded-full">排班模式</span>}
-        </h1>
-        
-        <div className="flex bg-white p-1 rounded-xl border shadow-sm overflow-x-auto">
+      <div className="max-w-[1600px] mx-auto flex gap-6">
+        {/* 左側待辦事項標籤 */}
+        <div className="w-48 shrink-0">
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 sticky top-4">
+            <h3 className="text-sm font-bold text-slate-500 mb-3">待辦事項</h3>
+            <button
+              onClick={() => setActiveTab('tasks')}
+              className={`w-full px-4 py-3 rounded-lg text-sm font-bold flex items-center gap-2 transition ${
+                activeTab === 'tasks'
+                  ? 'bg-teal-100 text-teal-700 border-2 border-teal-300'
+                  : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border-2 border-transparent'
+              }`}
+            >
+              <CheckCircle size={18}/> 待審核案件
+            </button>
+          </div>
+        </div>
+
+        {/* 右側主要內容區 */}
+        <div className="flex-1">
+          <div className="mb-6 flex flex-col md:flex-row justify-between items-center gap-4">
+            <div className="flex items-center gap-4">
+              <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
+                診所管理中樞 V29.5
+                {authLevel === 'manager' && <span className="text-xs bg-gray-200 text-gray-600 px-2 py-1 rounded-full">排班模式</span>}
+              </h1>
+              <button
+                onClick={handleLogout}
+                className="px-4 py-2 bg-red-50 text-red-600 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-red-100 transition"
+                title="登出"
+              >
+                <LogOut size={16}/> 登出
+              </button>
+            </div>
+            
+            <div className="flex bg-white p-1 rounded-xl border shadow-sm overflow-x-auto">
           {authLevel === 'boss' && (
             <>
               <button onClick={() => setActiveTab('attendance')} className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 whitespace-nowrap ${activeTab === 'attendance' ? 'bg-blue-100 text-blue-700' : 'text-slate-500 hover:bg-slate-50'}`}>
@@ -116,16 +164,19 @@ export default function AdminPage() {
         </div>
       </div>
 
-      <div className="max-w-[1600px] mx-auto">
-        {activeTab === 'attendance' && authLevel === 'boss' && <AttendanceView />}
-        {activeTab === 'staff_roster' && (authLevel === 'boss' || authLevel === 'manager') && <StaffRosterView authLevel={authLevel} />}
-        {activeTab === 'doctor_roster' && authLevel === 'boss' && <DoctorRosterView />}
-        {activeTab === 'labor_rules' && authLevel === 'boss' && <LaborRulesView />}
-        {activeTab === 'salary' && authLevel === 'boss' && <SalaryPage />}
-        {activeTab === 'settings' && authLevel === 'boss' && <SettingsView />}
-        {activeTab === 'leave' && authLevel === 'boss' && <LeaveView />}
-        {activeTab === 'doctor_salary' && authLevel === 'boss' && <DoctorSalaryPage />}
-        {activeTab === 'salary_report' && authLevel === 'boss' && <SalaryReportView />}
+          <div>
+            {activeTab === 'tasks' && authLevel === 'boss' && <TasksView />}
+            {activeTab === 'attendance' && authLevel === 'boss' && <AttendanceView />}
+            {activeTab === 'staff_roster' && (authLevel === 'boss' || authLevel === 'manager') && <StaffRosterView authLevel={authLevel} />}
+            {activeTab === 'doctor_roster' && authLevel === 'boss' && <DoctorRosterView />}
+            {activeTab === 'labor_rules' && authLevel === 'boss' && <LaborRulesView />}
+            {activeTab === 'salary' && authLevel === 'boss' && <SalaryPage />}
+            {activeTab === 'settings' && authLevel === 'boss' && <SettingsView />}
+            {activeTab === 'leave' && authLevel === 'boss' && <LeaveView />}
+            {activeTab === 'doctor_salary' && authLevel === 'boss' && <DoctorSalaryPage />}
+            {activeTab === 'salary_report' && authLevel === 'boss' && <SalaryReportView />}
+          </div>
+        </div>
       </div>
     </div>
   );

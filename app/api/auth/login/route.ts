@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
 
 /**
  * POST /api/auth/login
@@ -26,23 +27,36 @@ export async function POST(request: NextRequest) {
     const bossPasscode = process.env.ADMIN_BOSS_PASSWORD;
     const managerPasscode = process.env.ADMIN_MANAGER_PASSWORD;
 
+    let authLevel: 'boss' | 'manager' | null = null;
+
     // 驗證密碼
     if (passcode === bossPasscode) {
-      return NextResponse.json({
-        success: true,
-        authLevel: 'boss'
-      });
+      authLevel = 'boss';
     } else if (passcode === managerPasscode) {
-      return NextResponse.json({
-        success: true,
-        authLevel: 'manager'
-      });
+      authLevel = 'manager';
     } else {
       return NextResponse.json(
         { success: false, message: '密碼錯誤' },
         { status: 401 }
       );
     }
+
+    // 設定 Cookie
+    const cookieStore = await cookies();
+    const maxAge = 60 * 60 * 24; // 1 天 (秒)
+    
+    cookieStore.set('clinic_token', authLevel, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      path: '/',
+      maxAge: maxAge,
+      sameSite: 'lax'
+    });
+
+    return NextResponse.json({
+      success: true,
+      authLevel: authLevel
+    });
   } catch (error: any) {
     console.error('Login API Error:', error);
     return NextResponse.json(

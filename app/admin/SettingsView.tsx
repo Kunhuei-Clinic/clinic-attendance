@@ -67,6 +67,7 @@ export default function SettingsView() {
             entity: 'clinic',
             is_active: true,
             start_date: new Date().toISOString().slice(0, 10),
+            salary_mode: 'hourly',
             base_salary: 0,
             insurance_labor: 0,
             insurance_health: 0
@@ -82,6 +83,7 @@ export default function SettingsView() {
             entity: editData.entity,
             is_active: editData.is_active,
             start_date: editData.start_date || null,
+            salary_mode: editData.salary_mode || 'hourly',
             base_salary: Number(editData.base_salary) || 0,
             insurance_labor: Number(editData.insurance_labor) || 0,
             insurance_health: Number(editData.insurance_health) || 0
@@ -432,7 +434,49 @@ export default function SettingsView() {
                                 <div><label className="block text-xs font-bold text-slate-500 mb-1">所屬單位</label><div className="flex gap-2"><button onClick={() => setEditData({...editData, entity: 'clinic'})} className={`flex-1 py-2 rounded border text-sm font-bold ${editData.entity === 'clinic' ? 'bg-blue-50 border-blue-500 text-blue-700' : 'hover:bg-gray-50'}`}>診所</button><button onClick={() => setEditData({...editData, entity: 'pharmacy'})} className={`flex-1 py-2 rounded border text-sm font-bold ${editData.entity === 'pharmacy' ? 'bg-green-50 border-green-500 text-green-700' : 'hover:bg-gray-50'}`}>藥局</button></div></div>
                                 <div><label className="block text-xs font-bold text-slate-500 mb-1">到職日期</label><input type="date" value={editData.start_date || ''} onChange={e => setEditData({...editData, start_date: e.target.value})} className="w-full border p-2 rounded"/></div>
                             </div>
-                            {editData.role !== '醫師' && (<div className="bg-yellow-50 p-4 rounded-lg border border-yellow-100"><label className="block text-xs font-bold text-yellow-800 mb-1 flex items-center gap-1"><Briefcase size={12}/> 基礎薪資 (時薪/月薪)</label><input type="number" value={editData.base_salary} onChange={e => setEditData({...editData, base_salary: e.target.value})} className="w-full border p-2 rounded font-mono font-bold text-right"/><p className="text-[10px] text-yellow-600 mt-1">* 這是計算薪資的基準，若為時薪制請填時薪。</p></div>)}
+                            {editData.role !== '醫師' && (
+                                <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-100 space-y-3">
+                                    <div>
+                                        <label className="block text-xs font-bold text-yellow-800 mb-2 flex items-center gap-1"><Briefcase size={12}/> 薪資計算模式</label>
+                                        <div className="flex gap-2">
+                                            <button 
+                                                onClick={() => setEditData({...editData, salary_mode: 'monthly'})} 
+                                                className={`flex-1 py-2 rounded border text-sm font-bold transition ${
+                                                    editData.salary_mode === 'monthly' 
+                                                        ? 'bg-slate-800 text-white border-slate-800' 
+                                                        : 'bg-white text-slate-500 border-slate-300 hover:bg-slate-50'
+                                                }`}
+                                            >
+                                                月薪制
+                                            </button>
+                                            <button 
+                                                onClick={() => setEditData({...editData, salary_mode: 'hourly'})} 
+                                                className={`flex-1 py-2 rounded border text-sm font-bold transition ${
+                                                    editData.salary_mode === 'hourly' 
+                                                        ? 'bg-slate-800 text-white border-slate-800' 
+                                                        : 'bg-white text-slate-500 border-slate-300 hover:bg-slate-50'
+                                                }`}
+                                            >
+                                                時薪制
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-yellow-800 mb-1">
+                                            基礎薪資 {editData.salary_mode === 'monthly' ? '(月薪)' : '(時薪)'}
+                                        </label>
+                                        <input 
+                                            type="number" 
+                                            value={editData.base_salary} 
+                                            onChange={e => setEditData({...editData, base_salary: e.target.value})} 
+                                            className="w-full border p-2 rounded font-mono font-bold text-right"
+                                        />
+                                        <p className="text-[10px] text-yellow-600 mt-1">
+                                            * {editData.salary_mode === 'monthly' ? '月薪制：用於計算每日薪資 (月薪 ÷ 30)' : '時薪制：用於計算工時薪資'}
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
                             <div className="bg-slate-50 p-4 rounded-lg border border-slate-200"><h4 className="text-xs font-bold text-slate-500 mb-3 border-b pb-1">保險設定 (每月固定扣除)</h4><div className="grid grid-cols-2 gap-4"><div><label className="block text-xs text-slate-400 mb-1">勞保自付額</label><input type="number" value={editData.insurance_labor} onChange={e => setEditData({...editData, insurance_labor: e.target.value})} className="w-full border p-2 rounded text-right text-red-500 font-bold"/></div><div><label className="block text-xs text-slate-400 mb-1">健保自付額</label><input type="number" value={editData.insurance_health} onChange={e => setEditData({...editData, insurance_health: e.target.value})} className="w-full border p-2 rounded text-right text-red-500 font-bold"/></div></div></div>
                             <div className="flex justify-end gap-3 pt-4 border-t"><button onClick={() => setShowStaffModal(false)} className="px-5 py-2.5 rounded-lg text-slate-500 hover:bg-slate-100 font-bold text-sm">取消</button><button onClick={handleSaveStaff} className="px-6 py-2.5 rounded-lg bg-slate-900 text-white hover:bg-black font-bold text-sm shadow-lg flex items-center gap-2"><Save size={16}/> 儲存資料</button></div>
                         </div>

@@ -85,7 +85,7 @@ export async function GET(request: NextRequest) {
     // 2. 取得所有在職員工
     const { data: staffList, error: staffError } = await supabaseAdmin
       .from('staff')
-      .select('id, name, start_date, base_salary')
+      .select('id, name, start_date, base_salary, salary_mode')
       .eq('is_active', true)
       .order('name');
     
@@ -137,7 +137,8 @@ export async function GET(request: NextRequest) {
           remaining: 0,
           period_start: null,
           period_end: null,
-          base_salary: staff.base_salary || 0
+          base_salary: staff.base_salary || 0,
+          salary_mode: staff.salary_mode || 'hourly'
         };
       }
       
@@ -205,7 +206,8 @@ export async function GET(request: NextRequest) {
         remaining,
         period_start: periodStart,
         period_end: periodEnd,
-        base_salary: staff.base_salary || 0
+        base_salary: staff.base_salary || 0,
+        salary_mode: staff.salary_mode || 'hourly'
       };
     });
     
