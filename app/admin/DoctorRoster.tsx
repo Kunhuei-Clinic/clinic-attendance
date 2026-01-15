@@ -1,13 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { createClient } from '@supabase/supabase-js';
 import { ChevronLeft, ChevronRight, Stethoscope, Clock, X, Trash2, Plus, Copy, Check, Image as ImageIcon, Settings, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
 import DoctorRosterPrint from './DoctorRosterPrint';
-
-const supabaseUrl = 'https://ucpkvptnhgbtmghqgbof.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVjcGt2cHRuaGdidG1naHFnYm9mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUzNDg5MTAsImV4cCI6MjA4MDkyNDkxMH0.zdLx86ey-QywuGD-S20JJa7ZD6xHFRalAMRN659bbuo';
-const supabase = createClient(supabaseUrl, supabaseKey);
 
 // 🟢 修改：週一排前面
 const WEEKDAYS = ['一', '二', '三', '四', '五', '六', '日'];
@@ -66,35 +61,104 @@ export default function DoctorRosterView() {
     useEffect(() => { fetchRoster(); fetchClosedDays(); }, [currentDate]);
     useEffect(() => { calculateStats(); }, [rosterData, currentDate]);
 
-    const fetchDoctors = async () => { const { data } = await supabase.from('staff').select('id, name, role').order('id'); if (data) setDoctors(data.filter((s: any) => s.role === '醫師')); };
-    const fetchSettings = async () => {
-        const { data } = await supabase.from('system_settings').select('*');
-        if (data) {
-            data.forEach((item: any) => {
-                if (item.key === 'special_clinic_types') { try { setSpecialTypes(JSON.parse(item.value)); } catch (e) { } }
-                if (item.key === 'clinic_business_hours') { try { setBusinessHours(JSON.parse(item.value)); } catch (e) { } }
-            });
+    const fetchDoctors = async () => {
+        try {
+            const response = await fetch('/api/staff?role=醫師');
+            const result = await response.json();
+            if (result.data) setDoctors(result.data.filter((s: any) => s.role === '醫師'));
+        } catch (error) {
+            console.error('Fetch doctors error:', error);
         }
     };
+    
+    const fetchSettings = async () => {
+        try {
+            const response = await fetch('/api/settings');
+            const result = await response.json();
+            if (result.data) {
+                result.data.forEach((item: any) => {
+                    if (item.key === 'special_clinic_types') {
+                        try { setSpecialTypes(JSON.parse(item.value)); } catch (e) { }
+                    }
+                    if (item.key === 'clinic_business_hours') {
+                        try { setBusinessHours(JSON.parse(item.value)); } catch (e) { }
+                    }
+                });
+            }
+        } catch (error) {
+            console.error('Fetch settings error:', error);
+        }
+    };
+    
     const fetchRoster = async () => {
         setLoading(true);
-        const year = currentDate.getFullYear(); const month = currentDate.getMonth() + 1;
-        const start = `${year}-${String(month).padStart(2, '0')}-01`;
-        const nextMonthDate = new Date(year, month, 1); const nextMonth = getLocalDateString(nextMonthDate);
-        const { data } = await supabase.from('doctor_roster').select('*').gte('date', start).lt('date', nextMonth);
-        setRosterData(data || []); setLoading(false);
+        try {
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth() + 1;
+            const response = await fetch(`/api/roster/doctor?year=${year}&month=${month}`);
+            const result = await response.json();
+            if (result.error) {
+                console.error('Error:', result.error);
+                setRosterData([]);
+            } else {
+                setRosterData(result.data || []);
+            }
+        } catch (error) {
+            console.error('Fetch roster error:', error);
+            setRosterData([]);
+        } finally {
+            setLoading(false);
+        }
     };
+    
     const fetchClosedDays = async () => {
-        const year = currentDate.getFullYear(); const month = currentDate.getMonth() + 1;
-        const start = `${year}-${String(month).padStart(2, '0')}-01`;
-        const nextMonthDate = new Date(year, month, 1); const nextMonth = getLocalDateString(nextMonthDate);
-        const { data } = await supabase.from('clinic_closed_days').select('date').gte('date', start).lt('date', nextMonth);
-        setClosedDays(data?.map(d => d.date) || []);
+        try {
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth() + 1;
+            const response = await fetch(`/api/roster/closed-days?year=${year}&month=${month}`);
+            const result = await response.json();
+            if (result.error) {
+                console.error('Error:', result.error);
+                setClosedDays([]);
+            } else {
+                setClosedDays(result.data || []);
+            }
+        } catch (error) {
+            console.error('Fetch closed days error:', error);
+            setClosedDays([]);
+        }
     };
+    
     const toggleClosedDay = async (dateStr: string) => {
         const isClosed = closedDays.includes(dateStr);
-        if (isClosed) { const { error } = await supabase.from('clinic_closed_days').delete().eq('date', dateStr); if (!error) setClosedDays(prev => prev.filter(d => d !== dateStr)); }
-        else { const reason = prompt("請輸入休診原因", "休診"); if (reason === null) return; const { error } = await supabase.from('clinic_closed_days').insert({ date: dateStr, reason }); if (!error) setClosedDays(prev => [...prev, dateStr]); }
+        try {
+            if (isClosed) {
+                const response = await fetch(`/api/roster/closed-days?date=${dateStr}`, { method: 'DELETE' });
+                const result = await response.json();
+                if (result.success) {
+                    setClosedDays(prev => prev.filter(d => d !== dateStr));
+                } else {
+                    alert('刪除失敗: ' + result.message);
+                }
+            } else {
+                const reason = prompt("請輸入休診原因", "休診");
+                if (reason === null) return;
+                const response = await fetch('/api/roster/closed-days', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ date: dateStr, reason })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    setClosedDays(prev => [...prev, dateStr]);
+                } else {
+                    alert('新增失敗: ' + result.message);
+                }
+            }
+        } catch (error) {
+            console.error('Toggle closed day error:', error);
+            alert('操作失敗');
+        }
     };
     const calculateStats = () => {
         const newStats: Record<number, { total: number, weekly: number[] }> = {};
@@ -134,13 +198,117 @@ export default function DoctorRosterView() {
     const handleSubmitAssign = async () => {
         if (!selectedSlot || !assignForm.doctorId) return;
         const doctorId = Number(assignForm.doctorId);
-        const rosterPayload = { doctor_id: doctorId, date: selectedSlot.date, shift_code: selectedSlot.shiftId, start_time: assignForm.startTime, end_time: assignForm.endTime, special_tags: assignForm.specialTags, is_dedicated: assignForm.isDedicated, is_substitution: assignForm.isSubstitution };
-        if (editingId) { const { error } = await supabase.from('doctor_roster').update(rosterPayload).eq('id', editingId); if (error) alert("更新失敗"); else { setIsModalOpen(false); fetchRoster(); } }
-        else { const exists = rosterData.find(r => r.date === selectedSlot.date && r.shift_code === selectedSlot.shiftId && r.doctor_id === doctorId); if (exists) { if (!confirm("覆蓋？")) return; } const { error } = await supabase.from('doctor_roster').upsert(rosterPayload, { onConflict: 'doctor_id, date, shift_code' }); if (error) alert("寫入失敗"); else { setIsModalOpen(false); fetchRoster(); } }
+        const rosterPayload = {
+            id: editingId || undefined,
+            doctor_id: doctorId,
+            date: selectedSlot.date,
+            shift_code: selectedSlot.shiftId,
+            start_time: assignForm.startTime,
+            end_time: assignForm.endTime,
+            special_tags: assignForm.specialTags,
+            is_dedicated: assignForm.isDedicated,
+            is_substitution: assignForm.isSubstitution
+        };
+
+        try {
+            if (editingId) {
+                const response = await fetch('/api/roster/doctor', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(rosterPayload)
+                });
+                const result = await response.json();
+                if (result.success) {
+                    setIsModalOpen(false);
+                    fetchRoster();
+                } else {
+                    alert("更新失敗: " + result.message);
+                }
+            } else {
+                const exists = rosterData.find(r => r.date === selectedSlot.date && r.shift_code === selectedSlot.shiftId && r.doctor_id === doctorId);
+                if (exists) {
+                    if (!confirm("覆蓋？")) return;
+                }
+                const response = await fetch('/api/roster/doctor', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(rosterPayload)
+                });
+                const result = await response.json();
+                if (result.success) {
+                    setIsModalOpen(false);
+                    fetchRoster();
+                } else {
+                    alert("寫入失敗: " + result.message);
+                }
+            }
+        } catch (error) {
+            console.error('Submit assign error:', error);
+            alert('操作失敗');
+        }
     };
-    const removeRoster = async (id: number) => { if (!confirm('確定刪除？')) return; setRosterData(prev => prev.filter(r => r.id !== id)); await supabase.from('doctor_roster').delete().eq('id', id); setIsModalOpen(false); };
-    const handleBatchDelete = async (start: string, end: string) => { if (!confirm(`刪除 ${start} 到 ${end} ?`)) return; setLoading(true); await supabase.from('doctor_roster').delete().gte('date', start).lte('date', end); setLoading(false); setIsBatchOpen(false); fetchRoster(); };
-    const handleBatchCopy = async (sourceStart: string, targetStart: string, days: number) => { setLoading(true); const sDate = parseLocalDate(sourceStart); const sEndDate = parseLocalDate(sourceStart); sEndDate.setDate(sDate.getDate() + days); const { data: sourceData } = await supabase.from('doctor_roster').select('*').gte('date', getLocalDateString(sDate)).lt('date', getLocalDateString(sEndDate)); if (!sourceData || sourceData.length === 0) { setLoading(false); return alert("無資料"); } const tDate = parseLocalDate(targetStart); const diffDays = Math.round((tDate.getTime() - sDate.getTime()) / (1000 * 60 * 60 * 24)); const newEntries = sourceData.map(src => { const originalDate = parseLocalDate(src.date); const newDate = new Date(originalDate); newDate.setDate(newDate.getDate() + diffDays); return { doctor_id: src.doctor_id, date: getLocalDateString(newDate), shift_code: src.shift_code, start_time: src.start_time, end_time: src.end_time, special_tags: src.special_tags, is_dedicated: src.is_dedicated, is_substitution: src.is_substitution }; }); await supabase.from('doctor_roster').upsert(newEntries, { onConflict: 'doctor_id, date, shift_code' }); setLoading(false); setIsBatchOpen(false); fetchRoster(); alert(`已複製`); };
+    
+    const removeRoster = async (id: number) => {
+        if (!confirm('確定刪除？')) return;
+        try {
+            setRosterData(prev => prev.filter(r => r.id !== id));
+            const response = await fetch(`/api/roster/doctor?id=${id}`, { method: 'DELETE' });
+            const result = await response.json();
+            if (result.success) {
+                setIsModalOpen(false);
+                fetchRoster();
+            } else {
+                alert('刪除失敗: ' + result.message);
+            }
+        } catch (error) {
+            console.error('Remove roster error:', error);
+            alert('刪除失敗');
+        }
+    };
+    
+    const handleBatchDelete = async (start: string, end: string) => {
+        if (!confirm(`刪除 ${start} 到 ${end} ?`)) return;
+        setLoading(true);
+        try {
+            const response = await fetch(`/api/roster/doctor?start=${start}&end=${end}`, { method: 'DELETE' });
+            const result = await response.json();
+            if (result.success) {
+                setIsBatchOpen(false);
+                fetchRoster();
+            } else {
+                alert('刪除失敗: ' + result.message);
+            }
+        } catch (error) {
+            console.error('Batch delete error:', error);
+            alert('刪除失敗');
+        } finally {
+            setLoading(false);
+        }
+    };
+    
+    const handleBatchCopy = async (sourceStart: string, targetStart: string, days: number) => {
+        setLoading(true);
+        try {
+            const response = await fetch('/api/roster/doctor', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sourceStart, targetStart, days })
+            });
+            const result = await response.json();
+            if (result.success) {
+                setIsBatchOpen(false);
+                fetchRoster();
+                alert(result.message || '已複製');
+            } else {
+                alert('複製失敗: ' + result.message);
+            }
+        } catch (error) {
+            console.error('Batch copy error:', error);
+            alert('複製失敗');
+        } finally {
+            setLoading(false);
+        }
+    };
     
     // 🟢 修正日曆生成邏輯：週一排前面
     const generateCalendar = () => {

@@ -1,15 +1,10 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { createClient } from '@supabase/supabase-js';
 import { Download, X, ChevronLeft, ChevronRight, Settings, FileText } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import { saveAs } from 'file-saver';
 import jsPDF from 'jspdf';
-
-const supabaseUrl = 'https://ucpkvptnhgbtmghqgbof.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVjcGt2cHRuaGdidG1naHFnYm9mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUzNDg5MTAsImV4cCI6MjA4MDkyNDkxMH0.zdLx86ey-QywuGD-S20JJa7ZD6xHFRalAMRN659bbuo';
-const supabase = createClient(supabaseUrl, supabaseKey);
 
 const WEEKDAYS = ['星期一', '星期二', '星期三', '星期四', '星期五', '星期六', '星期日'];
 
@@ -68,25 +63,42 @@ export default function DoctorRosterPrint({ onClose }: { onClose: () => void }) 
     };
 
     const fetchData = async () => {
-        const chunks = getWeekChunks(targetDate, duration);
-        const allDates = chunks.flat();
-        const startDateStr = getLocalDateString(allDates[0]);
-        const endDateStr = getLocalDateString(allDates[allDates.length - 1]);
+        try {
+            const chunks = getWeekChunks(targetDate, duration);
+            const allDates = chunks.flat();
+            const startDateStr = getLocalDateString(allDates[0]);
+            const endDateStr = getLocalDateString(allDates[allDates.length - 1]);
 
-        const { data: docs } = await supabase.from('staff').select('id, name').eq('role', '醫師');
-        setDoctors(docs || []);
+            // 取得醫師列表
+            const docsResponse = await fetch('/api/staff?role=醫師');
+            const docsResult = await docsResponse.json();
+            if (docsResult.data) {
+                setDoctors(docsResult.data.filter((s: any) => s.role === '醫師').map((s: any) => ({ id: s.id, name: s.name })));
+            }
 
-        const { data: roster } = await supabase.from('doctor_roster')
-            .select('*')
-            .gte('date', startDateStr)
-            .lte('date', endDateStr);
-        setRosterData(roster || []);
+            // 取得排班資料（使用日期範圍查詢）
+            const rosterResponse = await fetch(`/api/roster/doctor?startDate=${startDateStr}&endDate=${endDateStr}`);
+            const rosterResult = await rosterResponse.json();
+            if (rosterResult.error) {
+                console.error('Error:', rosterResult.error);
+                setRosterData([]);
+            } else {
+                setRosterData(rosterResult.data || []);
+            }
 
-        const { data: closed } = await supabase.from('clinic_closed_days')
-            .select('date')
-            .gte('date', startDateStr)
-            .lte('date', endDateStr);
-        setClosedDays(closed?.map(c => c.date) || []);
+            // 取得休診日（使用日期範圍查詢）
+            const closedResponse = await fetch(`/api/roster/closed-days?startDate=${startDateStr}&endDate=${endDateStr}`);
+            const closedResult = await closedResponse.json();
+            if (closedResult.error) {
+                console.error('Error:', closedResult.error);
+                setClosedDays([]);
+            } else {
+                setClosedDays(closedResult.data || []);
+            }
+        } catch (error) {
+            console.error('Fetch data error:', error);
+            alert('載入資料失敗');
+        }
     };
 
     useEffect(() => { fetchData(); }, [targetDate, duration]);

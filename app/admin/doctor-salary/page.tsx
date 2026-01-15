@@ -1,13 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { createClient } from '@supabase/supabase-js';
 import { Stethoscope, Settings, Printer, Save, X, Trash2, Lock, Unlock, FileEdit, Landmark, PenLine, Sparkles, ShieldAlert, ChevronLeft, ChevronRight } from 'lucide-react';
 import PayslipModal from './PayslipModal';
-
-const supabaseUrl = 'https://ucpkvptnhgbtmghqgbof.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVjcGt2cHRuaGdidG1naHFnYm9mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUzNDg5MTAsImV4cCI6MjA4MDkyNDkxMH0.zdLx86ey-QywuGD-S20JJa7ZD6xHFRalAMRN659bbuo';
-const supabase = createClient(supabaseUrl, supabaseKey);
 
 type Item = { id: number; name: string; amount: number; rate?: number };
 
@@ -17,16 +12,31 @@ const DEFAULT_BASE_PAY = {
     insurance: 0, finalBase: 0, insurance_labor: 0, insurance_health: 0
 };
 
-const DoctorSettingsModal = ({ doctor, onClose, onUpdate }: any) => {
+    const DoctorSettingsModal = ({ doctor, onClose, onUpdate }: any) => {
     const [form, setForm] = useState({ ...doctor });
     const handleSave = async () => {
-        await supabase.from('staff').update({
-            doctor_base_mode: form.doctor_base_mode, doctor_license_fee: form.doctor_license_fee,
-            doctor_guarantee_salary: form.doctor_guarantee_salary, doctor_hourly_rate: form.doctor_hourly_rate,
-            doctor_nhi_rate: form.doctor_nhi_rate, doctor_hours_per_shift: form.doctor_hours_per_shift,
-            insurance_labor: form.insurance_labor, insurance_health: form.insurance_health
-        }).eq('id', doctor.id);
-        onUpdate(); onClose();
+        try {
+          await fetch('/api/staff', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id: doctor.id,
+              doctor_base_mode: form.doctor_base_mode,
+              doctor_license_fee: form.doctor_license_fee,
+              doctor_guarantee_salary: form.doctor_guarantee_salary,
+              doctor_hourly_rate: form.doctor_hourly_rate,
+              doctor_nhi_rate: form.doctor_nhi_rate,
+              doctor_hours_per_shift: form.doctor_hours_per_shift,
+              insurance_labor: form.insurance_labor,
+              insurance_health: form.insurance_health
+            })
+          });
+          onUpdate();
+          onClose();
+        } catch (error: any) {
+          console.error('Error updating doctor settings:', error);
+          alert('更新失敗: ' + error.message);
+        }
     };
     return (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
@@ -73,30 +83,45 @@ export default function DoctorSalaryPage() {
     useEffect(() => { fetchDoctors(); }, []);
     useEffect(() => { if (selectedDoctorId && currentMonth && ppfTargetMonth) { calculateBasePay(); fetchPpfRecord(); } }, [selectedDoctorId, currentMonth, ppfTargetMonth]);
 
-    const fetchDoctors = async () => { const { data } = await supabase.from('staff').select('*').eq('role', '醫師').order('id'); if (data) { setDoctors(data); if (data.length > 0 && !selectedDoctorId) setSelectedDoctorId(data[0].id); } };
+    const fetchDoctors = async () => {
+      try {
+        const res = await fetch('/api/staff?role=醫師');
+        const json = await res.json();
+        if (json.data) {
+          setDoctors(json.data);
+          if (json.data.length > 0 && !selectedDoctorId) setSelectedDoctorId(json.data[0].id);
+        }
+      } catch (error: any) {
+        console.error('Error fetching doctors:', error);
+      }
+    };
 
     const calculateBasePay = async () => {
         if (!selectedDoctorId) return;
         const doctor = doctors.find(d => d.id === selectedDoctorId);
         if (!doctor) return;
-        const start = `${currentMonth}-01`;
-        const [y, m] = currentMonth.split('-').map(Number);
-        const nextMonth = new Date(y, m, 1).toISOString();
-        const { data: roster } = await supabase.from('doctor_roster').select('*').eq('doctor_id', selectedDoctorId).gte('date', start).lt('date', nextMonth).order('date');
-        setRosterList(roster || []);
-        let actualHours = 0;
-        roster?.forEach((r: any) => {
+        try {
+          const [y, m] = currentMonth.split('-').map(Number);
+          const nextMonth = new Date(y, m, 1).toISOString().slice(0, 7);
+          const res = await fetch(`/api/roster/doctor?doctor_id=${selectedDoctorId}&year=${y}&month=${m}`);
+          const json = await res.json();
+          setRosterList(json.data || []);
+          let actualHours = 0;
+          (json.data || []).forEach((r: any) => {
             if (r.start_time && r.end_time) {
-                const [sh, sm] = r.start_time.split(':').map(Number); const [eh, em] = r.end_time.split(':').map(Number);
-                actualHours += Math.max(0, (eh * 60 + em) - (sh * 60 + sm)) / 60;
-            } else actualHours += (Number(doctor.doctor_hours_per_shift) || 3.5);
-        });
-        
-        const insurance_labor = (Number(doctor.insurance_labor) || 0);
-        const insurance_health = (Number(doctor.insurance_health) || 0);
-        const hourlyRate = Number(doctor.doctor_hourly_rate) || 0;
-        
-        const newData = {
+              const [sh, sm] = r.start_time.split(':').map(Number);
+              const [eh, em] = r.end_time.split(':').map(Number);
+              actualHours += Math.max(0, (eh * 60 + em) - (sh * 60 + sm)) / 60;
+            } else {
+              actualHours += (Number(doctor.doctor_hours_per_shift) || 3.5);
+            }
+          });
+          
+          const insurance_labor = (Number(doctor.insurance_labor) || 0);
+          const insurance_health = (Number(doctor.insurance_health) || 0);
+          const hourlyRate = Number(doctor.doctor_hourly_rate) || 0;
+          
+          const newData = {
             mode: doctor.doctor_base_mode || 'guarantee',
             licenseFee: Number(doctor.doctor_license_fee) || 0,
             guarantee: Number(doctor.doctor_guarantee_salary) || 0,
@@ -106,54 +131,73 @@ export default function DoctorSalaryPage() {
             workPay: 0,
             adjustment: 0,
             finalBase: 0,
-            insurance_labor, 
+            insurance_labor,
             insurance_health
-        };
+          };
 
-        if (doctor.doctor_base_mode === 'license') {
+          if (doctor.doctor_base_mode === 'license') {
             newData.workPay = Math.round(actualHours * hourlyRate);
             newData.finalBase = newData.licenseFee + newData.workPay;
-        } else {
+          } else {
             const weeklyShifts = Number(doctor.doctor_shifts_per_week) || 0;
             newData.standardHours = (weeklyShifts * (Number(doctor.doctor_hours_per_shift) || 3.5) / 7) * 30;
             newData.adjustment = Math.round((actualHours - newData.standardHours) * hourlyRate);
             newData.finalBase = newData.guarantee + newData.adjustment;
+          }
+          setBasePayData(newData);
+        } catch (error: any) {
+          console.error('Error calculating base pay:', error);
         }
-        setBasePayData(newData);
     };
 
     const fetchPpfRecord = async () => {
         if (!selectedDoctorId || !ppfTargetMonth) return;
         const doctor = doctors.find(d => d.id === selectedDoctorId);
         
-        const { data } = await supabase.from('doctor_ppf').select('*').eq('doctor_id', selectedDoctorId).eq('target_month', ppfTargetMonth).single();
-        
-        let historicalBasePay = 0;
-        const { data: historyData } = await supabase.from('doctor_ppf').select('actual_base_pay').eq('doctor_id', selectedDoctorId).eq('paid_in_month', ppfTargetMonth).single();
-        if (historyData) historicalBasePay = Number(historyData.actual_base_pay);
-        else historicalBasePay = Number(doctor?.doctor_guarantee_salary) || 0;
+        try {
+          const res = await fetch(`/api/doctor/ppf?doctor_id=${selectedDoctorId}&target_month=${ppfTargetMonth}`);
+          const json = await res.json();
+          
+          let historicalBasePay = 0;
+          const historyRes = await fetch(`/api/doctor/ppf?doctor_id=${selectedDoctorId}&paid_in_month=${ppfTargetMonth}`);
+          const historyJson = await historyRes.json();
+          if (historyJson.data && historyJson.data.length > 0) {
+            historicalBasePay = Number(historyJson.data[0].actual_base_pay) || 0;
+          } else {
+            historicalBasePay = Number(doctor?.doctor_guarantee_salary) || 0;
+          }
 
-        if (data) {
-            setPpfData({ 
-                patient_count: Number(data.patient_count) || 0, nhi_points: Number(data.nhi_points) || 0, reg_fee_deduction: Number(data.reg_fee_deduction) || 0, 
-                clinic_days: Number(data.clinic_days) || 0, transfer_amount: Number(data.transfer_amount) || 0, 
-                self_pay_items: Array.isArray(data.self_pay_items) ? data.self_pay_items : [], 
-                extra_items: Array.isArray(data.extra_items) ? data.extra_items : [], 
-                past_base_salary: data.base_salary_at_time !== null ? Number(data.base_salary_at_time) : historicalBasePay, 
-                status: data.status || 'draft'
+          if (json.data) {
+            setPpfData({
+              patient_count: Number(json.data.patient_count) || 0,
+              nhi_points: Number(json.data.nhi_points) || 0,
+              reg_fee_deduction: Number(json.data.reg_fee_deduction) || 0,
+              clinic_days: Number(json.data.clinic_days) || 0,
+              transfer_amount: Number(json.data.transfer_amount) || 0,
+              self_pay_items: Array.isArray(json.data.self_pay_items) ? json.data.self_pay_items : [],
+              extra_items: Array.isArray(json.data.extra_items) ? json.data.extra_items : [],
+              past_base_salary: json.data.base_salary_at_time !== null ? Number(json.data.base_salary_at_time) : historicalBasePay,
+              status: json.data.status || 'draft'
             });
-        } else {
+          } else {
             let templateItems: Item[] = [];
             if (doctor?.doctor_self_pay_template) {
-                templateItems = doctor.doctor_self_pay_template.map((t: any) => ({ id: Date.now() + Math.random(), name: t.name, amount: 0, rate: t.rate }));
+              templateItems = doctor.doctor_self_pay_template.map((t: any) => ({ id: Date.now() + Math.random(), name: t.name, amount: 0, rate: t.rate }));
             }
-            setPpfData({ 
-                patient_count: 0, nhi_points: 0, reg_fee_deduction: 0, 
-                clinic_days: 0, transfer_amount: 0, 
-                self_pay_items: templateItems, extra_items: [], 
-                past_base_salary: historicalBasePay, 
-                status: 'draft'
+            setPpfData({
+              patient_count: 0,
+              nhi_points: 0,
+              reg_fee_deduction: 0,
+              clinic_days: 0,
+              transfer_amount: 0,
+              self_pay_items: templateItems,
+              extra_items: [],
+              past_base_salary: historicalBasePay,
+              status: 'draft'
             });
+          }
+        } catch (error: any) {
+          console.error('Error fetching PPF record:', error);
         }
     };
 
@@ -200,25 +244,50 @@ export default function DoctorSalaryPage() {
     const saveData = async (status: 'draft' | 'locked') => {
         if (!selectedDoctorId) return alert("請先選擇醫師");
         setIsSaving(true);
-        const { error } = await supabase.from('doctor_ppf').upsert({ 
-            doctor_id: selectedDoctorId, target_month: ppfTargetMonth, 
-            patient_count: ppfData.patient_count, nhi_points: ppfData.nhi_points, reg_fee_deduction: ppfData.reg_fee_deduction, 
-            clinic_days: ppfData.clinic_days, transfer_amount: ppfData.transfer_amount, 
-            actual_base_pay: basePayData.finalBase, 
-            self_pay_items: ppfData.self_pay_items, extra_items: ppfData.extra_items,
-            total_performance: ppfResult.totalPerformance, 
-            base_salary_at_time: ppfData.past_base_salary, 
-            final_ppf_bonus: ppfResult.bonus, paid_in_month: currentMonth, status: status,
-            // 🟢 關鍵修正：這裡把算好的 net_pay 和 cash_amount 寫入資料庫
-            net_pay: finalNetPay,
-            cash_amount: remainingCash
-        }, { onConflict: 'doctor_id, target_month' });
-        setIsSaving(false);
-        if (!error) { 
-            if (status === 'locked') { const tmpl = ppfData.self_pay_items.map(i => ({ name: i.name, rate: i.rate })); await supabase.from('staff').update({ doctor_self_pay_template: tmpl }).eq('id', selectedDoctorId); }
+        try {
+          const res = await fetch('/api/doctor/ppf', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              doctor_id: selectedDoctorId,
+              target_month: ppfTargetMonth,
+              patient_count: ppfData.patient_count,
+              nhi_points: ppfData.nhi_points,
+              reg_fee_deduction: ppfData.reg_fee_deduction,
+              clinic_days: ppfData.clinic_days,
+              transfer_amount: ppfData.transfer_amount,
+              actual_base_pay: basePayData.finalBase,
+              self_pay_items: ppfData.self_pay_items,
+              extra_items: ppfData.extra_items,
+              total_performance: ppfResult.totalPerformance,
+              base_salary_at_time: ppfData.past_base_salary,
+              final_ppf_bonus: ppfResult.bonus,
+              paid_in_month: currentMonth,
+              status: status,
+              net_pay: finalNetPay,
+              cash_amount: remainingCash
+            })
+          });
+          const json = await res.json();
+          setIsSaving(false);
+          if (!json.error) {
+            if (status === 'locked') {
+              const tmpl = ppfData.self_pay_items.map((i: any) => ({ name: i.name, rate: i.rate }));
+              await fetch('/api/staff', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: selectedDoctorId, doctor_self_pay_template: tmpl })
+              });
+            }
             setPpfData(prev => ({ ...prev, status }));
-            alert(status === 'locked' ? '✅ 已結算並封存！' : '💾 草稿已暫存'); 
-        } else alert('儲存失敗: ' + error.message);
+            alert(status === 'locked' ? '✅ 已結算並封存！' : '💾 草稿已暫存');
+          } else {
+            alert('儲存失敗: ' + json.error);
+          }
+        } catch (error: any) {
+          setIsSaving(false);
+          alert('儲存失敗: ' + error.message);
+        }
     };
 
     return (

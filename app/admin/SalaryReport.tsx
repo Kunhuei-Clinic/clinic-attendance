@@ -1,12 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { createClient } from '@supabase/supabase-js';
 import { FileSpreadsheet, Filter, User, ToggleLeft, ToggleRight, Calendar } from 'lucide-react';
-
-const supabaseUrl = 'https://ucpkvptnhgbtmghqgbof.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVjcGt2cHRuaGdidG1naHFnYm9mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUzNDg5MTAsImV4cCI6MjA4MDkyNDkxMH0.zdLx86ey-QywuGD-S20JJa7ZD6xHFRalAMRN659bbuo';
-const supabase = createClient(supabaseUrl, supabaseKey);
 
 const getInitialMonth = () => {
     const d = new Date();
@@ -32,94 +27,48 @@ export default function SalaryReportView() {
     useEffect(() => { fetchReport(); }, [useDateFilter, startMonth, endMonth, month, roleFilter, selectedStaffId]);
 
     const fetchStaffList = async () => {
-        const { data } = await supabase.from('staff').select('id, name, role').order('role');
-        setStaffList(data || []);
+        try {
+            const response = await fetch('/api/staff');
+            const result = await response.json();
+            if (result.data) {
+                setStaffList(result.data.map((s: any) => ({ id: s.id, name: s.name, role: s.role })));
+            }
+        } catch (error) {
+            console.error('Fetch staff list error:', error);
+        }
     };
 
     const fetchReport = async () => {
         setLoading(true);
-        const data: any[] = [];
-
-        // 1. 抓醫師資料 (doctor_ppf)
-        if (roleFilter === 'all' || roleFilter === 'doctor') {
-            let query = supabase.from('doctor_ppf')
-                .select(`*, staff:doctor_id (name, role, insurance_labor, insurance_health)`)
-                .eq('status', 'locked'); 
+        try {
+            const params = new URLSearchParams({
+                useDateFilter: String(useDateFilter),
+                roleFilter: roleFilter,
+                selectedStaffId: selectedStaffId,
+            });
 
             if (useDateFilter) {
-                query = query.gte('paid_in_month', startMonth).lte('paid_in_month', endMonth);
+                params.append('startMonth', startMonth);
+                params.append('endMonth', endMonth);
             } else {
-                query = query.eq('paid_in_month', month);
+                params.append('month', month);
             }
 
-            if (selectedStaffId !== 'all') {
-                query = query.eq('doctor_id', selectedStaffId);
-            }
+            const response = await fetch(`/api/report/salary?${params.toString()}`);
+            const result = await response.json();
 
-            const { data: docs } = await query;
-
-            docs?.forEach((d: any) => {
-                const extraTotal = Array.isArray(d.extra_items) 
-                    ? d.extra_items.reduce((sum:number, item:any) => sum + Number(item.amount), 0) 
-                    : 0;
-                const insuranceDeduction = (d.staff?.insurance_labor || 0) + (d.staff?.insurance_health || 0);
-                const basePay = d.actual_base_pay || 0; 
-                const bonus = (d.final_ppf_bonus || 0) + extraTotal; 
-                const netTotal = basePay + bonus - insuranceDeduction; 
-
-                data.push({
-                    type: 'doctor', // 用於排序
-                    displayType: '醫師', // 顯示用
-                    name: d.staff?.name,
-                    month: d.paid_in_month,
-                    total: netTotal,
-                    details: `PPF:${d.target_month}`
-                });
-            });
-        }
-
-        // 2. 抓員工資料 (salary_history)
-        if (roleFilter === 'all' || roleFilter === 'staff') {
-            let query = supabase.from('salary_history').select('year_month, staff_name, snapshot');
-
-            if (useDateFilter) {
-                query = query.gte('year_month', startMonth).lte('year_month', endMonth);
+            if (result.error) {
+                console.error('Error:', result.error);
+                setReportData([]);
             } else {
-                query = query.eq('year_month', month);
+                setReportData(result.data || []);
             }
-
-            if (selectedStaffId !== 'all') {
-                const staff = staffList.find(s => String(s.id) === selectedStaffId);
-                if (staff) query = query.eq('staff_name', staff.name);
-            }
-
-            const { data: histories } = await query;
-
-            histories?.forEach((h: any) => {
-                const snap = h.snapshot || {}; 
-                data.push({
-                    type: 'staff', // 用於排序
-                    displayType: '員工',
-                    name: h.staff_name,
-                    month: h.year_month,
-                    total: snap.net_pay || 0,
-                    details: `工時:${snap.total_hours?.toFixed(1) || 0}hr`
-                });
-            });
+        } catch (error) {
+            console.error('Fetch report error:', error);
+            setReportData([]);
+        } finally {
+            setLoading(false);
         }
-
-        // 🟢 排序邏輯優化：
-        // 1. 月份 (新 -> 舊)
-        // 2. 職類 (醫師 -> 員工)  *利用字串比較 'doctor' < 'staff'
-        // 3. 姓名 (筆畫 A -> Z)
-        data.sort((a, b) => 
-            b.month.localeCompare(a.month) || 
-            a.type.localeCompare(b.type) || 
-            a.name.localeCompare(b.name)
-        );
-        
-        setReportData(data);
-        setLoading(false);
     };
 
     const handleExport = () => {

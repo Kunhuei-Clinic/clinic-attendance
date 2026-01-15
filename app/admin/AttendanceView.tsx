@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { createClient } from '@supabase/supabase-js';
 import { 
   Clock, 
   User, 
@@ -15,14 +14,9 @@ import {
   Pencil,
   AlertCircle,
   Briefcase,
-  Trash2 // 🟢 新增：刪除圖示
+  Trash2
 } from 'lucide-react';
 import { saveAs } from 'file-saver';
-
-// --- Supabase Config ---
-const supabaseUrl = 'https://ucpkvptnhgbtmghqgbof.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVjcGt2cHRuaGdidG1naHFnYm9mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUzNDg5MTAsImV4cCI6MjA4MDkyNDkxMH0.zdLx86ey-QywuGD-S20JJa7ZD6xHFRalAMRN659bbuo';
-const supabase = createClient(supabaseUrl, supabaseKey);
 
 const getInitialRange = () => {
     const now = new Date();
@@ -70,12 +64,18 @@ export default function AttendanceView() {
   }, [useDateFilter, startDate, endDate, selectedStaffId, selectedRole]);
 
   const fetchStaff = async () => {
-    const { data } = await supabase.from('staff').select('id, name, role').order('id');
-    if (data) {
-        setStaffList(data);
-        if(data.length > 0 && !formData.staffId) {
-            setFormData(prev => ({...prev, staffId: String(data[0].id)}));
+    try {
+      const response = await fetch('/api/staff');
+      const result = await response.json();
+      if (result.data) {
+        setStaffList(result.data);
+        if (result.data.length > 0 && !formData.staffId) {
+          setFormData(prev => ({...prev, staffId: String(result.data[0].id)}));
         }
+      }
+    } catch (error) {
+      console.error('Fetch staff error:', error);
+      alert('載入員工列表失敗');
     }
   };
 
@@ -88,54 +88,55 @@ export default function AttendanceView() {
   const fetchLogs = async () => {
     setLoading(true);
     
-    let query = supabase.from('attendance_logs')
-        .select('*')
-        .order('clock_in_time', { ascending: false });
+    try {
+      const params = new URLSearchParams({
+        useDateFilter: String(useDateFilter),
+        selectedStaffId: selectedStaffId,
+        selectedRole: selectedRole,
+      });
 
-    // 日期篩選
-    if (useDateFilter) {
-        query = query.gte('clock_in_time', `${startDate}T00:00:00`).lte('clock_in_time', `${endDate}T23:59:59`);
+      if (useDateFilter) {
+        params.append('startDate', startDate);
+        params.append('endDate', endDate);
+      }
+
+      const response = await fetch(`/api/attendance?${params.toString()}`);
+      const result = await response.json();
+
+      if (result.error) {
+        console.error('Error fetching logs:', result.error);
+        alert('載入考勤紀錄失敗: ' + result.error);
+        setLogs([]);
+      } else {
+        setLogs(result.data || []);
+      }
+    } catch (error) {
+      console.error('Fetch logs error:', error);
+      alert('載入考勤紀錄失敗');
+      setLogs([]);
+    } finally {
+      setLoading(false);
     }
-
-    // 姓名/職位篩選
-    let targetNames: string[] = [];
-    if (selectedStaffId !== 'all') {
-        const target = staffList.find(s => String(s.id) === selectedStaffId);
-        if (target) targetNames = [target.name];
-    } else if (selectedRole !== 'all') {
-        targetNames = staffList
-            .filter(s => (s.role || '未分類') === selectedRole)
-            .map(s => s.name);
-    }
-
-    if (targetNames.length > 0) {
-        query = query.in('staff_name', targetNames);
-    } else if (selectedRole !== 'all' && targetNames.length === 0) {
-        query = query.eq('staff_name', 'NO_MATCH'); 
-    }
-
-    if (!useDateFilter) {
-        query = query.limit(300);
-    }
-
-    const { data, error } = await query;
-    if (error) console.error('Error fetching logs:', error);
-    else setLogs(data || []);
-    
-    setLoading(false);
   };
 
-  // 🟢 新增：刪除紀錄功能
+  // 刪除紀錄功能
   const handleDelete = async (id: number) => {
     if (!confirm('確定要永久刪除這筆打卡紀錄嗎？此操作無法復原。')) return;
 
     try {
-        const { error } = await supabase.from('attendance_logs').delete().eq('id', id);
-        if (error) throw error;
-        alert('刪除成功');
+      const response = await fetch(`/api/attendance?id=${id}`, {
+        method: 'DELETE',
+      });
+      const result = await response.json();
+
+      if (result.success) {
+        alert(result.message || '刪除成功');
         fetchLogs();
+      } else {
+        alert(result.message || '刪除失敗');
+      }
     } catch (err: any) {
-        alert('刪除失敗: ' + err.message);
+      alert('刪除失敗: ' + err.message);
     }
   };
 
@@ -196,67 +197,65 @@ export default function AttendanceView() {
 
   const handleManualSubmit = async () => {
     if (!formData.staffId || !formData.date || !formData.startTime) {
-        alert("請填寫完整資訊");
-        return;
+      alert("請填寫完整資訊");
+      return;
     }
 
     setIsSubmitting(true);
 
     try {
-        const staff = staffList.find(s => String(s.id) === formData.staffId);
-        if (!staff) throw new Error("找不到員工資料");
-
-        const startDateTime = new Date(`${formData.date}T${formData.startTime}:00`);
-        let endDateTime = null;
-        let workHours = 0;
-
-        if (formData.endTime) {
-            endDateTime = new Date(`${formData.date}T${formData.endTime}:00`);
-            if (endDateTime < startDateTime) {
-               if(!confirm("下班時間早於上班時間，確認要送出嗎？")) {
-                 setIsSubmitting(false);
-                 return;
-               }
-            }
-            workHours = (endDateTime.getTime() - startDateTime.getTime()) / (1000 * 60 * 60);
-        }
-
-        const payload = {
-            staff_id: Number(formData.staffId),
-            staff_name: staff.name,
-            clock_in_time: startDateTime.toISOString(),
-            clock_out_time: endDateTime ? endDateTime.toISOString() : null,
-            work_type: formData.workType,
-            work_hours: workHours > 0 ? workHours : 0,
-            note: formData.note, // 🟢 寫入備註
-            status: endDateTime ? 'completed' : 'pending'
-        };
-
-        let error;
-        if (editingLogId) {
-            const { error: updateError } = await supabase
-                .from('attendance_logs')
-                .update(payload)
-                .eq('id', editingLogId);
-            error = updateError;
-        } else {
-            const { error: insertError } = await supabase
-                .from('attendance_logs')
-                .insert(payload);
-            error = insertError;
-        }
-
-        if (error) throw error;
-
-        alert(editingLogId ? "修改成功！" : "補打卡成功！");
-        setIsModalOpen(false);
-        fetchLogs(); 
-
-    } catch (err: any) {
-        console.error(err);
-        alert(`處理失敗: ${err.message}`);
-    } finally {
+      const staff = staffList.find(s => String(s.id) === formData.staffId);
+      if (!staff) {
+        alert("找不到員工資料");
         setIsSubmitting(false);
+        return;
+      }
+
+      // 驗證時間邏輯
+      if (formData.endTime) {
+        const endDateTime = new Date(`${formData.date}T${formData.endTime}:00`);
+        const startDateTime = new Date(`${formData.date}T${formData.startTime}:00`);
+        if (endDateTime < startDateTime) {
+          if (!confirm("下班時間早於上班時間，確認要送出嗎？")) {
+            setIsSubmitting(false);
+            return;
+          }
+        }
+      }
+
+      const payload = {
+        id: editingLogId || undefined,
+        staffId: Number(formData.staffId),
+        staffName: staff.name,
+        date: formData.date,
+        startTime: formData.startTime,
+        endTime: formData.endTime || undefined,
+        workType: formData.workType,
+        note: formData.note || undefined,
+      };
+
+      const response = await fetch('/api/attendance', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        alert(result.message || (editingLogId ? "修改成功！" : "補打卡成功！"));
+        setIsModalOpen(false);
+        fetchLogs();
+      } else {
+        alert(result.message || '處理失敗');
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert(`處理失敗: ${err.message}`);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 

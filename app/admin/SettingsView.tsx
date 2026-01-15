@@ -1,12 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { createClient } from '@supabase/supabase-js';
 import { Settings, Save, Plus, User, UserX, UserCheck, Stethoscope, Briefcase, Eye, EyeOff, Building, Clock, CalendarDays, LayoutGrid, Trash2 } from 'lucide-react';
-
-const supabaseUrl = 'https://ucpkvptnhgbtmghqgbof.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVjcGt2cHRuaGdidG1naHFnYm9mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUzNDg5MTAsImV4cCI6MjA4MDkyNDkxMH0.zdLx86ey-QywuGD-S20JJa7ZD6xHFRalAMRN659bbuo';
-const supabase = createClient(supabaseUrl, supabaseKey);
 
 type Entity = { id: string; name: string };
 const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六'];
@@ -46,9 +41,17 @@ export default function SettingsView() {
     // ==========================================
     const fetchStaff = async () => {
         setLoadingStaff(true);
-        const { data } = await supabase.from('staff').select('*').order('id');
-        setStaffList(data || []);
-        setLoadingStaff(false);
+        try {
+            const response = await fetch('/api/staff');
+            const result = await response.json();
+            if (result.data) {
+                setStaffList(result.data || []);
+            }
+        } catch (error) {
+            console.error('Fetch staff error:', error);
+        } finally {
+            setLoadingStaff(false);
+        }
     };
 
     const handleEditStaff = (staff: any) => {
@@ -83,20 +86,33 @@ export default function SettingsView() {
             insurance_health: Number(editData.insurance_health) || 0
         };
 
-        let error;
-        if (editData.id) {
-            const { error: err } = await supabase.from('staff').update(payload).eq('id', editData.id);
-            error = err;
-        } else {
-            const { error: err } = await supabase.from('staff').insert([payload]);
-            error = err;
-        }
+        try {
+            let response;
+            if (editData.id) {
+                response = await fetch('/api/staff', {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: editData.id, ...payload })
+                });
+            } else {
+                response = await fetch('/api/staff', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+            }
 
-        if (error) alert("儲存失敗: " + error.message);
-        else {
-            alert("儲存成功！");
-            setShowStaffModal(false);
-            fetchStaff();
+            const result = await response.json();
+            if (result.success) {
+                alert("儲存成功！");
+                setShowStaffModal(false);
+                fetchStaff();
+            } else {
+                alert("儲存失敗: " + result.message);
+            }
+        } catch (error) {
+            console.error('Save staff error:', error);
+            alert("儲存失敗");
         }
     };
 
@@ -104,8 +120,23 @@ export default function SettingsView() {
         const newStatus = !staff.is_active;
         const action = newStatus ? '復職' : '離職';
         if (!confirm(`確定要將 ${staff.name} 設定為「${action}」嗎？`)) return;
-        await supabase.from('staff').update({ is_active: newStatus }).eq('id', staff.id);
-        fetchStaff();
+        
+        try {
+            const response = await fetch('/api/staff', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: staff.id, is_active: newStatus })
+            });
+            const result = await response.json();
+            if (result.success) {
+                fetchStaff();
+            } else {
+                alert('更新失敗: ' + result.message);
+            }
+        } catch (error) {
+            console.error('Toggle staff status error:', error);
+            alert('更新失敗');
+        }
     };
 
     const displayedStaff = staffList.filter(s => showResigned ? true : s.is_active);
@@ -114,35 +145,53 @@ export default function SettingsView() {
     // 🟢 功能 B: 系統設定 (Logic)
     // ==========================================
     const fetchSystemSettings = async () => {
-        const { data } = await supabase.from('system_settings').select('*');
-        if (data) {
-            data.forEach((item: any) => {
-                if (item.key === 'org_entities') {
-                    try { setEntities(JSON.parse(item.value)); } catch (e) {}
-                }
-                if (item.key === 'special_clinic_types') {
-                    try { setSpecialClinics(JSON.parse(item.value)); } catch (e) {}
-                }
-                if (item.key === 'clinic_business_hours') {
-                    try { setBusinessHours(JSON.parse(item.value)); } catch (e) {}
-                }
-            });
+        try {
+            const response = await fetch('/api/settings');
+            const result = await response.json();
+            if (result.data) {
+                result.data.forEach((item: any) => {
+                    if (item.key === 'org_entities') {
+                        try { setEntities(JSON.parse(item.value)); } catch (e) { }
+                    }
+                    if (item.key === 'special_clinic_types') {
+                        try { setSpecialClinics(JSON.parse(item.value)); } catch (e) { }
+                    }
+                    if (item.key === 'clinic_business_hours') {
+                        try { setBusinessHours(JSON.parse(item.value)); } catch (e) { }
+                    }
+                });
+            }
+        } catch (error) {
+            console.error('Fetch system settings error:', error);
         }
     };
 
     const handleSaveSystem = async () => {
         setLoadingSystem(true);
-        const updates = [
-            { key: 'org_entities', value: JSON.stringify(entities) },
-            { key: 'special_clinic_types', value: JSON.stringify(specialClinics) },
-            { key: 'clinic_business_hours', value: JSON.stringify(businessHours) }
-        ];
-        const { error } = await supabase.from('system_settings').upsert(updates);
-        setLoadingSystem(false);
-        if (error) setSystemMessage('❌ 儲存失敗: ' + error.message);
-        else {
-            setSystemMessage('✅ 設定已更新，排班表將套用新時間');
-            setTimeout(() => setSystemMessage(''), 3000);
+        try {
+            const updates = [
+                { key: 'org_entities', value: JSON.stringify(entities) },
+                { key: 'special_clinic_types', value: JSON.stringify(specialClinics) },
+                { key: 'clinic_business_hours', value: JSON.stringify(businessHours) }
+            ];
+            const response = await fetch('/api/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(updates)
+            });
+            const result = await response.json();
+            
+            if (result.success) {
+                setSystemMessage('✅ 設定已更新，排班表將套用新時間');
+                setTimeout(() => setSystemMessage(''), 3000);
+            } else {
+                setSystemMessage('❌ 儲存失敗: ' + result.message);
+            }
+        } catch (error) {
+            console.error('Save system settings error:', error);
+            setSystemMessage('❌ 儲存失敗');
+        } finally {
+            setLoadingSystem(false);
         }
     };
 

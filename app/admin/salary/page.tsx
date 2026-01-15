@@ -2,7 +2,6 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { createClient } from '@supabase/supabase-js';
 import { DollarSign, Calendar, Save, Archive, RefreshCw, CloudLightning, History, ChevronLeft, ChevronRight } from 'lucide-react';
 import { addMonths, format, subMonths } from 'date-fns';
 
@@ -10,11 +9,6 @@ import CalculatorView from './CalculatorView';
 import SettingsModal from './SettingsModal';
 import PayslipModal from './PayslipModal';
 import { calculateStaffSalary } from './salaryEngine';
-
-// 請替換為你的環境變數或確保環境已設定
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const supabase = createClient(supabaseUrl, supabaseKey);
 
 type Entity = { id: string; name: string };
 
@@ -51,132 +45,148 @@ export default function SalaryPage() {
   }, [staffList, adjustments]);
 
   const fetchSystemSettings = async () => {
-    const { data } = await supabase.from('system_settings').select('value').eq('key', 'org_entities').single();
-    if (data?.value) setEntityList(JSON.parse(data.value));
+    try {
+      const res = await fetch('/api/settings?key=org_entities');
+      const json = await res.json();
+      if (json.data && json.data.length > 0 && json.data[0]?.value) {
+        setEntityList(JSON.parse(json.data[0].value));
+      }
+    } catch (error: any) {
+      console.error('Error fetching system settings:', error);
+    }
   };
 
   const fetchStaffSettings = async () => {
-    const { data } = await supabase.from('staff').select('*').neq('role', '醫師').order('id');
-    if (data) {
-        const formatted = data.map((s: any) => ({
-            ...s,
-            entity: s.entity || 'clinic', 
-            salary_mode: s.salary_mode || 'hourly',
-            base_salary: s.base_salary || 183,
-            work_rule: s.work_rule || 'normal',
-            clock_in_calc_mode: s.clock_in_calc_mode || 'actual', // 預設實支實付
-            bonuses: Array.isArray(s.bonuses) ? s.bonuses : [],
-            default_deductions: Array.isArray(s.default_deductions) ? s.default_deductions : [],
-            insurance_labor: s.insurance_labor || 0,
-            insurance_health: s.insurance_health || 0,
+    try {
+      const res = await fetch('/api/staff');
+      const json = await res.json();
+      // 過濾掉醫師
+      if (json.data) {
+        json.data = json.data.filter((s: any) => s.role !== '醫師');
+      }
+      if (json.data) {
+        const formatted = json.data.map((s: any) => ({
+          ...s,
+          entity: s.entity || 'clinic',
+          salary_mode: s.salary_mode || 'hourly',
+          base_salary: s.base_salary || 183,
+          work_rule: s.work_rule || 'normal',
+          clock_in_calc_mode: s.clock_in_calc_mode || 'actual', // 預設實支實付
+          bonuses: Array.isArray(s.bonuses) ? s.bonuses : [],
+          default_deductions: Array.isArray(s.default_deductions) ? s.default_deductions : [],
+          insurance_labor: s.insurance_labor || 0,
+          insurance_health: s.insurance_health || 0,
         }));
         setStaffList(formatted);
+      }
+    } catch (error: any) {
+      console.error('Error fetching staff settings:', error);
     }
   };
 
   const fetchAdjustments = async () => {
-    const { data } = await supabase.from('salary_adjustments').select('*').eq('year_month', selectedMonth);
-    const map: Record<number, any[]> = {};
-    data?.forEach((item: any) => {
-      if (!map[item.staff_id]) map[item.staff_id] = [];
-      map[item.staff_id].push(item);
-    });
-    setAdjustments(map);
+    try {
+      const res = await fetch(`/api/salary/adjustments?year_month=${selectedMonth}`);
+      const json = await res.json();
+      const map: Record<number, any[]> = {};
+      json.data?.forEach((item: any) => {
+        if (!map[item.staff_id]) map[item.staff_id] = [];
+        map[item.staff_id].push(item);
+      });
+      setAdjustments(map);
+    } catch (error: any) {
+      console.error('Error fetching adjustments:', error);
+    }
   };
 
   const checkIfArchived = async () => {
-    const { data } = await supabase.from('salary_history').select('id').eq('year_month', selectedMonth).limit(1);
-    setIsSaved(!!data && data.length > 0);
+    try {
+      const res = await fetch(`/api/salary/history?year_month=${selectedMonth}`);
+      const json = await res.json();
+      setIsSaved(!!json.data && json.data.length > 0);
+    } catch (error: any) {
+      console.error('Error checking archive status:', error);
+    }
   };
 
   // --- 核心計算流程 ---
   const performCalculation = async () => {
     if (!selectedMonth) return;
-    const startDate = `${selectedMonth}-01T00:00:00`;
-    const [y, m] = selectedMonth.split('-').map(Number);
-    const nextMonth = new Date(y, m, 1).toISOString();
     
-    // 計算月標準工時
-    const daysInMonth = new Date(y, m, 0).getDate();
-    let standardWorkDays = 0;
-    for (let d = 1; d <= daysInMonth; d++) {
-        const day = new Date(y, m - 1, d).getDay();
-        if (day !== 0 && day !== 6) standardWorkDays++;
-    }
-    const monthlyStandardHours = standardWorkDays * 8;
+    try {
+      // 從 API 獲取所有計算所需的數據
+      const res = await fetch(`/api/salary/calculate?month=${selectedMonth}`);
+      const json = await res.json();
+      
+      if (json.error) {
+        console.error('Error fetching calculation data:', json.error);
+        return;
+      }
 
-    // 1. 撈取考勤 Log
-    const { data: logs } = await supabase.from('attendance_logs').select('*').gte('clock_in_time', startDate).lt('clock_in_time', nextMonth);
-    
-    // 2. 撈取班表 (包含 shift_details JSONB)
-    const { data: rosterData } = await supabase.from('roster').select('*').gte('date', startDate).lt('date', nextMonth);
-    
-    // 3. 撈取假日表
-    const { data: holidayData } = await supabase.from('clinic_holidays').select('date').gte('date', startDate).lt('date', nextMonth);
-    
-    // 4. 撈取請假單
-    const { data: leaveData } = await supabase.from('leave_requests').select('*').eq('status', 'approved').gte('start_time', startDate).lt('start_time', nextMonth);
-    
-    const holidaySet = new Set(holidayData?.map((h:any) => h.date));
-    
-    // 建構 Roster Map，包含班表細節
-    const rosterMap: Record<string, any> = {};
-    rosterData?.forEach((r:any) => {
+      const { logs, roster, holidays, leaves, monthlyStandardHours } = json;
+      
+      const holidaySet = new Set<string>((holidays || []).map((h: any) => String(h.date)));
+      
+      // 建構 Roster Map，包含班表細節
+      const rosterMap: Record<string, any> = {};
+      roster?.forEach((r: any) => {
         rosterMap[`${r.staff_id}_${r.date}`] = {
-            day_type: r.day_type,
-            shift_details: r.shift_details // 傳入 Shift JSON
+          day_type: r.day_type,
+          shift_details: r.shift_details // 傳入 Shift JSON
         };
-    });
+      });
 
-    const reports: any[] = [];
+      const reports: any[] = [];
 
-    staffList.forEach(staff => {
-       const myLogs = logs?.filter((l:any) => l.staff_name === staff.name) || [];
-       const myLeaves = leaveData?.filter((l:any) => l.staff_id === staff.id) || [];
+      staffList.forEach(staff => {
+        const myLogs = logs?.filter((l: any) => l.staff_name === staff.name) || [];
+        const myLeaves = leaves?.filter((l: any) => l.staff_id === staff.id) || [];
 
-       // 執行計算引擎
-       const calc = calculateStaffSalary(staff, myLogs, rosterMap, holidaySet, monthlyStandardHours, myLeaves);
+        // 執行計算引擎
+        const calc = calculateStaffSalary(staff, myLogs, rosterMap, holidaySet, monthlyStandardHours, myLeaves);
 
-       // 金額彙總
-       const fixedBonus = staff.bonuses.reduce((sum:number, b:any) => sum + Number(b.amount), 0);
-       const fixedDeduction = staff.default_deductions.reduce((sum:number, b:any) => sum + Number(b.amount), 0);
-       const myAdj = adjustments[staff.id] || [];
-       const tempBonus = myAdj.filter((a:any)=>a.type==='bonus').reduce((sum:number, b:any)=>sum+Number(b.amount),0);
-       const tempDeduction = myAdj.filter((a:any)=>a.type==='deduction').reduce((sum:number, b:any)=>sum+Number(b.amount),0);
+        // 金額彙總
+        const fixedBonus = staff.bonuses.reduce((sum: number, b: any) => sum + Number(b.amount), 0);
+        const fixedDeduction = staff.default_deductions.reduce((sum: number, b: any) => sum + Number(b.amount), 0);
+        const myAdj = adjustments[staff.id] || [];
+        const tempBonus = myAdj.filter((a: any) => a.type === 'bonus').reduce((sum: number, b: any) => sum + Number(b.amount), 0);
+        const tempDeduction = myAdj.filter((a: any) => a.type === 'deduction').reduce((sum: number, b: any) => sum + Number(b.amount), 0);
 
-       const gross = calc.base_pay + calc.ot_pay + calc.holiday_pay + fixedBonus + tempBonus + calc.leave_addition;
-       const deduction = staff.insurance_labor + staff.insurance_health + fixedDeduction + tempDeduction + calc.leave_deduction;
+        const gross = calc.base_pay + calc.ot_pay + calc.holiday_pay + fixedBonus + tempBonus + calc.leave_addition;
+        const deduction = staff.insurance_labor + staff.insurance_health + fixedDeduction + tempDeduction + calc.leave_deduction;
 
-       reports.push({
-           ...calc,
-           staff_entity: staff.entity,
-           staff_name: staff.name,
-           salary_mode: staff.salary_mode,
-           work_rule: staff.work_rule,
-           fixed_bonus_pay: fixedBonus,
-           temp_bonus_pay: tempBonus,
-           insurance_labor: staff.insurance_labor,
-           insurance_health: staff.insurance_health,
-           fixed_deduction_pay: fixedDeduction,
-           temp_deduction_pay: tempDeduction,
-           gross_pay: gross,
-           total_deduction: deduction,
-           net_pay: gross - deduction,
-           bonus_details: [...staff.bonuses, ...myAdj.filter((a:any)=>a.type==='bonus')],
-           deduction_details: [...staff.default_deductions, ...myAdj.filter((a:any)=>a.type==='deduction')]
-       });
-    });
-    setLiveReports(reports);
+        reports.push({
+          ...calc,
+          staff_entity: staff.entity,
+          staff_name: staff.name,
+          salary_mode: staff.salary_mode,
+          work_rule: staff.work_rule,
+          fixed_bonus_pay: fixedBonus,
+          temp_bonus_pay: tempBonus,
+          insurance_labor: staff.insurance_labor,
+          insurance_health: staff.insurance_health,
+          fixed_deduction_pay: fixedDeduction,
+          temp_deduction_pay: tempDeduction,
+          gross_pay: gross,
+          total_deduction: deduction,
+          net_pay: gross - deduction,
+          bonus_details: [...staff.bonuses, ...myAdj.filter((a: any) => a.type === 'bonus')],
+          deduction_details: [...staff.default_deductions, ...myAdj.filter((a: any) => a.type === 'deduction')]
+        });
+      });
+      setLiveReports(reports);
+    } catch (error: any) {
+      console.error('Error performing calculation:', error);
+    }
   };
 
   // 手動調整增刪修
   const modifyAdjustment = async (staffId: number, type: 'bonus' | 'deduction', action: 'add' | 'update' | 'remove', id?: number, field?: string, value?: any) => {
-    // (保持原有的實作邏輯，略過以節省篇幅)
-    // 實作與原檔案相同...
     const currentList = adjustments[staffId] || [];
     let newList = [...currentList];
+    
     if (action === 'add') {
-      newList.push({ id: -1, staff_id: staffId, year_month: selectedMonth, type, name: type==='bonus'?'本月獎金':'本月扣款', amount: 0 });
+      newList.push({ id: -1, staff_id: staffId, year_month: selectedMonth, type, name: type === 'bonus' ? '本月獎金' : '本月扣款', amount: 0 });
     } else if (action === 'update' && id) {
       newList = newList.map(item => item.id === id ? { ...item, [field!]: value } : item);
     } else if (action === 'remove' && id) {
@@ -184,50 +194,91 @@ export default function SalaryPage() {
     }
     setAdjustments(prev => ({ ...prev, [staffId]: newList }));
 
-    if (action === 'add') {
-      await supabase.from('salary_adjustments').insert([{ staff_id: staffId, year_month: selectedMonth, type, name: type==='bonus'?'本月獎金':'本月扣款', amount: 0 }]);
-    } else if (action === 'update' && id) {
-      await supabase.from('salary_adjustments').update({ [field!]: value }).eq('id', id);
-    } else if (action === 'remove' && id) {
-      await supabase.from('salary_adjustments').delete().eq('id', id);
+    try {
+      if (action === 'add') {
+        const res = await fetch('/api/salary/adjustments', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ staff_id: staffId, year_month: selectedMonth, type, name: type === 'bonus' ? '本月獎金' : '本月扣款', amount: 0 })
+        });
+        if (res.ok) fetchAdjustments();
+      } else if (action === 'update' && id) {
+        await fetch('/api/salary/adjustments', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, field, value })
+        });
+      } else if (action === 'remove' && id) {
+        await fetch(`/api/salary/adjustments?id=${id}`, { method: 'DELETE' });
+      }
+    } catch (error: any) {
+      console.error('Error modifying adjustment:', error);
+      alert('操作失敗: ' + error.message);
     }
-    if (action === 'add') fetchAdjustments();
   };
   
   const updateStaff = async (id: number, field: string, value: any) => {
     const newList = staffList.map(s => s.id === id ? { ...s, [field]: value } : s);
     setStaffList(newList);
-    await supabase.from('staff').update({ [field]: value }).eq('id', id);
+    try {
+      await fetch('/api/staff', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, [field]: value })
+      });
+    } catch (error: any) {
+      console.error('Error updating staff:', error);
+      alert('更新失敗: ' + error.message);
+    }
   };
 
   const handleArchive = async () => {
     if (!confirm(`確定要封存 ${selectedMonth} 的薪資資料嗎？`)) return;
-    const records = liveReports.map(rpt => ({
-      year_month: selectedMonth,
-      staff_id: staffList.find(s => s.name === rpt.staff_name)?.id,
-      staff_name: rpt.staff_name,
-      snapshot: rpt
-    }));
-    const { error } = await supabase.from('salary_history').insert(records);
-    if (error) alert('封存失敗: ' + error.message);
-    else { alert('封存成功！'); setIsSaved(true); }
+    try {
+      const records = liveReports.map(rpt => ({
+        year_month: selectedMonth,
+        staff_id: staffList.find(s => s.name === rpt.staff_name)?.id,
+        staff_name: rpt.staff_name,
+        snapshot: rpt
+      }));
+      const res = await fetch('/api/salary/history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ records })
+      });
+      const json = await res.json();
+      if (json.error) alert('封存失敗: ' + json.error);
+      else { alert('封存成功！'); setIsSaved(true); }
+    } catch (error: any) {
+      alert('封存失敗: ' + error.message);
+    }
   };
 
   const handleUnArchive = async () => {
     if (!confirm(`⚠️ 警告：解除封存將刪除 ${selectedMonth} 的歷史紀錄。\n\n確定要繼續嗎？`)) return;
-    const { error } = await supabase.from('salary_history').delete().eq('year_month', selectedMonth);
-    if (error) alert('解除失敗: ' + error.message);
-    else { alert('已解除封存。'); setIsSaved(false); setViewMode('calculator'); fetchAdjustments(); }
+    try {
+      const res = await fetch(`/api/salary/history?year_month=${selectedMonth}`, { method: 'DELETE' });
+      const json = await res.json();
+      if (json.error) alert('解除失敗: ' + json.error);
+      else { alert('已解除封存。'); setIsSaved(false); setViewMode('calculator'); fetchAdjustments(); }
+    } catch (error: any) {
+      alert('解除失敗: ' + error.message);
+    }
   };
 
   const loadHistory = async () => {
-    const { data } = await supabase.from('salary_history').select('snapshot, id').eq('year_month', selectedMonth);
-    if (data && data.length > 0) {
-      setLiveReports(data.map((d: any) => ({ ...d.snapshot, is_archived: true, history_id: d.id })));
-      setIsSaved(true);
-    } else {
-      setLiveReports([]);
-      setIsSaved(false);
+    try {
+      const res = await fetch(`/api/salary/history?year_month=${selectedMonth}`);
+      const json = await res.json();
+      if (json.data && json.data.length > 0) {
+        setLiveReports(json.data.map((d: any) => ({ ...d.snapshot, is_archived: true, history_id: d.id })));
+        setIsSaved(true);
+      } else {
+        setLiveReports([]);
+        setIsSaved(false);
+      }
+    } catch (error: any) {
+      console.error('Error loading history:', error);
     }
   };
 

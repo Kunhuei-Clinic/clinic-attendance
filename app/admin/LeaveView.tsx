@@ -1,12 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { createClient } from '@supabase/supabase-js';
 import { Calendar, Plus, Trash2, CheckCircle, Clock, ToggleLeft, ToggleRight, User, Filter, XCircle } from 'lucide-react';
-
-const supabaseUrl = 'https://ucpkvptnhgbtmghqgbof.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVjcGt2cHRuaGdidG1naHFnYm9mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUzNDg5MTAsImV4cCI6MjA4MDkyNDkxMH0.zdLx86ey-QywuGD-S20JJa7ZD6xHFRalAMRN659bbuo';
-const supabase = createClient(supabaseUrl, supabaseKey);
 
 // 🟢 中文假別列表 (供新增時選單使用)
 const LEAVE_OPTIONS = ['事假', '病假', '特休', '補休', '公假', '喪假', '婚假', '產假'];
@@ -57,61 +52,103 @@ export default function LeaveView() {
   }, [formData.start_time, formData.end_time]);
 
   const fetchStaff = async () => {
-    const { data } = await supabase.from('staff').select('id, name, entity').order('entity');
-    if (data) setStaffList(data);
+    try {
+      const response = await fetch('/api/staff');
+      const result = await response.json();
+      if (result.data) {
+        setStaffList(result.data.map((s: any) => ({ id: s.id, name: s.name, entity: s.entity })));
+      }
+    } catch (error) {
+      console.error('Fetch staff error:', error);
+    }
   };
 
   const fetchRequests = async () => {
     setLoading(true);
-    let query = supabase.from('leave_requests').select('*').order('start_time', { ascending: false });
+    try {
+      const params = new URLSearchParams({
+        useDateFilter: String(useDateFilter),
+        selectedStaffId: selectedStaffId,
+        statusFilter: statusFilter,
+      });
 
-    if (useDateFilter) {
-      query = query.lte('start_time', `${endDate}T23:59:59`).gte('end_time', `${startDate}T00:00:00`);
+      if (useDateFilter) {
+        params.append('startDate', startDate);
+        params.append('endDate', endDate);
+      }
+
+      const response = await fetch(`/api/leave?${params.toString()}`);
+      const result = await response.json();
+
+      if (result.error) {
+        console.error('Error:', result.error);
+        setRequests([]);
+      } else {
+        setRequests(result.data || []);
+      }
+    } catch (error) {
+      console.error('Fetch requests error:', error);
+      setRequests([]);
+    } finally {
+      setLoading(false);
     }
-    if (selectedStaffId !== 'all') {
-        query = query.eq('staff_id', Number(selectedStaffId));
-    }
-    if (statusFilter !== 'all') {
-        query = query.eq('status', statusFilter);
-    }
-    if (!useDateFilter && statusFilter === 'all' && selectedStaffId === 'all') {
-        query = query.limit(200);
-    }
-      
-    const { data } = await query;
-    setRequests(data || []);
-    setLoading(false);
   };
 
   const handleDelete = async (id: number) => {
     if (!confirm('確定要刪除這筆請假紀錄嗎？')) return;
-    await supabase.from('leave_requests').delete().eq('id', id);
-    fetchRequests();
+    try {
+      const response = await fetch(`/api/leave?id=${id}`, { method: 'DELETE' });
+      const result = await response.json();
+      if (result.success) {
+        fetchRequests();
+      } else {
+        alert('刪除失敗: ' + result.message);
+      }
+    } catch (error) {
+      console.error('Delete error:', error);
+      alert('刪除失敗');
+    }
   };
 
   const handleSubmit = async () => {
-    if (!formData.staff_id) { alert('請選擇員工'); return; }
-    
-    // 補上 staff_name
-    const staff = staffList.find(s => s.id === Number(formData.staff_id));
-    const startFull = `${formData.date}T${formData.start_time}:00`;
-    const endFull = `${formData.date}T${formData.end_time}:00`;
+    if (!formData.staff_id) {
+      alert('請選擇員工');
+      return;
+    }
 
-    const { error } = await supabase.from('leave_requests').insert([{
-      staff_id: Number(formData.staff_id),
-      staff_name: staff?.name, // ✅ 補上姓名
-      type: formData.type,     // ✅ 存入中文假別
-      start_time: startFull,
-      end_time: endFull,
-      hours: Number(formData.hours),
-      reason: formData.reason,
-      status: 'approved' // 管理者直接新增視為已核准
-    }]);
+    try {
+      const staff = staffList.find(s => s.id === Number(formData.staff_id));
+      if (!staff) {
+        alert('找不到員工資料');
+        return;
+      }
 
-    if (error) alert('新增失敗: ' + error.message);
-    else {
-      setShowModal(false);
-      fetchRequests();
+      const response = await fetch('/api/leave', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          staff_id: Number(formData.staff_id),
+          staff_name: staff.name,
+          type: formData.type,
+          date: formData.date,
+          start_time: formData.start_time,
+          end_time: formData.end_time,
+          hours: Number(formData.hours),
+          reason: formData.reason,
+          status: 'approved'
+        })
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        setShowModal(false);
+        fetchRequests();
+      } else {
+        alert('新增失敗: ' + result.message);
+      }
+    } catch (error) {
+      console.error('Submit error:', error);
+      alert('新增失敗');
     }
   };
 

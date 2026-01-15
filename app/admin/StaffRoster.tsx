@@ -1,12 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { createClient } from '@supabase/supabase-js';
 import { ChevronLeft, ChevronRight, ShieldAlert, Lock, Clock, Settings, Save, X } from 'lucide-react';
-
-const supabaseUrl = 'https://ucpkvptnhgbtmghqgbof.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVjcGt2cHRuaGdidG1naHFnYm9mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUzNDg5MTAsImV4cCI6MjA4MDkyNDkxMH0.zdLx86ey-QywuGD-S20JJa7ZD6xHFRalAMRN659bbuo';
-const supabase = createClient(supabaseUrl, supabaseKey);
 
 // 定義班別代號映射 (SettingsView 用 AM/PM/NIGHT，這裡用 M/A/N)
 const SHIFT_MAPPING: Record<string, 'AM' | 'PM' | 'NIGHT'> = {
@@ -64,72 +59,100 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
 
     // 🟢 功能：讀取系統設定 (營業時間)
     const fetchGlobalSettings = async () => {
-        const { data } = await supabase.from('system_settings').select('*').eq('key', 'clinic_business_hours').single();
-        if (data && data.value) {
-            try {
-                const settings = JSON.parse(data.value);
-                setBusinessHours(settings);
-            } catch (e) {
-                console.error("解析營業時間失敗", e);
+        try {
+            const response = await fetch('/api/settings?key=clinic_business_hours');
+            const result = await response.json();
+            if (result.data && result.data.length > 0 && result.data[0].value) {
+                try {
+                    const settings = JSON.parse(result.data[0].value);
+                    setBusinessHours(settings);
+                } catch (e) {
+                    console.error("解析營業時間失敗", e);
+                }
             }
+        } catch (error) {
+            console.error('Fetch global settings error:', error);
         }
     };
 
     // 🟢 功能：儲存臨時修改的營業時間 (更新全域設定)
     const handleSaveGlobalTime = async () => {
-        const { error } = await supabase.from('system_settings').upsert({
-            key: 'clinic_business_hours',
-            value: JSON.stringify(businessHours)
-        });
-        if (error) alert("儲存失敗");
-        else {
-            alert("營業時間已更新，後續點擊排班將套用新時間。");
-            setShowTimeModal(false);
+        try {
+            const response = await fetch('/api/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    key: 'clinic_business_hours',
+                    value: JSON.stringify(businessHours)
+                })
+            });
+            const result = await response.json();
+            if (result.success) {
+                alert("營業時間已更新，後續點擊排班將套用新時間。");
+                setShowTimeModal(false);
+            } else {
+                alert("儲存失敗: " + result.message);
+            }
+        } catch (error) {
+            console.error('Save global time error:', error);
+            alert("儲存失敗");
         }
     };
 
     const fetchStaff = async () => {
-        const { data } = await supabase.from('staff').select('*').order('role').order('display_order');
-        if (data) {
-            const validStaff = data.filter((s: any) => s.role !== '醫師' && s.role !== '主管' && s.role !== '營養師');
-            // @ts-ignore
-            setStaffList(validStaff);
+        try {
+            const response = await fetch('/api/staff');
+            const result = await response.json();
+            if (result.data) {
+                const validStaff = result.data.filter((s: any) => s.role !== '醫師' && s.role !== '主管' && s.role !== '營養師');
+                // @ts-ignore
+                setStaffList(validStaff);
+            }
+        } catch (error) {
+            console.error('Fetch staff error:', error);
         }
     };
 
     const fetchHolidays = async () => {
-        const year = currentDate.getFullYear();
-        const month = currentDate.getMonth() + 1;
-        const startStr = `${year}-${String(month).padStart(2, '0')}-01`;
-        const nextMonthDate = new Date(year, month, 1);
-        const endStr = `${nextMonthDate.getFullYear()}-${String(nextMonthDate.getMonth() + 1).padStart(2, '0')}-01`;
-        const { data } = await supabase.from('clinic_holidays').select('date').gte('date', startStr).lt('date', endStr);
-        if (data) setHolidays(data.map((h: any) => h.date));
+        try {
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth() + 1;
+            const response = await fetch(`/api/roster/holidays?year=${year}&month=${month}`);
+            const result = await response.json();
+            if (result.data) {
+                setHolidays(result.data);
+            }
+        } catch (error) {
+            console.error('Fetch holidays error:', error);
+            setHolidays([]);
+        }
     };
 
     const fetchRoster = async () => {
-        const year = currentDate.getFullYear();
-        const month = currentDate.getMonth() + 1;
-        const startStr = `${year}-${String(month).padStart(2, '0')}-01`;
-        const nextMonthDate = new Date(year, month, 1);
-        const endStr = `${nextMonthDate.getFullYear()}-${String(nextMonthDate.getMonth() + 1).padStart(2, '0')}-01`;
-
-        // 記得在 Select 加入 shift_details
-        const { data } = await supabase.from('roster').select('*').gte('date', startStr).lt('date', endStr);
-        const map: Record<string, RosterData> = {};
-        data?.forEach((r: any) => {
-            let shifts: Shift[] = [];
-            if (Array.isArray(r.shifts)) shifts = r.shifts.filter((s: any) => typeof s === 'string' && ['M', 'A', 'N'].includes(s));
-            let day_type: DayType = 'normal';
-            if (r.day_type === 'rest') day_type = 'rest';
-            if (r.day_type === 'regular') day_type = 'regular';
+        try {
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth() + 1;
+            const response = await fetch(`/api/roster/staff?year=${year}&month=${month}`);
+            const result = await response.json();
             
-            // 讀取 Snapshot 的詳細時間
-            const shift_details = r.shift_details || {};
-            
-            map[`${r.staff_id}_${r.date}`] = { shifts, day_type, shift_details };
-        });
-        setRosterMap(map);
+            const map: Record<string, RosterData> = {};
+            if (result.data) {
+                result.data.forEach((r: any) => {
+                    let shifts: Shift[] = [];
+                    if (Array.isArray(r.shifts)) shifts = r.shifts.filter((s: any) => typeof s === 'string' && ['M', 'A', 'N'].includes(s));
+                    let day_type: DayType = 'normal';
+                    if (r.day_type === 'rest') day_type = 'rest';
+                    if (r.day_type === 'regular') day_type = 'regular';
+                    
+                    const shift_details = r.shift_details || {};
+                    map[`${r.staff_id}_${r.date}`] = { shifts, day_type, shift_details };
+                });
+            }
+            setRosterMap(map);
+        } catch (error) {
+            console.error('Fetch roster error:', error);
+            setRosterMap({});
+        }
     };
 
     const getDaysInMonth = () => {
@@ -183,18 +206,44 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
     useEffect(() => { validateCompliance(); }, [rosterMap, staffList]);
 
     const updateWorkRule = async (staffId: number, rule: any) => {
-        await supabase.from('staff').update({ work_rule: rule }).eq('id', staffId);
-        setStaffList(prev => prev.map(s => s.id === staffId ? { ...s, work_rule: rule } : s));
+        try {
+            const response = await fetch('/api/staff', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: staffId, work_rule: rule })
+            });
+            const result = await response.json();
+            if (result.success) {
+                setStaffList(prev => prev.map(s => s.id === staffId ? { ...s, work_rule: rule } : s));
+            }
+        } catch (error) {
+            console.error('Update work rule error:', error);
+        }
     };
 
     const toggleGlobalHoliday = async (dateStr: string) => {
         if (authLevel !== 'boss') return;
-        if (holidays.includes(dateStr)) {
-            setHolidays(prev => prev.filter(h => h !== dateStr));
-            await supabase.from('clinic_holidays').delete().eq('date', dateStr);
-        } else {
-            setHolidays(prev => [...prev, dateStr]);
-            await supabase.from('clinic_holidays').insert([{ date: dateStr, name: '國定假日' }]);
+        
+        try {
+            if (holidays.includes(dateStr)) {
+                const response = await fetch(`/api/roster/holidays?date=${dateStr}`, { method: 'DELETE' });
+                const result = await response.json();
+                if (result.success) {
+                    setHolidays(prev => prev.filter(h => h !== dateStr));
+                }
+            } else {
+                const response = await fetch('/api/roster/holidays', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ date: dateStr, name: '國定假日' })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    setHolidays(prev => [...prev, dateStr]);
+                }
+            }
+        } catch (error) {
+            console.error('Toggle holiday error:', error);
         }
     };
 
@@ -242,38 +291,39 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
         const key = `${staffId}_${dateStr}`;
         
         // 計算當日整體的 Start/End (取最小值與最大值，供列表顯示或簡易計算用)
-        let minStart = "23:59";
-        let maxEnd = "00:00";
+        let minStart: string | null = "23:59";
+        let maxEnd: string | null = "00:00";
         
         if (shifts.length > 0) {
              Object.values(details).forEach((d: any) => {
-                 if (d.start < minStart) minStart = d.start;
-                 if (d.end > maxEnd) maxEnd = d.end;
+                 if (d.start && d.start < minStart!) minStart = d.start;
+                 if (d.end && d.end > maxEnd!) maxEnd = d.end;
              });
         } else {
-            minStart = null as any;
-            maxEnd = null as any;
+            minStart = null;
+            maxEnd = null;
         }
 
         setRosterMap(prev => ({ ...prev, [key]: { shifts, day_type: dayType, shift_details: details } }));
         
-        const { data: existing } = await supabase.from('roster').select('id').eq('staff_id', staffId).eq('date', dateStr).single();
-        
-        const payload = { 
-            staff_id: staffId, 
-            date: dateStr, 
-            shifts, 
-            day_type: dayType,
-            shift_details: details, // 👈 關鍵：存入 JSON
-            start_time: minStart,   // 👈 存入當天最早開始
-            end_time: maxEnd        // 👈 存入當天最晚結束
-        };
-
-        if (existing) {
-            if (shifts.length === 0 && dayType === 'normal') await supabase.from('roster').delete().eq('id', existing.id);
-            else await supabase.from('roster').update(payload).eq('id', existing.id);
-        } else if (shifts.length > 0 || dayType !== 'normal') {
-            await supabase.from('roster').insert([payload]);
+        try {
+            const response = await fetch('/api/roster/staff', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    staff_id: staffId,
+                    date: dateStr,
+                    shifts,
+                    day_type: dayType,
+                    shift_details: details
+                })
+            });
+            const result = await response.json();
+            if (!result.success) {
+                console.error('Update roster error:', result.message);
+            }
+        } catch (error) {
+            console.error('Update roster error:', error);
         }
     };
 

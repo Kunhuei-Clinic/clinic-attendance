@@ -13,9 +13,6 @@ import LeaveView from './LeaveView';
 import DoctorSalaryPage from './doctor-salary/page';
 import SalaryReportView from './SalaryReport'; 
 
-const BOSS_PASSCODE = "1007";    
-const MANAGER_PASSCODE = "0000"; 
-
 export default function AdminPage() {
   const [authLevel, setAuthLevel] = useState<'none' | 'boss' | 'manager'>('none');
   const [inputPasscode, setInputPasscode] = useState('');
@@ -24,15 +21,28 @@ export default function AdminPage() {
 
   useEffect(() => { setIsClient(true); }, []);
 
-  const handleLogin = () => {
-    if (inputPasscode === BOSS_PASSCODE) {
-      setAuthLevel('boss');
-      setActiveTab('attendance'); 
-    } else if (inputPasscode === MANAGER_PASSCODE) {
-      setAuthLevel('manager');
-      setActiveTab('staff_roster'); 
-    } else {
-      alert('密碼錯誤');
+  const handleLogin = async () => {
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ passcode: inputPasscode }),
+      });
+
+      const data = await response.json();
+
+      if (data.success && data.authLevel) {
+        setAuthLevel(data.authLevel);
+        setActiveTab(data.authLevel === 'boss' ? 'attendance' : 'staff_roster');
+      } else {
+        alert(data.message || '密碼錯誤');
+        setInputPasscode('');
+      }
+    } catch (error) {
+      console.error('Login error:', error);
+      alert('登入失敗，請稍後再試');
       setInputPasscode('');
     }
   };
