@@ -27,6 +27,7 @@ export default function SettingsView() {
             NIGHT: { start: '18:00', end: '21:30' }
         }
     });
+    const [leaveCalculationSystem, setLeaveCalculationSystem] = useState<'anniversary' | 'calendar'>('anniversary');
     const [loadingSystem, setLoadingSystem] = useState(false);
     const [systemMessage, setSystemMessage] = useState('');
 
@@ -159,6 +160,9 @@ export default function SettingsView() {
                     if (item.key === 'clinic_business_hours') {
                         try { setBusinessHours(JSON.parse(item.value)); } catch (e) { }
                     }
+                    if (item.key === 'leave_calculation_system') {
+                        setLeaveCalculationSystem(item.value === 'calendar' ? 'calendar' : 'anniversary');
+                    }
                 });
             }
         } catch (error) {
@@ -172,7 +176,8 @@ export default function SettingsView() {
             const updates = [
                 { key: 'org_entities', value: JSON.stringify(entities) },
                 { key: 'special_clinic_types', value: JSON.stringify(specialClinics) },
-                { key: 'clinic_business_hours', value: JSON.stringify(businessHours) }
+                { key: 'clinic_business_hours', value: JSON.stringify(businessHours) },
+                { key: 'leave_calculation_system', value: leaveCalculationSystem }
             ];
             const response = await fetch('/api/settings', {
                 method: 'POST',
@@ -360,6 +365,43 @@ export default function SettingsView() {
                                     </div>
                                 ))}
                                 <button onClick={addSpecial} className="py-2 border-2 border-dashed border-slate-300 text-slate-500 rounded-xl hover:bg-purple-50 font-bold flex items-center justify-center gap-2"><Plus size={18}/> 新增類型</button>
+                            </div>
+                        </div>
+
+                        {/* 特休計算制 */}
+                        <div>
+                            <h3 className="text-lg font-bold text-slate-700 border-b pb-2 mb-4 flex items-center gap-2"><CalendarDays size={20}/> 特休計算制 (Annual Leave Calculation System)</h3>
+                            <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 mb-4">
+                                <p className="text-sm text-blue-800 mb-2">
+                                    <strong>週年制 (Anniversary)</strong>：以員工到職日為基準，每年週年日重新計算特休天數。
+                                </p>
+                                <p className="text-sm text-blue-800">
+                                    <strong>曆年制 (Calendar)</strong>：以日曆年度為基準，每年1月1日重新計算特休天數，按比例分配。
+                                </p>
+                            </div>
+                            <div className="flex gap-4">
+                                <button 
+                                    onClick={() => setLeaveCalculationSystem('anniversary')} 
+                                    className={`flex-1 p-4 rounded-xl border-2 transition ${
+                                        leaveCalculationSystem === 'anniversary' 
+                                            ? 'bg-blue-50 border-blue-500 text-blue-700 font-bold' 
+                                            : 'bg-white border-slate-200 text-slate-600 hover:border-blue-300'
+                                    }`}
+                                >
+                                    <div className="text-lg font-bold mb-1">週年制</div>
+                                    <div className="text-xs opacity-80">Anniversary System</div>
+                                </button>
+                                <button 
+                                    onClick={() => setLeaveCalculationSystem('calendar')} 
+                                    className={`flex-1 p-4 rounded-xl border-2 transition ${
+                                        leaveCalculationSystem === 'calendar' 
+                                            ? 'bg-blue-50 border-blue-500 text-blue-700 font-bold' 
+                                            : 'bg-white border-slate-200 text-slate-600 hover:border-blue-300'
+                                    }`}
+                                >
+                                    <div className="text-lg font-bold mb-1">曆年制</div>
+                                    <div className="text-xs opacity-80">Calendar System</div>
+                                </button>
                             </div>
                         </div>
                     </div>
