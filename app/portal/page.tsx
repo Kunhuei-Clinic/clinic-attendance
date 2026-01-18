@@ -222,33 +222,42 @@ export default function EmployeePortal() {
 
   const submitLog = async (action: 'in' | 'out', lat: number|null, lng: number|null, isBypass: boolean) => {
       try {
+        // 使用 API 路由來避免 RLS 政策限制
         if (action === 'in') {
-            const { error } = await supabase.from('attendance_logs').insert([{
-                staff_id: staffUser.id,
-                staff_name: staffUser.name, 
-                clock_in_time: new Date().toISOString(), 
-                status: 'working', 
-                gps_lat: lat, 
-                gps_lng: lng, 
-                is_bypass: isBypass, 
-                work_type: 'work'
-            }]);
-            if (error) throw error;
+            const response = await fetch('/api/attendance/clock', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'in',
+                    staffId: staffUser.id,
+                    staffName: staffUser.name,
+                    gpsLat: lat,
+                    gpsLng: lng,
+                    isBypass: isBypass
+                })
+            });
+            const result = await response.json();
+            if (!result.success) throw new Error(result.message || '打卡失敗');
             alert('上班打卡成功！'); 
         } else {
             const lastLog = logs.find(l => !l.clock_out_time);
             if (!lastLog) return alert("無上班紀錄");
-            const now = new Date();
-            const hours = (now.getTime() - new Date(lastLog.clock_in_time).getTime()) / 3600000;
-            const { error } = await supabase.from('attendance_logs').update({
-                clock_out_time: now.toISOString(), 
-                work_hours: hours.toFixed(2), 
-                status: 'completed', 
-                gps_lat: lat, 
-                gps_lng: lng, 
-                is_bypass: isBypass
-            }).eq('id', lastLog.id);
-            if (error) throw error;
+            
+            const response = await fetch('/api/attendance/clock', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'out',
+                    staffId: staffUser.id,
+                    staffName: staffUser.name,
+                    logId: lastLog.id,
+                    gpsLat: lat,
+                    gpsLng: lng,
+                    isBypass: isBypass
+                })
+            });
+            const result = await response.json();
+            if (!result.success) throw new Error(result.message || '打卡失敗');
             alert('下班打卡成功！'); 
         }
         fetchTodayLogs(staffUser.name);
