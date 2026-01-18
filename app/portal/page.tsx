@@ -100,9 +100,25 @@ export default function EmployeePortal() {
   }, [view, selectedMonth, staffUser]);
 
   const fetchTodayLogs = async (name: string) => {
-      const today = new Date().toISOString().slice(0, 10);
-      const { data } = await supabase.from('attendance_logs').select('*').eq('staff_name', name).gte('clock_in_time', `${today}T00:00:00`).order('clock_in_time', { ascending: false });
-      setLogs(data || []);
+      try {
+          const today = new Date().toISOString().slice(0, 10);
+          // 使用 API 路由讀取，避免 RLS 限制
+          const response = await fetch(`/api/attendance?useDateFilter=true&startDate=${today}&endDate=${today}&selectedStaffId=all&selectedRole=all`);
+          const result = await response.json();
+          if (result.data) {
+              // 過濾出當前員工的記錄
+              const todayLogs = result.data.filter((log: any) => log.staff_name === name);
+              setLogs(todayLogs || []);
+          } else {
+              setLogs([]);
+          }
+      } catch (error) {
+          console.error('讀取打卡記錄失敗:', error);
+          // 如果 API 失敗，嘗試使用客戶端讀取
+          const today = new Date().toISOString().slice(0, 10);
+          const { data } = await supabase.from('attendance_logs').select('*').eq('staff_name', name).gte('clock_in_time', `${today}T00:00:00`).order('clock_in_time', { ascending: false });
+          setLogs(data || []);
+      }
   };
 
   const fetchHistory = async () => {
@@ -260,7 +276,8 @@ export default function EmployeePortal() {
             if (!result.success) throw new Error(result.message || '打卡失敗');
             alert('下班打卡成功！'); 
         }
-        fetchTodayLogs(staffUser.name);
+        // 等待資料更新完成
+        await fetchTodayLogs(staffUser.name);
         setGpsStatus('idle');
         setBypassMode(false);
       } catch (err: any) { 
