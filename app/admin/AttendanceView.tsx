@@ -175,8 +175,25 @@ export default function AttendanceView() {
   const openEditModal = (log: any) => {
     setEditingLogId(log.id);
     const logDate = log.clock_in_time ? log.clock_in_time.split('T')[0] : new Date().toISOString().split('T')[0];
-    const startTime = log.clock_in_time ? new Date(log.clock_in_time).toTimeString().slice(0, 5) : '08:00';
-    const endTime = log.clock_out_time ? new Date(log.clock_out_time).toTimeString().slice(0, 5) : '17:00';
+    // 直接從 ISO 字符串提取時間部分，避免時區轉換問題
+    // 如果數據庫存的是 UTC，需要轉換為本地時間顯示
+    let startTime = '08:00';
+    let endTime = '17:00';
+    
+    if (log.clock_in_time) {
+      const dateObj = new Date(log.clock_in_time);
+      // 使用本地時間格式化，確保顯示的是本地時區的時間
+      const hours = String(dateObj.getHours()).padStart(2, '0');
+      const minutes = String(dateObj.getMinutes()).padStart(2, '0');
+      startTime = `${hours}:${minutes}`;
+    }
+    
+    if (log.clock_out_time) {
+      const dateObj = new Date(log.clock_out_time);
+      const hours = String(dateObj.getHours()).padStart(2, '0');
+      const minutes = String(dateObj.getMinutes()).padStart(2, '0');
+      endTime = `${hours}:${minutes}`;
+    }
 
     let targetStaffId = log.staff_id;
     if (!targetStaffId) {

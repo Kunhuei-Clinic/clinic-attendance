@@ -126,6 +126,10 @@ export async function POST(request: NextRequest) {
     }
 
     // 計算時間
+    // 使用本地時區創建日期對象（沒有 'Z' 後綴表示本地時間）
+    // 格式：YYYY-MM-DDTHH:mm:ss 會被解釋為本地時區
+    // 例如：new Date("2024-01-15T08:00:00") 在台灣時區(UTC+8)會被解釋為本地時間 08:00
+    // 然後 toISOString() 會轉換為 UTC 時間存儲到數據庫
     const startDateTime = new Date(`${date}T${startTime}:00`);
     let endDateTime = null;
     let workHours = 0;

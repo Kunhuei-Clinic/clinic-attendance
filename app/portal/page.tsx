@@ -224,7 +224,14 @@ export default function EmployeePortal() {
       try {
         if (action === 'in') {
             const { error } = await supabase.from('attendance_logs').insert([{
-                staff_name: staffUser.name, clock_in_time: new Date(), status: 'working', gps_lat: lat, gps_lng: lng, is_bypass: isBypass, work_type: 'work'
+                staff_id: staffUser.id,
+                staff_name: staffUser.name, 
+                clock_in_time: new Date().toISOString(), 
+                status: 'working', 
+                gps_lat: lat, 
+                gps_lng: lng, 
+                is_bypass: isBypass, 
+                work_type: 'work'
             }]);
             if (error) throw error;
             alert('上班打卡成功！'); 
@@ -234,7 +241,12 @@ export default function EmployeePortal() {
             const now = new Date();
             const hours = (now.getTime() - new Date(lastLog.clock_in_time).getTime()) / 3600000;
             const { error } = await supabase.from('attendance_logs').update({
-                clock_out_time: now.toISOString(), work_hours: hours.toFixed(2), status: 'completed', gps_lat: lat, gps_lng: lng, is_bypass: isBypass
+                clock_out_time: now.toISOString(), 
+                work_hours: hours.toFixed(2), 
+                status: 'completed', 
+                gps_lat: lat, 
+                gps_lng: lng, 
+                is_bypass: isBypass
             }).eq('id', lastLog.id);
             if (error) throw error;
             alert('下班打卡成功！'); 
@@ -242,7 +254,10 @@ export default function EmployeePortal() {
         fetchTodayLogs(staffUser.name);
         setGpsStatus('idle');
         setBypassMode(false);
-      } catch (err: any) { alert("錯誤：" + err.message); }
+      } catch (err: any) { 
+        console.error('打卡錯誤:', err);
+        alert("錯誤：" + (err.message || '打卡失敗，請重試')); 
+      }
   };
 
   if (status === 'loading') return <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50"><div className="w-12 h-12 border-4 border-teal-500 border-t-transparent rounded-full animate-spin"></div><p className="mt-4 text-slate-400 font-bold">系統載入中...</p></div>;
