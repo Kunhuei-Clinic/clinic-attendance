@@ -298,13 +298,13 @@ export default function DoctorRosterPrint({ onClose }: { onClose: () => void }) 
                                                                                     {w.special_tags.map((tag: string, tagIdx: number) => (
                                                                                         <span 
                                                                                             key={tagIdx} 
-                                                                                            className={`text-xs font-bold ${
+                                                                                            className={`text-[10px] font-bold whitespace-nowrap scale-90 origin-center ${
                                                                                                 w.is_dedicated 
                                                                                                     ? 'text-pink-600' 
                                                                                                     : 'text-orange-600'
                                                                                             }`}
                                                                                         >
-                                                                                            {w.is_dedicated ? `${tag}專診` : `暨${tag}`}
+                                                                                            {w.is_dedicated ? `${tag}專診` : `暨 ${tag}`}
                                                                                         </span>
                                                                                     ))}
                                                                                 </div>

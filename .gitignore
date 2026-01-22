@@ -1,9 +1,7 @@
 # Dependencies
 node_modules
 .pnp
-.pnp.js
-
-# Build / Next
+.pnp.js# Build / Next
 .next
 out
 build
