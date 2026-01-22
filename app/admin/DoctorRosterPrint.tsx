@@ -266,9 +266,9 @@ export default function DoctorRosterPrint({ onClose }: { onClose: () => void }) 
                                     <tbody>
                                         {SHIFTS.map(shift => (
                                             <tr key={shift.id} className="h-40">
-                                                <td className="border border-slate-400 bg-slate-50 align-middle">
+                                                <td className="border border-slate-400 align-middle">
                                                     <div className="text-2xl font-black text-teal-800 mb-2">{shift.label}</div>
-                                                    <div className="text-sm font-bold text-slate-500 bg-white inline-block px-2 py-1 rounded border">{shift.time}</div>
+                                                    <div className="text-sm font-bold text-slate-500">{shift.time}</div>
                                                 </td>
                                                 {weekDays.map((date, idx) => {
                                                     const dateStr = getLocalDateString(date);
