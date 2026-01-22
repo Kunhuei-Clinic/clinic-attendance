@@ -75,7 +75,14 @@ export default function PayslipModal({ data, roster, ppfDetails, month, onClose 
 
     const safeData = data || {};
     const safePPF = ppfDetails || {};
-    const safeRoster = Array.isArray(roster) ? roster : [];
+    // 依 date ASC -> start_time ASC 排序，讓報表依時間順序呈現
+    const safeRoster = (Array.isArray(roster) ? [...roster] : [])
+        .filter((r: any) => r?.date != null)
+        .sort((a: any, b: any) => {
+            const d = (a.date || '').localeCompare(b.date || '');
+            if (d !== 0) return d;
+            return (a.start_time || '').localeCompare(b.start_time || '');
+        });
     const selfPayItems = Array.isArray(safePPF.self_pay_items) ? safePPF.self_pay_items : [];
     const extraItems = Array.isArray(safePPF.extra_items) ? safePPF.extra_items : [];
 
