@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { FileSpreadsheet, Filter, User, ToggleLeft, ToggleRight, Calendar } from 'lucide-react';
+import { FileSpreadsheet, Filter, User, ToggleLeft, ToggleRight, Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
 
 const getInitialMonth = () => {
     const d = new Date();
@@ -71,6 +71,50 @@ export default function SalaryReportView() {
         }
     };
 
+    const changeMonth = (direction: 'prev' | 'next', target: 'month' | 'startMonth' | 'endMonth' = 'month') => {
+        const currentMonth = target === 'month' ? month : target === 'startMonth' ? startMonth : endMonth;
+        const [year, monthNum] = currentMonth.split('-').map(Number);
+        const date = new Date(year, monthNum - 1, 1);
+        
+        if (direction === 'prev') {
+            date.setMonth(date.getMonth() - 1);
+        } else {
+            date.setMonth(date.getMonth() + 1);
+        }
+        
+        const newMonth = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        
+        if (target === 'month') {
+            setMonth(newMonth);
+        } else if (target === 'startMonth') {
+            setStartMonth(newMonth);
+        } else {
+            setEndMonth(newMonth);
+        }
+    };
+
+    const changeDateRange = (direction: 'prev' | 'next') => {
+        const [startYear, startMonthNum] = startMonth.split('-').map(Number);
+        const [endYear, endMonthNum] = endMonth.split('-').map(Number);
+        const startDate = new Date(startYear, startMonthNum - 1, 1);
+        const endDate = new Date(endYear, endMonthNum - 1, 1);
+        const monthDiff = (endYear - startYear) * 12 + (endMonthNum - startMonthNum);
+        
+        if (direction === 'prev') {
+            startDate.setMonth(startDate.getMonth() - 1);
+            endDate.setMonth(endDate.getMonth() - 1);
+        } else {
+            startDate.setMonth(startDate.getMonth() + 1);
+            endDate.setMonth(endDate.getMonth() + 1);
+        }
+        
+        const newStartMonth = `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}`;
+        const newEndMonth = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, '0')}`;
+        
+        setStartMonth(newStartMonth);
+        setEndMonth(newEndMonth);
+    };
+
     const handleExport = () => {
         if (reportData.length === 0) return alert("無資料可匯出");
         const headers = ["職稱", "姓名", "月份", "實領總額", "備註"];
@@ -101,15 +145,43 @@ export default function SalaryReportView() {
 
                     {useDateFilter ? (
                         <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-lg border text-sm animate-fade-in">
+                            <button 
+                                onClick={() => changeDateRange('prev')} 
+                                className="p-1 hover:bg-slate-200 rounded transition-colors flex items-center justify-center"
+                                title="往前一個月"
+                            >
+                                <ChevronLeft size={18} className="text-slate-600" />
+                            </button>
                             <span className="text-slate-500 pl-1">區間:</span>
-                            <input type="month" value={startMonth} onChange={(e) => setStartMonth(e.target.value)} className="bg-transparent font-bold text-slate-700 outline-none"/>
+                            <input type="month" value={startMonth} onChange={(e) => setStartMonth(e.target.value)} className="bg-transparent font-bold text-slate-700 outline-none min-w-[140px]"/>
                             <span className="text-slate-400">~</span>
-                            <input type="month" value={endMonth} onChange={(e) => setEndMonth(e.target.value)} className="bg-transparent font-bold text-slate-700 outline-none"/>
+                            <input type="month" value={endMonth} onChange={(e) => setEndMonth(e.target.value)} className="bg-transparent font-bold text-slate-700 outline-none min-w-[140px]"/>
+                            <button 
+                                onClick={() => changeDateRange('next')} 
+                                className="p-1 hover:bg-slate-200 rounded transition-colors flex items-center justify-center"
+                                title="往後一個月"
+                            >
+                                <ChevronRight size={18} className="text-slate-600" />
+                            </button>
                         </div>
                     ) : (
                         <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-lg border text-sm animate-fade-in">
+                            <button 
+                                onClick={() => changeMonth('prev')} 
+                                className="p-1 hover:bg-slate-200 rounded transition-colors flex items-center justify-center"
+                                title="上個月"
+                            >
+                                <ChevronLeft size={18} className="text-slate-600" />
+                            </button>
                             <span className="text-slate-500 pl-1">月份:</span>
-                            <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="bg-transparent font-bold text-slate-700 outline-none"/>
+                            <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="bg-transparent font-bold text-slate-700 outline-none min-w-[140px]"/>
+                            <button 
+                                onClick={() => changeMonth('next')} 
+                                className="p-1 hover:bg-slate-200 rounded transition-colors flex items-center justify-center"
+                                title="下個月"
+                            >
+                                <ChevronRight size={18} className="text-slate-600" />
+                            </button>
                         </div>
                     )}
 

@@ -126,16 +126,15 @@ export async function POST(request: NextRequest) {
     }
 
     // 計算時間
-    // 使用本地時區創建日期對象（沒有 'Z' 後綴表示本地時間）
-    // 格式：YYYY-MM-DDTHH:mm:ss 會被解釋為本地時區
-    // 例如：new Date("2024-01-15T08:00:00") 在台灣時區(UTC+8)會被解釋為本地時間 08:00
-    // 然後 toISOString() 會轉換為 UTC 時間存儲到數據庫
-    const startDateTime = new Date(`${date}T${startTime}:00`);
+    // 🟢 修正時區問題：強制指定為台灣時間 (UTC+8)
+    // 使用 +08:00 時區後綴，確保無論伺服器在哪個時區，都能正確將台灣時間轉換為 UTC
+    // 範例：2025-01-22T09:00:00+08:00 會被正確轉換為 UTC 時間 (01:00) 存入資料庫
+    const startDateTime = new Date(`${date}T${startTime}:00+08:00`);
     let endDateTime = null;
     let workHours = 0;
 
     if (endTime) {
-      endDateTime = new Date(`${date}T${endTime}:00`);
+      endDateTime = new Date(`${date}T${endTime}:00+08:00`);
       workHours = (endDateTime.getTime() - startDateTime.getTime()) / (1000 * 60 * 60);
     }
 

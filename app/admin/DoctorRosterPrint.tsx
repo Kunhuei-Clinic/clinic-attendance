@@ -304,7 +304,7 @@ export default function DoctorRosterPrint({ onClose }: { onClose: () => void }) 
                                                                                                     : 'text-orange-600'
                                                                                             }`}
                                                                                         >
-                                                                                            {w.is_dedicated ? `${tag}專診` : `暨 ${tag}`}
+                                                                                            {w.is_dedicated ? `${tag}專診` : `暨${tag}`}
                                                                                         </span>
                                                                                     ))}
                                                                                 </div>
