@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { getClinicIdFromRequest } from '@/lib/clinicHelper';
 
 /**
  * GET /api/roster/closed-days
@@ -13,13 +14,27 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin';
  */
 export async function GET(request: NextRequest) {
   try {
+    // 🟢 多租戶：取得當前使用者的 clinic_id
+    const clinicId = await getClinicIdFromRequest(request);
+    if (!clinicId) {
+      return NextResponse.json(
+        { data: [], error: '無法識別診所，請重新登入' },
+        { status: 401 }
+      );
+    }
+
     const searchParams = request.nextUrl.searchParams;
     const year = searchParams.get('year');
     const month = searchParams.get('month');
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
 
-    let query = supabaseAdmin.from('clinic_closed_days').select('date');
+    // 🟢 多租戶：強制加上 clinic_id 過濾
+    // ⚠️ 注意：如果 clinic_closed_days 表還沒有 clinic_id 欄位，需要先執行 migration
+    let query = supabaseAdmin
+      .from('clinic_closed_days')
+      .select('date')
+      .eq('clinic_id', clinicId); // 只查詢該診所的休診日
 
     // 支援日期範圍查詢
     if (startDate && endDate) {
@@ -69,6 +84,15 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
+    // 🟢 多租戶：取得當前使用者的 clinic_id
+    const clinicId = await getClinicIdFromRequest(request);
+    if (!clinicId) {
+      return NextResponse.json(
+        { success: false, message: '無法識別診所，請重新登入' },
+        { status: 401 }
+      );
+    }
+
     const body = await request.json();
     const { date, reason } = body;
 
@@ -79,9 +103,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // 🟢 多租戶：將 clinic_id 合併到 payload 中（不讓前端傳入）
+    // ⚠️ 注意：如果 clinic_closed_days 表還沒有 clinic_id 欄位，需要先執行 migration
     const { error } = await supabaseAdmin
       .from('clinic_closed_days')
-      .insert({ date, reason: reason || '休診' });
+      .insert({ 
+        date, 
+        reason: reason || '休診',
+        clinic_id: clinicId // 🟢 自動填入，不讓前端傳入
+      });
 
     if (error) {
       console.error('Add closed day error:', error);
@@ -113,6 +143,15 @@ export async function POST(request: NextRequest) {
  */
 export async function DELETE(request: NextRequest) {
   try {
+    // 🟢 多租戶：取得當前使用者的 clinic_id
+    const clinicId = await getClinicIdFromRequest(request);
+    if (!clinicId) {
+      return NextResponse.json(
+        { success: false, message: '無法識別診所，請重新登入' },
+        { status: 401 }
+      );
+    }
+
     const searchParams = request.nextUrl.searchParams;
     const date = searchParams.get('date');
 
@@ -123,10 +162,13 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
+    // 🟢 多租戶：刪除時也要驗證該紀錄屬於當前診所
+    // ⚠️ 注意：如果 clinic_closed_days 表還沒有 clinic_id 欄位，需要先執行 migration
     const { error } = await supabaseAdmin
       .from('clinic_closed_days')
       .delete()
-      .eq('date', date);
+      .eq('date', date)
+      .eq('clinic_id', clinicId); // 🟢 確保只刪除該診所的休診日
 
     if (error) {
       console.error('Delete closed day error:', error);

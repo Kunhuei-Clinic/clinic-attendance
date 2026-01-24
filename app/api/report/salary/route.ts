@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { getClinicIdFromRequest } from '@/lib/clinicHelper';
 
 /**
  * GET /api/report/salary
@@ -15,6 +16,15 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin';
  */
 export async function GET(request: NextRequest) {
   try {
+    // 🟢 多租戶：取得當前使用者的 clinic_id
+    const clinicId = await getClinicIdFromRequest(request);
+    if (!clinicId) {
+      return NextResponse.json(
+        { data: [], error: '無法識別診所，請重新登入' },
+        { status: 401 }
+      );
+    }
+
     const searchParams = request.nextUrl.searchParams;
     const useDateFilter = searchParams.get('useDateFilter') === 'true';
     const startMonth = searchParams.get('startMonth');
@@ -27,10 +37,12 @@ export async function GET(request: NextRequest) {
 
     // 1. 抓醫師資料 (doctor_ppf)
     if (roleFilter === 'all' || roleFilter === 'doctor') {
+      // 🟢 多租戶：強制加上 clinic_id 過濾
       let query = supabaseAdmin
         .from('doctor_ppf')
         .select(`*, staff:doctor_id (name, role, insurance_labor, insurance_health)`)
-        .eq('status', 'locked');
+        .eq('status', 'locked')
+        .eq('clinic_id', clinicId); // 只查詢該診所的醫師薪資
 
       if (useDateFilter && startMonth && endMonth) {
         query = query.gte('paid_in_month', startMonth).lte('paid_in_month', endMonth);
@@ -77,9 +89,11 @@ export async function GET(request: NextRequest) {
 
     // 2. 抓員工資料 (salary_history)
     if (roleFilter === 'all' || roleFilter === 'staff') {
+      // 🟢 多租戶：強制加上 clinic_id 過濾
       let query = supabaseAdmin
         .from('salary_history')
-        .select('year_month, staff_name, snapshot');
+        .select('year_month, staff_name, snapshot')
+        .eq('clinic_id', clinicId); // 只查詢該診所的員工薪資
 
       if (useDateFilter && startMonth && endMonth) {
         query = query.gte('year_month', startMonth).lte('year_month', endMonth);
@@ -88,11 +102,12 @@ export async function GET(request: NextRequest) {
       }
 
       if (selectedStaffId !== 'all') {
-        // 需要先取得員工姓名
+        // 🟢 多租戶：需要先取得該診所的員工姓名
         const { data: staff } = await supabaseAdmin
           .from('staff')
           .select('name')
           .eq('id', Number(selectedStaffId))
+          .eq('clinic_id', clinicId) // 🟢 確保只查詢該診所的員工
           .single();
         
         if (staff) {

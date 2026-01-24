@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { getClinicIdFromRequest } from '@/lib/clinicHelper';
 
 /**
  * GET /api/attendance
@@ -16,6 +17,15 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin';
  */
 export async function GET(request: NextRequest) {
   try {
+    // 🟢 多租戶：取得當前使用者的 clinic_id
+    const clinicId = await getClinicIdFromRequest(request);
+    if (!clinicId) {
+      return NextResponse.json(
+        { data: [], error: '無法識別診所，請重新登入' },
+        { status: 401 }
+      );
+    }
+
     const searchParams = request.nextUrl.searchParams;
     const useDateFilter = searchParams.get('useDateFilter') === 'true';
     const startDate = searchParams.get('startDate');
@@ -23,16 +33,18 @@ export async function GET(request: NextRequest) {
     const selectedStaffId = searchParams.get('selectedStaffId') || 'all';
     const selectedRole = searchParams.get('selectedRole') || 'all';
 
-    // 先取得員工列表 (用於篩選)
+    // 🟢 多租戶：先取得該診所的員工列表 (用於篩選)
     const { data: staffList } = await supabaseAdmin
       .from('staff')
       .select('id, name, role')
+      .eq('clinic_id', clinicId) // 只查詢該診所的員工
       .order('id');
 
-    // 建立查詢
+    // 🟢 多租戶：建立查詢，強制加上 clinic_id 過濾
     let query = supabaseAdmin
       .from('attendance_logs')
       .select('*')
+      .eq('clinic_id', clinicId) // 只查詢該診所的考勤紀錄
       .order('clock_in_time', { ascending: false });
 
     // 日期篩選
@@ -105,6 +117,15 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
+    // 🟢 多租戶：取得當前使用者的 clinic_id
+    const clinicId = await getClinicIdFromRequest(request);
+    if (!clinicId) {
+      return NextResponse.json(
+        { success: false, message: '無法識別診所，請重新登入' },
+        { status: 401 }
+      );
+    }
+
     const body = await request.json();
     const {
       id,
@@ -125,6 +146,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // 🟢 多租戶：驗證該員工是否屬於當前診所
+    const { data: staff } = await supabaseAdmin
+      .from('staff')
+      .select('id, clinic_id')
+      .eq('id', Number(staffId))
+      .eq('clinic_id', clinicId)
+      .single();
+
+    if (!staff) {
+      return NextResponse.json(
+        { success: false, message: '找不到該員工或無權限操作' },
+        { status: 403 }
+      );
+    }
+
     // 計算時間
     // 🟢 修正時區問題：強制指定為台灣時間 (UTC+8)
     // 使用 +08:00 時區後綴，確保無論伺服器在哪個時區，都能正確將台灣時間轉換為 UTC
@@ -138,6 +174,7 @@ export async function POST(request: NextRequest) {
       workHours = (endDateTime.getTime() - startDateTime.getTime()) / (1000 * 60 * 60);
     }
 
+    // 🟢 多租戶：將 clinic_id 合併到 payload 中（不讓前端傳入）
     const payload = {
       staff_id: Number(staffId),
       staff_name: staffName,
@@ -146,16 +183,33 @@ export async function POST(request: NextRequest) {
       work_type: workType || '正常班',
       work_hours: workHours > 0 ? workHours : 0,
       note: note || null,
-      status: endDateTime ? 'completed' : 'pending'
+      status: endDateTime ? 'completed' : 'pending',
+      clinic_id: clinicId // 🟢 自動填入，不讓前端傳入
     };
 
     let error;
     if (id) {
+      // 🟢 多租戶：更新時也要驗證該紀錄屬於當前診所
+      const { data: existingLog } = await supabaseAdmin
+        .from('attendance_logs')
+        .select('id, clinic_id')
+        .eq('id', id)
+        .eq('clinic_id', clinicId)
+        .single();
+
+      if (!existingLog) {
+        return NextResponse.json(
+          { success: false, message: '找不到該紀錄或無權限操作' },
+          { status: 403 }
+        );
+      }
+
       // 更新
       const { error: updateError } = await supabaseAdmin
         .from('attendance_logs')
         .update(payload)
-        .eq('id', id);
+        .eq('id', id)
+        .eq('clinic_id', clinicId); // 🟢 確保只更新該診所的紀錄
       error = updateError;
     } else {
       // 新增
@@ -197,6 +251,15 @@ export async function POST(request: NextRequest) {
  */
 export async function DELETE(request: NextRequest) {
   try {
+    // 🟢 多租戶：取得當前使用者的 clinic_id
+    const clinicId = await getClinicIdFromRequest(request);
+    if (!clinicId) {
+      return NextResponse.json(
+        { success: false, message: '無法識別診所，請重新登入' },
+        { status: 401 }
+      );
+    }
+
     const searchParams = request.nextUrl.searchParams;
     const id = searchParams.get('id');
 
@@ -207,10 +270,12 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
+    // 🟢 多租戶：刪除時也要驗證該紀錄屬於當前診所
     const { error } = await supabaseAdmin
       .from('attendance_logs')
       .delete()
-      .eq('id', Number(id));
+      .eq('id', Number(id))
+      .eq('clinic_id', clinicId); // 🟢 確保只刪除該診所的紀錄
 
     if (error) {
       console.error('Delete attendance log error:', error);

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { getClinicIdFromRequest } from '@/lib/clinicHelper';
 
 /**
  * POST /api/attendance/clock
@@ -20,6 +21,15 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin';
  */
 export async function POST(request: NextRequest) {
   try {
+    // 🟢 多租戶：取得當前使用者的 clinic_id
+    const clinicId = await getClinicIdFromRequest(request);
+    if (!clinicId) {
+      return NextResponse.json(
+        { success: false, message: '無法識別診所，請重新登入' },
+        { status: 401 }
+      );
+    }
+
     const body = await request.json();
     const {
       action,
@@ -39,15 +49,32 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // 🟢 多租戶：驗證該員工是否屬於當前診所
+    const { data: staff } = await supabaseAdmin
+      .from('staff')
+      .select('id, clinic_id')
+      .eq('id', Number(staffId))
+      .eq('clinic_id', clinicId)
+      .single();
+
+    if (!staff) {
+      return NextResponse.json(
+        { success: false, message: '找不到該員工或無權限操作' },
+        { status: 403 }
+      );
+    }
+
     if (action === 'in') {
       // 上班打卡
       const now = new Date().toISOString();
+      // 🟢 多租戶：將 clinic_id 合併到 payload 中（不讓前端傳入）
       const payload: any = {
         staff_id: Number(staffId),
         staff_name: staffName,
         clock_in_time: now,
         status: 'working',
-        work_type: 'work'
+        work_type: 'work',
+        clinic_id: clinicId // 🟢 自動填入，不讓前端傳入
       };
 
       // 可選欄位
@@ -84,17 +111,18 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // 先取得現有記錄以計算工時
+      // 🟢 多租戶：先取得現有記錄以計算工時，並驗證該紀錄屬於當前診所
       const { data: existing } = await supabaseAdmin
         .from('attendance_logs')
-        .select('clock_in_time')
+        .select('clock_in_time, clinic_id')
         .eq('id', logId)
+        .eq('clinic_id', clinicId) // 🟢 確保只查詢該診所的紀錄
         .single();
 
       if (!existing) {
         return NextResponse.json(
-          { success: false, message: '找不到上班紀錄' },
-          { status: 404 }
+          { success: false, message: '找不到上班紀錄或無權限操作' },
+          { status: 403 }
         );
       }
 
@@ -113,10 +141,12 @@ export async function POST(request: NextRequest) {
       if (gpsLng !== null && gpsLng !== undefined) updatePayload.gps_lng = gpsLng;
       if (isBypass !== undefined) updatePayload.is_bypass = isBypass;
 
+      // 🟢 多租戶：更新時也要驗證該紀錄屬於當前診所
       const { error } = await supabaseAdmin
         .from('attendance_logs')
         .update(updatePayload)
-        .eq('id', logId);
+        .eq('id', logId)
+        .eq('clinic_id', clinicId); // 🟢 確保只更新該診所的紀錄
 
       if (error) {
         console.error('Clock out error:', error);

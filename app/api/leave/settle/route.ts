@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { getClinicIdFromRequest } from '@/lib/clinicHelper';
 
 /**
  * POST /api/leave/settle
@@ -15,6 +16,15 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin';
  */
 export async function POST(request: NextRequest) {
   try {
+    // 🟢 多租戶：取得當前使用者的 clinic_id
+    const clinicId = await getClinicIdFromRequest(request);
+    if (!clinicId) {
+      return NextResponse.json(
+        { success: false, message: '無法識別診所，請重新登入' },
+        { status: 401 }
+      );
+    }
+
     const body = await request.json();
     const { staff_id, days, pay_month, notes } = body;
     
@@ -40,17 +50,18 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // 1. 取得員工資料 (需要 base_salary 和 salary_mode)
+    // 🟢 多租戶：取得該診所的員工資料
     const { data: staff, error: staffError } = await supabaseAdmin
       .from('staff')
       .select('id, name, base_salary, salary_mode')
       .eq('id', Number(staff_id))
+      .eq('clinic_id', clinicId) // 🟢 確保只查詢該診所的員工
       .single();
     
     if (staffError || !staff) {
       return NextResponse.json(
-        { success: false, message: '找不到員工資料' },
-        { status: 404 }
+        { success: false, message: '找不到員工資料或無權限操作' },
+        { status: 403 }
       );
     }
     
@@ -74,13 +85,15 @@ export async function POST(request: NextRequest) {
       .select('staff_id, hours, start_time')
       .eq('staff_id', Number(staff_id))
       .eq('type', '特休')
-      .eq('status', 'approved');
+      .eq('status', 'approved')
+      .eq('clinic_id', clinicId); // 🟢 只查詢該診所的請假紀錄
     
     const { data: settlements } = await supabaseAdmin
       .from('leave_settlements')
       .select('staff_id, days, status')
       .eq('staff_id', Number(staff_id))
-      .eq('status', 'processed');
+      .eq('status', 'processed')
+      .eq('clinic_id', clinicId); // 🟢 只查詢該診所的結算紀錄
     
     // 簡化計算：這裡只做基本驗證，詳細計算由 stats API 處理
     // 如果結算天數過大（超過30天），直接拒絕
@@ -91,7 +104,7 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // 4. 建立結算紀錄
+    // 🟢 多租戶：建立結算紀錄時自動填入 clinic_id
     const { data: settlement, error: insertError } = await supabaseAdmin
       .from('leave_settlements')
       .insert([{
@@ -100,7 +113,8 @@ export async function POST(request: NextRequest) {
         amount,
         pay_month,
         status: 'pending',
-        notes: notes || ''
+        notes: notes || '',
+        clinic_id: clinicId // 🟢 自動填入，不讓前端傳入
       }])
       .select()
       .single();
@@ -133,14 +147,25 @@ export async function POST(request: NextRequest) {
  */
 export async function GET(request: NextRequest) {
   try {
+    // 🟢 多租戶：取得當前使用者的 clinic_id
+    const clinicId = await getClinicIdFromRequest(request);
+    if (!clinicId) {
+      return NextResponse.json(
+        { data: [], error: '無法識別診所，請重新登入' },
+        { status: 401 }
+      );
+    }
+
     const searchParams = request.nextUrl.searchParams;
     const staffId = searchParams.get('staff_id');
     const payMonth = searchParams.get('pay_month');
     const status = searchParams.get('status');
     
+    // 🟢 多租戶：強制加上 clinic_id 過濾
     let query = supabaseAdmin
       .from('leave_settlements')
       .select('*, staff:staff_id (id, name)')
+      .eq('clinic_id', clinicId) // 只查詢該診所的結算紀錄
       .order('created_at', { ascending: false });
     
     if (staffId) {
@@ -181,6 +206,15 @@ export async function GET(request: NextRequest) {
  */
 export async function PATCH(request: NextRequest) {
   try {
+    // 🟢 多租戶：取得當前使用者的 clinic_id
+    const clinicId = await getClinicIdFromRequest(request);
+    if (!clinicId) {
+      return NextResponse.json(
+        { success: false, message: '無法識別診所，請重新登入' },
+        { status: 401 }
+      );
+    }
+
     const body = await request.json();
     const { id, status } = body;
     
@@ -191,10 +225,12 @@ export async function PATCH(request: NextRequest) {
       );
     }
     
+    // 🟢 多租戶：更新時也要驗證該紀錄屬於當前診所
     const { error } = await supabaseAdmin
       .from('leave_settlements')
       .update({ status })
-      .eq('id', Number(id));
+      .eq('id', Number(id))
+      .eq('clinic_id', clinicId); // 🟢 確保只更新該診所的紀錄
     
     if (error) {
       console.error('Update settlement error:', error);

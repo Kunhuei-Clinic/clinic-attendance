@@ -1,8 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { getClinicIdFromRequest } from '@/lib/clinicHelper';
 
 export async function GET(request: NextRequest) {
   try {
+    // 🟢 多租戶：取得當前使用者的 clinic_id
+    const clinicId = await getClinicIdFromRequest(request);
+    if (!clinicId) {
+      return NextResponse.json(
+        { error: '無法識別診所，請重新登入' },
+        { status: 401 }
+      );
+    }
+
     const searchParams = request.nextUrl.searchParams;
     const month = searchParams.get('month'); // Format: yyyy-MM
 
@@ -14,10 +24,11 @@ export async function GET(request: NextRequest) {
     const [y, m] = month.split('-').map(Number);
     const nextMonth = new Date(y, m, 1).toISOString();
 
-    // 1. 撈取考勤 Log
+    // 1. 撈取考勤 Log（加上 clinic_id 過濾）
     const { data: logs, error: logsError } = await supabaseAdmin
       .from('attendance_logs')
       .select('*')
+      .eq('clinic_id', clinicId) // 🟢 只查詢該診所的考勤紀錄
       .gte('clock_in_time', startDate)
       .lt('clock_in_time', nextMonth);
 
@@ -26,10 +37,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: logsError.message }, { status: 500 });
     }
 
-    // 2. 撈取班表 (包含 shift_details JSONB)
+    // 2. 撈取班表（加上 clinic_id 過濾）
     const { data: rosterData, error: rosterError } = await supabaseAdmin
       .from('roster')
       .select('*')
+      .eq('clinic_id', clinicId) // 🟢 只查詢該診所的班表
       .gte('date', startDate)
       .lt('date', nextMonth);
 
@@ -38,10 +50,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: rosterError.message }, { status: 500 });
     }
 
-    // 3. 撈取假日表
+    // 3. 撈取假日表（加上 clinic_id 過濾）
     const { data: holidayData, error: holidayError } = await supabaseAdmin
       .from('clinic_holidays')
       .select('date')
+      .eq('clinic_id', clinicId) // 🟢 只查詢該診所的國定假日
       .gte('date', startDate)
       .lt('date', nextMonth);
 
@@ -50,11 +63,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: holidayError.message }, { status: 500 });
     }
 
-    // 4. 撈取請假單
+    // 4. 撈取請假單（加上 clinic_id 過濾）
     const { data: leaveData, error: leaveError } = await supabaseAdmin
       .from('leave_requests')
       .select('*')
       .eq('status', 'approved')
+      .eq('clinic_id', clinicId) // 🟢 只查詢該診所的請假紀錄
       .gte('start_time', startDate)
       .lt('start_time', nextMonth);
 

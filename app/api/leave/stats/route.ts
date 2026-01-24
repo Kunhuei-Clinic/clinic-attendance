@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { getClinicIdFromRequest } from '@/lib/clinicHelper';
 
 /**
  * 計算勞基法特休天數 (週年制)
@@ -73,20 +74,31 @@ function calculateCalendarLeave(startDate: Date, year: number): number {
  */
 export async function GET(request: NextRequest) {
   try {
-    // 1. 取得系統設定：特休計算制
+    // 🟢 多租戶：取得當前使用者的 clinic_id
+    const clinicId = await getClinicIdFromRequest(request);
+    if (!clinicId) {
+      return NextResponse.json(
+        { data: [], error: '無法識別診所，請重新登入' },
+        { status: 401 }
+      );
+    }
+
+    // 1. 取得系統設定：特休計算制（加上 clinic_id 過濾）
     const { data: settingsData } = await supabaseAdmin
       .from('system_settings')
       .select('value')
       .eq('key', 'leave_calculation_system')
+      .eq('clinic_id', clinicId) // 🟢 只查詢該診所的設定
       .single();
     
     const calculationSystem = settingsData?.value || 'anniversary'; // 預設週年制
     
-    // 2. 取得所有在職員工
+    // 2. 取得該診所所有在職員工
     const { data: staffList, error: staffError } = await supabaseAdmin
       .from('staff')
       .select('id, name, start_date, base_salary, salary_mode')
       .eq('is_active', true)
+      .eq('clinic_id', clinicId) // 🟢 只查詢該診所的員工
       .order('name');
     
     if (staffError) {
@@ -98,23 +110,25 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ data: [] });
     }
     
-    // 3. 取得所有已通過的特休申請
+    // 3. 取得該診所所有已通過的特休申請
     const { data: leaveRequests, error: leaveError } = await supabaseAdmin
       .from('leave_requests')
       .select('staff_id, hours, start_time')
       .eq('type', '特休')
-      .eq('status', 'approved');
+      .eq('status', 'approved')
+      .eq('clinic_id', clinicId); // 🟢 只查詢該診所的請假紀錄
     
     if (leaveError) {
       console.error('Fetch leave requests error:', leaveError);
       return NextResponse.json({ data: [], error: leaveError.message }, { status: 500 });
     }
     
-    // 4. 取得已結算的特休
+    // 4. 取得該診所已結算的特休
     const { data: settlements, error: settleError } = await supabaseAdmin
       .from('leave_settlements')
       .select('staff_id, days, status')
-      .eq('status', 'processed');
+      .eq('status', 'processed')
+      .eq('clinic_id', clinicId); // 🟢 只查詢該診所的結算紀錄
     
     if (settleError) {
       console.error('Fetch settlements error:', settleError);

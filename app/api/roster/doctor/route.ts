@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { getClinicIdFromRequest } from '@/lib/clinicHelper';
 
 /**
  * GET /api/roster/doctor
@@ -15,6 +16,15 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin';
  */
 export async function GET(request: NextRequest) {
   try {
+    // 🟢 多租戶：取得當前使用者的 clinic_id
+    const clinicId = await getClinicIdFromRequest(request);
+    if (!clinicId) {
+      return NextResponse.json(
+        { data: [], error: '無法識別診所，請重新登入' },
+        { status: 401 }
+      );
+    }
+
     const searchParams = request.nextUrl.searchParams;
     const year = searchParams.get('year');
     const month = searchParams.get('month');
@@ -22,7 +32,11 @@ export async function GET(request: NextRequest) {
     const endDate = searchParams.get('endDate');
     const doctorId = searchParams.get('doctor_id');
 
-    let query = supabaseAdmin.from('doctor_roster').select('*');
+    // 🟢 多租戶：強制加上 clinic_id 過濾
+    let query = supabaseAdmin
+      .from('doctor_roster')
+      .select('*')
+      .eq('clinic_id', clinicId); // 只查詢該診所的醫師班表
 
     // 支援 doctor_id 過濾
     if (doctorId) {
@@ -86,6 +100,15 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
+    // 🟢 多租戶：取得當前使用者的 clinic_id
+    const clinicId = await getClinicIdFromRequest(request);
+    if (!clinicId) {
+      return NextResponse.json(
+        { success: false, message: '無法識別診所，請重新登入' },
+        { status: 401 }
+      );
+    }
+
     const body = await request.json();
     const {
       id,
@@ -106,6 +129,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // 🟢 多租戶：驗證該醫師是否屬於當前診所
+    const { data: doctor } = await supabaseAdmin
+      .from('staff')
+      .select('id, clinic_id')
+      .eq('id', Number(doctor_id))
+      .eq('clinic_id', clinicId)
+      .eq('role', '醫師')
+      .single();
+
+    if (!doctor) {
+      return NextResponse.json(
+        { success: false, message: '找不到該醫師或無權限操作' },
+        { status: 403 }
+      );
+    }
+
+    // 🟢 多租戶：將 clinic_id 合併到 payload 中（不讓前端傳入）
     const payload = {
       doctor_id: Number(doctor_id),
       date,
@@ -114,16 +154,33 @@ export async function POST(request: NextRequest) {
       end_time,
       special_tags: special_tags || [],
       is_dedicated: is_dedicated || false,
-      is_substitution: is_substitution || false
+      is_substitution: is_substitution || false,
+      clinic_id: clinicId // 🟢 自動填入，不讓前端傳入
     };
 
     let error;
     if (id) {
+      // 🟢 多租戶：更新時也要驗證該紀錄屬於當前診所
+      const { data: existing } = await supabaseAdmin
+        .from('doctor_roster')
+        .select('id, clinic_id')
+        .eq('id', id)
+        .eq('clinic_id', clinicId)
+        .single();
+
+      if (!existing) {
+        return NextResponse.json(
+          { success: false, message: '找不到該紀錄或無權限操作' },
+          { status: 403 }
+        );
+      }
+
       // 更新
       const { error: updateError } = await supabaseAdmin
         .from('doctor_roster')
         .update(payload)
-        .eq('id', id);
+        .eq('id', id)
+        .eq('clinic_id', clinicId); // 🟢 確保只更新該診所的紀錄
       error = updateError;
     } else {
       // 新增 (upsert)
@@ -165,6 +222,15 @@ export async function POST(request: NextRequest) {
  */
 export async function DELETE(request: NextRequest) {
   try {
+    // 🟢 多租戶：取得當前使用者的 clinic_id
+    const clinicId = await getClinicIdFromRequest(request);
+    if (!clinicId) {
+      return NextResponse.json(
+        { success: false, message: '無法識別診所，請重新登入' },
+        { status: 401 }
+      );
+    }
+
     const searchParams = request.nextUrl.searchParams;
     const id = searchParams.get('id');
     const start = searchParams.get('start');
@@ -172,17 +238,19 @@ export async function DELETE(request: NextRequest) {
 
     let error;
     if (id) {
-      // 單筆刪除
+      // 🟢 多租戶：單筆刪除時也要驗證該紀錄屬於當前診所
       const { error: deleteError } = await supabaseAdmin
         .from('doctor_roster')
         .delete()
-        .eq('id', Number(id));
+        .eq('id', Number(id))
+        .eq('clinic_id', clinicId); // 🟢 確保只刪除該診所的紀錄
       error = deleteError;
     } else if (start && end) {
-      // 批次刪除
+      // 🟢 多租戶：批次刪除時也要加上 clinic_id 過濾
       const { error: batchError } = await supabaseAdmin
         .from('doctor_roster')
         .delete()
+        .eq('clinic_id', clinicId) // 🟢 確保只刪除該診所的紀錄
         .gte('date', start)
         .lte('date', end);
       error = batchError;
@@ -227,6 +295,15 @@ export async function DELETE(request: NextRequest) {
  */
 export async function PATCH(request: NextRequest) {
   try {
+    // 🟢 多租戶：取得當前使用者的 clinic_id
+    const clinicId = await getClinicIdFromRequest(request);
+    if (!clinicId) {
+      return NextResponse.json(
+        { success: false, message: '無法識別診所，請重新登入' },
+        { status: 401 }
+      );
+    }
+
     const body = await request.json();
     const { sourceStart, targetStart, days } = body;
 
@@ -237,14 +314,16 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    // 取得來源資料
+    // 取得來源資料（加上 clinic_id 過濾）
     const sourceEnd = new Date(sourceStart);
     sourceEnd.setDate(sourceEnd.getDate() + days);
     const sourceEndStr = sourceEnd.toISOString().split('T')[0];
 
+    // 🟢 多租戶：只查詢該診所的資料
     const { data: sourceData, error: fetchError } = await supabaseAdmin
       .from('doctor_roster')
       .select('*')
+      .eq('clinic_id', clinicId) // 🟢 確保只查詢該診所的資料
       .gte('date', sourceStart)
       .lt('date', sourceEndStr);
 
@@ -267,7 +346,7 @@ export async function PATCH(request: NextRequest) {
     const tDate = new Date(targetStart);
     const diffDays = Math.round((tDate.getTime() - sDate.getTime()) / (1000 * 60 * 60 * 24));
 
-    // 產生新資料
+    // 🟢 多租戶：產生新資料時也要包含 clinic_id
     const newEntries = sourceData.map(src => {
       const originalDate = new Date(src.date);
       const newDate = new Date(originalDate);
@@ -282,7 +361,8 @@ export async function PATCH(request: NextRequest) {
         end_time: src.end_time,
         special_tags: src.special_tags,
         is_dedicated: src.is_dedicated,
-        is_substitution: src.is_substitution
+        is_substitution: src.is_substitution,
+        clinic_id: clinicId // 🟢 自動填入，不讓前端傳入
       };
     });
 

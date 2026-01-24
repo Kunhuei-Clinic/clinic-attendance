@@ -1,14 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { getClinicIdFromRequest } from '@/lib/clinicHelper';
 
 export async function GET(request: NextRequest) {
   try {
+    // 🟢 多租戶：取得當前使用者的 clinic_id
+    const clinicId = await getClinicIdFromRequest(request);
+    if (!clinicId) {
+      return NextResponse.json(
+        { data: null, error: '無法識別診所，請重新登入' },
+        { status: 401 }
+      );
+    }
+
     const searchParams = request.nextUrl.searchParams;
     const doctorId = searchParams.get('doctor_id');
     const targetMonth = searchParams.get('target_month');
     const paidInMonth = searchParams.get('paid_in_month');
 
-    let query = supabaseAdmin.from('doctor_ppf').select('*');
+    // 🟢 多租戶：強制加上 clinic_id 過濾
+    let query = supabaseAdmin
+      .from('doctor_ppf')
+      .select('*')
+      .eq('clinic_id', clinicId); // 只查詢該診所的醫師 PPF
 
     if (doctorId) {
       query = query.eq('doctor_id', Number(doctorId));
@@ -43,6 +57,15 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    // 🟢 多租戶：取得當前使用者的 clinic_id
+    const clinicId = await getClinicIdFromRequest(request);
+    if (!clinicId) {
+      return NextResponse.json(
+        { error: '無法識別診所，請重新登入' },
+        { status: 401 }
+      );
+    }
+
     const body = await request.json();
     const {
       doctor_id,
@@ -75,6 +98,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields: doctor_id, target_month' }, { status: 400 });
     }
 
+    // 🟢 多租戶：驗證該醫師是否屬於當前診所
+    const { data: doctor } = await supabaseAdmin
+      .from('staff')
+      .select('id, clinic_id')
+      .eq('id', Number(doctor_id))
+      .eq('clinic_id', clinicId)
+      .eq('role', '醫師')
+      .single();
+
+    if (!doctor) {
+      return NextResponse.json(
+        { error: '找不到該醫師或無權限操作' },
+        { status: 403 }
+      );
+    }
+
+    // 🟢 多租戶：將 clinic_id 合併到 payload 中（不讓前端傳入）
     const payload: Record<string, unknown> = {
       doctor_id,
       target_month,
@@ -93,6 +133,7 @@ export async function POST(request: NextRequest) {
       status: status || 'draft',
       net_pay: net_pay || 0,
       cash_amount: cash_amount || 0,
+      clinic_id: clinicId, // 🟢 自動填入，不讓前端傳入
     };
 
     if (snapshot_actual_hours != null) payload.snapshot_actual_hours = snapshot_actual_hours;

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { getClinicIdFromRequest } from '@/lib/clinicHelper';
 
 /**
  * GET /api/roster/staff
@@ -11,6 +12,15 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin';
  */
 export async function GET(request: NextRequest) {
   try {
+    // 🟢 多租戶：取得當前使用者的 clinic_id
+    const clinicId = await getClinicIdFromRequest(request);
+    if (!clinicId) {
+      return NextResponse.json(
+        { data: [], error: '無法識別診所，請重新登入' },
+        { status: 401 }
+      );
+    }
+
     const searchParams = request.nextUrl.searchParams;
     const year = Number(searchParams.get('year'));
     const month = Number(searchParams.get('month'));
@@ -26,9 +36,11 @@ export async function GET(request: NextRequest) {
     const nextMonthDate = new Date(year, month, 1);
     const nextMonth = `${nextMonthDate.getFullYear()}-${String(nextMonthDate.getMonth() + 1).padStart(2, '0')}-01`;
 
+    // 🟢 多租戶：強制加上 clinic_id 過濾
     const { data, error } = await supabaseAdmin
       .from('roster')
       .select('*')
+      .eq('clinic_id', clinicId) // 只查詢該診所的班表
       .gte('date', start)
       .lt('date', nextMonth);
 
@@ -65,6 +77,15 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
+    // 🟢 多租戶：取得當前使用者的 clinic_id
+    const clinicId = await getClinicIdFromRequest(request);
+    if (!clinicId) {
+      return NextResponse.json(
+        { success: false, message: '無法識別診所，請重新登入' },
+        { status: 401 }
+      );
+    }
+
     const body = await request.json();
     const {
       staff_id,
@@ -78,6 +99,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { success: false, message: '缺少必要欄位' },
         { status: 400 }
+      );
+    }
+
+    // 🟢 多租戶：驗證該員工是否屬於當前診所
+    const { data: staff } = await supabaseAdmin
+      .from('staff')
+      .select('id, clinic_id')
+      .eq('id', Number(staff_id))
+      .eq('clinic_id', clinicId)
+      .single();
+
+    if (!staff) {
+      return NextResponse.json(
+        { success: false, message: '找不到該員工或無權限操作' },
+        { status: 403 }
       );
     }
 
@@ -95,12 +131,14 @@ export async function POST(request: NextRequest) {
       maxEnd = null;
     }
 
+    // 🟢 多租戶：將 clinic_id 合併到 payload 中（不讓前端傳入）
     const payload: any = {
       staff_id: Number(staff_id),
       date,
       shifts: shifts || [],
       day_type: day_type || 'normal',
-      shift_details: shift_details || {}
+      shift_details: shift_details || {},
+      clinic_id: clinicId // 🟢 自動填入，不讓前端傳入
     };
 
     if (minStart && maxEnd) {
@@ -108,12 +146,13 @@ export async function POST(request: NextRequest) {
       payload.end_time = maxEnd;
     }
 
-    // 檢查是否已存在
+    // 檢查是否已存在（加上 clinic_id 驗證）
     const { data: existing } = await supabaseAdmin
       .from('roster')
       .select('id')
       .eq('staff_id', staff_id)
       .eq('date', date)
+      .eq('clinic_id', clinicId) // 🟢 確保只查詢該診所的班表
       .single();
 
     let error;
@@ -123,14 +162,16 @@ export async function POST(request: NextRequest) {
         const { error: deleteError } = await supabaseAdmin
           .from('roster')
           .delete()
-          .eq('id', existing.id);
+          .eq('id', existing.id)
+          .eq('clinic_id', clinicId); // 🟢 確保只刪除該診所的班表
         error = deleteError;
       } else {
         // 更新
         const { error: updateError } = await supabaseAdmin
           .from('roster')
           .update(payload)
-          .eq('id', existing.id);
+          .eq('id', existing.id)
+          .eq('clinic_id', clinicId); // 🟢 確保只更新該診所的班表
         error = updateError;
       }
     } else {
