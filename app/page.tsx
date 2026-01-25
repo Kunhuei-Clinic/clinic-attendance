@@ -11,7 +11,7 @@ import { redirect } from 'next/navigation';
  * 注意：員工入口請使用 /portal 或 /checkin
  */
 export default async function RootPage() {
-  const cookieStore = await cookies();
+  const cookieStore = cookies();
 
   // 建立 Supabase Client (Server Component 方式)
   const supabase = createServerClient(

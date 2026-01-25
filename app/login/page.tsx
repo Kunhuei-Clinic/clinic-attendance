@@ -2,20 +2,14 @@
 
 import React, { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { createClient } from '@supabase/supabase-js';
+import { createBrowserClient } from '@supabase/ssr';
 import { Lock, Mail } from 'lucide-react';
 
-// 建立 Supabase 客戶端（使用環境變數或直接設定）
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://ucpkvptnhgbtmghqgbof.supabase.co';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVjcGt2cHRuaGdidG1naHFnYm9mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUzNDg5MTAsImV4cCI6MjA4MDkyNDkxMH0.zdLx86ey-QywuGD-S20JJa7ZD6xHFRalAMRN659bbuo';
-
-const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true
-  }
-});
+// 建立 Supabase 客戶端（使用 @supabase/ssr 確保 Session 寫入 Cookie）
+const supabase = createBrowserClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://ucpkvptnhgbtmghqgbof.supabase.co',
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVjcGt2cHRuaGdidG1naHFnYm9mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUzNDg5MTAsImV4cCI6MjA4MDkyNDkxMH0.zdLx86ey-QywuGD-S20JJa7ZD6xHFRalAMRN659bbuo'
+);
 
 function LoginForm() {
   const router = useRouter();
@@ -25,7 +19,7 @@ function LoginForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // 檢查是否已經登入
+  // 檢查是否已經登入（從 Cookie 讀取）
   useEffect(() => {
     const checkSession = async () => {
       try {
@@ -55,7 +49,7 @@ function LoginForm() {
     }
 
     try {
-      // 使用 Supabase Auth 進行登入
+      // 使用 Supabase Auth 直接登入（createBrowserClient 會自動將 Session 寫入 Cookie）
       const { data, error: signInError } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password: password
@@ -76,38 +70,14 @@ function LoginForm() {
       }
 
       if (data.session) {
-        // 登入成功，將 session 同步到後端 cookie
-        // 這樣 middleware 才能識別認證狀態
-        try {
-          const syncResponse = await fetch('/api/auth/sync-session', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              access_token: data.session.access_token,
-              refresh_token: data.session.refresh_token,
-              expires_at: data.session.expires_at
-            }),
-            credentials: 'include'
-          });
-
-          if (!syncResponse.ok) {
-            console.warn('Session sync failed, but login succeeded');
-          }
-        } catch (syncError) {
-          console.warn('Session sync error:', syncError);
-          // 即使同步失敗，也繼續跳轉（因為客戶端 session 已建立）
-        }
-
-        // 刷新路由以更新認證狀態
-        const redirect = searchParams.get('redirect') || '/admin';
+        // 登入成功
+        // createBrowserClient 已經自動將 Session 寫入 Cookie
+        // 關鍵步驟：刷新路由讓 Server 知道 Cookie 更新了
         router.refresh();
         
-        // 延遲一下確保 session 已寫入 cookie
-        setTimeout(() => {
-          router.push(redirect);
-        }, 100);
+        // 跳轉到目標頁面
+        const redirect = searchParams.get('redirect') || '/admin';
+        router.push(redirect);
       } else {
         setError('登入失敗，無法建立 Session');
         setPassword('');

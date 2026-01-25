@@ -1,87 +1,57 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabaseAdmin';
-import { getClinicIdFromRequest } from '@/lib/clinicHelper';
+import { createServerClient } from '@supabase/ssr'
+import { cookies } from 'next/headers'
+import { NextResponse } from 'next/server'
+import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
-/**
- * GET /api/auth/check
- * 檢查認證狀態 API (Supabase Auth)
- * 
- * Response:
- *   { authenticated: boolean, user?: { id: string, email: string, clinic_id: string } }
- */
-export async function GET(request: NextRequest) {
-  try {
-    // 從 Request 取得 clinic_id (會自動從 Session Cookie 解析)
-    const clinicId = await getClinicIdFromRequest(request);
+export async function GET() {
+  // 1. 取得 Cookie Store
+  const cookieStore = cookies()
 
-    if (!clinicId) {
-      return NextResponse.json({
-        authenticated: false
-      });
+  // 2. 建立 Server Client (只讀模式)
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value
+        },
+      },
     }
+  )
 
-    // 嘗試從 Session Cookie 取得 user ID
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    if (!supabaseUrl) {
-      return NextResponse.json({ authenticated: false });
-    }
+  // 3. 正規取得 User (這會自動處理 base64 格式)
+  const { data: { user }, error } = await supabase.auth.getUser()
 
-    const projectRef = supabaseUrl.split('//')[1]?.split('.')[0];
-    if (!projectRef) {
-      return NextResponse.json({ authenticated: false });
-    }
-
-    const sessionCookieName = `sb-${projectRef}-auth-token`;
-    const sessionCookie = request.cookies.get(sessionCookieName);
-
-    if (!sessionCookie?.value) {
-      // 檢查是否有 user_id cookie (向後兼容)
-      const userIdCookie = request.cookies.get('user_id');
-      if (userIdCookie?.value) {
-        return NextResponse.json({
-          authenticated: true,
-          user: {
-            id: userIdCookie.value,
-            clinic_id: clinicId
-          }
-        });
-      }
-      return NextResponse.json({ authenticated: false });
-    }
-
-    try {
-      // 解析 session cookie 取得 user ID
-      const sessionData = JSON.parse(sessionCookie.value);
-      const userId = sessionData?.user?.id;
-
-      if (!userId) {
-        return NextResponse.json({ authenticated: false });
-      }
-
-      // 驗證 user 是否存在
-      const { data: { user }, error } = await supabaseAdmin.auth.getUser(sessionData.access_token);
-      
-      if (error || !user) {
-        return NextResponse.json({ authenticated: false });
-      }
-
-      return NextResponse.json({
-        authenticated: true,
-        user: {
-          id: user.id,
-          email: user.email,
-          clinic_id: clinicId
-        }
-      });
-    } catch (parseError) {
-      console.error('Error parsing session:', parseError);
-      return NextResponse.json({ authenticated: false });
-    }
-  } catch (error: any) {
-    console.error('Auth Check API Error:', error);
-    return NextResponse.json(
-      { authenticated: false },
-      { status: 500 }
-    );
+  if (error || !user) {
+    return NextResponse.json({ authenticated: false }, { status: 401 })
   }
+
+  // 4. 查詢使用者的角色 (使用 supabaseAdmin 繞過 RLS)
+  const { data: profile, error: profileError } = await supabaseAdmin
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .single()
+
+  if (profileError || !profile) {
+    // 如果查不到 profile，預設為 'boss' (向後兼容)
+    console.warn('Profile not found for user:', user.id, profileError)
+    return NextResponse.json({
+      authenticated: true,
+      user: { id: user.id, email: user.email },
+      authLevel: 'boss'
+    }, { status: 200 })
+  }
+
+  // 5. 轉換角色為 authLevel
+  // 'admin' -> 'boss', 'user' -> 'manager'
+  const authLevel = profile.role === 'admin' ? 'boss' : 'manager'
+
+  // 6. 回傳成功（包含 authLevel）
+  return NextResponse.json({
+    authenticated: true,
+    user: { id: user.id, email: user.email },
+    authLevel: authLevel
+  }, { status: 200 })
 }

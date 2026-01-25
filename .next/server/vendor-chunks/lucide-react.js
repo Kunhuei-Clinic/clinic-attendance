@@ -381,6 +381,16 @@ eval("__webpack_require__.r(__webpack_exports__);\n/* harmony export */ __webpac
 
 /***/ }),
 
+/***/ "(ssr)/./node_modules/lucide-react/dist/esm/icons/mail.js":
+/*!**********************************************************!*\
+  !*** ./node_modules/lucide-react/dist/esm/icons/mail.js ***!
+  \**********************************************************/
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+eval("__webpack_require__.r(__webpack_exports__);\n/* harmony export */ __webpack_require__.d(__webpack_exports__, {\n/* harmony export */   \"default\": () => (/* binding */ Mail)\n/* harmony export */ });\n/* harmony import */ var _createLucideIcon_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ../createLucideIcon.js */ \"(ssr)/./node_modules/lucide-react/dist/esm/createLucideIcon.js\");\n/**\n * lucide-react v0.284.0 - ISC\n */\n\n\n\nconst Mail = (0,_createLucideIcon_js__WEBPACK_IMPORTED_MODULE_0__[\"default\"])(\"Mail\", [\n  [\n    \"rect\",\n    { width: \"20\", height: \"16\", x: \"2\", y: \"4\", rx: \"2\", key: \"18n3k1\" }\n  ],\n  [\"path\", { d: \"m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7\", key: \"1ocrg3\" }]\n]);\n\n\n//# sourceMappingURL=mail.js.map\n//# sourceURL=[module]\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoiKHNzcikvLi9ub2RlX21vZHVsZXMvbHVjaWRlLXJlYWN0L2Rpc3QvZXNtL2ljb25zL21haWwuanMiLCJtYXBwaW5ncyI6Ijs7Ozs7QUFBQTtBQUNBO0FBQ0E7O0FBRXNEOztBQUV0RCxhQUFhLGdFQUFnQjtBQUM3QjtBQUNBO0FBQ0EsTUFBTTtBQUNOO0FBQ0EsYUFBYSwrREFBK0Q7QUFDNUU7O0FBRTJCO0FBQzNCIiwic291cmNlcyI6WyJ3ZWJwYWNrOi8vbmV4dGpzLy4vbm9kZV9tb2R1bGVzL2x1Y2lkZS1yZWFjdC9kaXN0L2VzbS9pY29ucy9tYWlsLmpzPzI5ZWYiXSwic291cmNlc0NvbnRlbnQiOlsiLyoqXG4gKiBsdWNpZGUtcmVhY3QgdjAuMjg0LjAgLSBJU0NcbiAqL1xuXG5pbXBvcnQgY3JlYXRlTHVjaWRlSWNvbiBmcm9tICcuLi9jcmVhdGVMdWNpZGVJY29uLmpzJztcblxuY29uc3QgTWFpbCA9IGNyZWF0ZUx1Y2lkZUljb24oXCJNYWlsXCIsIFtcbiAgW1xuICAgIFwicmVjdFwiLFxuICAgIHsgd2lkdGg6IFwiMjBcIiwgaGVpZ2h0OiBcIjE2XCIsIHg6IFwiMlwiLCB5OiBcIjRcIiwgcng6IFwiMlwiLCBrZXk6IFwiMThuM2sxXCIgfVxuICBdLFxuICBbXCJwYXRoXCIsIHsgZDogXCJtMjIgNy04Ljk3IDUuN2ExLjk0IDEuOTQgMCAwIDEtMi4wNiAwTDIgN1wiLCBrZXk6IFwiMW9jcmczXCIgfV1cbl0pO1xuXG5leHBvcnQgeyBNYWlsIGFzIGRlZmF1bHQgfTtcbi8vIyBzb3VyY2VNYXBwaW5nVVJMPW1haWwuanMubWFwXG4iXSwibmFtZXMiOltdLCJzb3VyY2VSb290IjoiIn0=\n//# sourceURL=webpack-internal:///(ssr)/./node_modules/lucide-react/dist/esm/icons/mail.js\n");
+
+/***/ }),
+
 /***/ "(ssr)/./node_modules/lucide-react/dist/esm/icons/pen-line.js":
 /*!**************************************************************!*\
   !*** ./node_modules/lucide-react/dist/esm/icons/pen-line.js ***!

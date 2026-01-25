@@ -8,10 +8,10 @@ import StaffRosterView from './StaffRoster';
 import DoctorRosterView from './DoctorRoster';
 import LaborRulesView from './LaborRules';
 import AttendanceView from './AttendanceView';
-import SalaryPage from './salary/page'; 
+import SalaryView from '@/components/views/SalaryView'; 
 import SettingsView from './SettingsView'; 
 import LeaveView from './LeaveView';
-import DoctorSalaryPage from './doctor-salary/page';
+import DoctorSalaryView from '@/components/views/DoctorSalaryView';
 import SalaryReportView from './SalaryReport';
 import TasksView from './TasksView'; 
 
@@ -167,10 +167,10 @@ export default function AdminPage() {
             {activeTab === 'staff_roster' && (authLevel === 'boss' || authLevel === 'manager') && <StaffRosterView authLevel={authLevel} />}
             {activeTab === 'doctor_roster' && authLevel === 'boss' && <DoctorRosterView />}
             {activeTab === 'labor_rules' && authLevel === 'boss' && <LaborRulesView />}
-            {activeTab === 'salary' && authLevel === 'boss' && <SalaryPage />}
+            {activeTab === 'salary' && authLevel === 'boss' && <SalaryView />}
             {activeTab === 'settings' && authLevel === 'boss' && <SettingsView />}
             {activeTab === 'leave' && authLevel === 'boss' && <LeaveView />}
-            {activeTab === 'doctor_salary' && authLevel === 'boss' && <DoctorSalaryPage />}
+            {activeTab === 'doctor_salary' && authLevel === 'boss' && <DoctorSalaryView />}
             {activeTab === 'salary_report' && authLevel === 'boss' && <SalaryReportView />}
           </div>
         </div>
