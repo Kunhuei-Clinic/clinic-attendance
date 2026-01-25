@@ -2,7 +2,20 @@
 
 import React, { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { createClient } from '@supabase/supabase-js';
 import { Lock, Mail } from 'lucide-react';
+
+// 建立 Supabase 客戶端（使用環境變數或直接設定）
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://ucpkvptnhgbtmghqgbof.supabase.co';
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVjcGt2cHRuaGdidG1naHFnYm9mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUzNDg5MTAsImV4cCI6MjA4MDkyNDkxMH0.zdLx86ey-QywuGD-S20JJa7ZD6xHFRalAMRN659bbuo';
+
+const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true
+  }
+});
 
 function LoginForm() {
   const router = useRouter();
@@ -14,22 +27,20 @@ function LoginForm() {
 
   // 檢查是否已經登入
   useEffect(() => {
-    const checkAuth = async () => {
+    const checkSession = async () => {
       try {
-        const response = await fetch('/api/auth/check', { method: 'GET' });
-        if (response.ok) {
-          const data = await response.json();
-          if (data.authenticated) {
-            // 已經登入，重定向到 admin 或原本要去的頁面
-            const redirect = searchParams.get('redirect') || '/admin';
-            router.push(redirect);
-          }
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          // 已經登入，重定向到 admin 或原本要去的頁面
+          const redirect = searchParams.get('redirect') || '/admin';
+          router.push(redirect);
         }
       } catch (err) {
         // 忽略錯誤，繼續顯示登入頁
+        console.error('Session check error:', err);
       }
     };
-    checkAuth();
+    checkSession();
   }, [router, searchParams]);
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -44,30 +55,68 @@ function LoginForm() {
     }
 
     try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email, password }),
-        credentials: 'include', // 確保 Cookie 被設定
+      // 使用 Supabase Auth 進行登入
+      const { data, error: signInError } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password: password
       });
 
-      const data = await response.json();
-
-      if (data.success) {
-        // 登入成功，重定向到 admin 或原本要去的頁面
-        const redirect = searchParams.get('redirect') || '/admin';
-        router.push(redirect);
-      } else {
-        setError(data.message || '登入失敗');
+      if (signInError) {
+        // 處理各種錯誤情況
+        if (signInError.message.includes('Invalid login credentials')) {
+          setError('帳號或密碼錯誤');
+        } else if (signInError.message.includes('Email not confirmed')) {
+          setError('請先驗證您的 Email');
+        } else {
+          setError(signInError.message || '登入失敗');
+        }
         setPassword('');
+        setLoading(false);
+        return;
       }
-    } catch (error) {
+
+      if (data.session) {
+        // 登入成功，將 session 同步到後端 cookie
+        // 這樣 middleware 才能識別認證狀態
+        try {
+          const syncResponse = await fetch('/api/auth/sync-session', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              access_token: data.session.access_token,
+              refresh_token: data.session.refresh_token,
+              expires_at: data.session.expires_at
+            }),
+            credentials: 'include'
+          });
+
+          if (!syncResponse.ok) {
+            console.warn('Session sync failed, but login succeeded');
+          }
+        } catch (syncError) {
+          console.warn('Session sync error:', syncError);
+          // 即使同步失敗，也繼續跳轉（因為客戶端 session 已建立）
+        }
+
+        // 刷新路由以更新認證狀態
+        const redirect = searchParams.get('redirect') || '/admin';
+        router.refresh();
+        
+        // 延遲一下確保 session 已寫入 cookie
+        setTimeout(() => {
+          router.push(redirect);
+        }, 100);
+      } else {
+        setError('登入失敗，無法建立 Session');
+        setPassword('');
+        setLoading(false);
+      }
+    } catch (error: any) {
       console.error('Login error:', error);
       setError('登入失敗，請稍後再試');
       setPassword('');
-    } finally {
       setLoading(false);
     }
   };
