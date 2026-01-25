@@ -300,7 +300,7 @@ export default function TasksView() {
 
       {loading ? (
         <div className="text-center py-20 text-slate-400">載入中...</div>
-      ) : requests.length === 0 ? (
+      ) : tasks.length === 0 ? (
         <div className="text-center py-20 bg-white rounded-xl border border-dashed border-slate-300">
           <CheckCircle className="mx-auto text-slate-300 mb-4" size={48} />
           <p className="text-slate-500 font-bold">目前沒有案件 🎉</p>
