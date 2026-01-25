@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Calendar, Plus, Trash2, CheckCircle, Clock, ToggleLeft, ToggleRight, User, Filter, XCircle, DollarSign, TrendingUp, X } from 'lucide-react';
+import { Calendar, Plus, Trash2, CheckCircle, Clock, ToggleLeft, ToggleRight, User, Filter, XCircle, DollarSign, TrendingUp, X, FileText, Save } from 'lucide-react';
 
 // 🟢 中文假別列表 (供新增時選單使用)
 const LEAVE_OPTIONS = ['事假', '病假', '特休', '補休', '公假', '喪假', '婚假', '產假'];
@@ -55,6 +55,17 @@ export default function LeaveView() {
     pay_month: new Date().toISOString().slice(0, 7),
     notes: ''
   });
+
+  // ==========================================
+  // LeaveHistoryModal 狀態
+  // ==========================================
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [selectedStaffForHistory, setSelectedStaffForHistory] = useState<any>(null);
+  const [annualLeaveHistory, setAnnualLeaveHistory] = useState<Array<{ year: string; days: number }>>([]);
+  const [settlements, setSettlements] = useState<any[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [newLeaveYear, setNewLeaveYear] = useState('');
+  const [newLeaveDays, setNewLeaveDays] = useState('');
 
   useEffect(() => { 
     fetchStaff(); 
@@ -207,6 +218,122 @@ export default function LeaveView() {
       notes: ''
     });
     setShowSettleModal(true);
+  };
+
+  const handleOpenHistory = async (staff: any) => {
+    setSelectedStaffForHistory(staff);
+    setShowHistoryModal(true);
+    setLoadingHistory(true);
+    
+    try {
+      // 1. 取得員工完整資料（包含 annual_leave_history）
+      const staffResponse = await fetch(`/api/staff?id=${staff.staff_id}`);
+      const staffResult = await staffResponse.json();
+      
+      if (staffResult.data && staffResult.data.length > 0) {
+        const staffData = staffResult.data[0];
+        let historyList: Array<{ year: string; days: number }> = [];
+        
+        // 解析 annual_leave_history (JSON)
+        if (staffData.annual_leave_history) {
+          try {
+            const historyObj = typeof staffData.annual_leave_history === 'string' 
+              ? JSON.parse(staffData.annual_leave_history)
+              : staffData.annual_leave_history;
+            
+            historyList = Object.entries(historyObj).map(([year, days]) => ({
+              year: String(year),
+              days: Number(days)
+            })).sort((a, b) => b.year.localeCompare(a.year)); // 由新到舊排序
+          } catch (e) {
+            console.error('Parse annual_leave_history error:', e);
+          }
+        }
+        
+        setAnnualLeaveHistory(historyList);
+      }
+      
+      // 2. 取得結算紀錄
+      const settleResponse = await fetch(`/api/leave/settle?staff_id=${staff.staff_id}`);
+      const settleResult = await settleResponse.json();
+      
+      if (settleResult.data) {
+        setSettlements(settleResult.data || []);
+      }
+    } catch (error) {
+      console.error('Fetch history error:', error);
+      alert('載入資料失敗');
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  const handleSaveAnnualLeaveHistory = async () => {
+    if (!selectedStaffForHistory) return;
+    
+    // 將陣列轉為 JSON 物件
+    const historyObj: Record<string, number> = {};
+    annualLeaveHistory.forEach(item => {
+      if (item.year && item.days !== undefined && item.days !== null) {
+        historyObj[item.year] = Number(item.days);
+      }
+    });
+    
+    try {
+      const response = await fetch('/api/staff', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: selectedStaffForHistory.staff_id,
+          annual_leave_history: Object.keys(historyObj).length > 0 ? historyObj : null
+        })
+      });
+      
+      const result = await response.json();
+      if (result.success) {
+        alert('儲存成功！');
+        // 重新載入統計資料
+        fetchLeaveStats();
+      } else {
+        alert('儲存失敗: ' + result.message);
+      }
+    } catch (error) {
+      console.error('Save annual leave history error:', error);
+      alert('儲存失敗');
+    }
+  };
+
+  const handleAddLeaveYear = () => {
+    const year = newLeaveYear.trim();
+    const days = Number(newLeaveDays);
+    
+    if (!year || !days || days <= 0) {
+      alert('請輸入有效的年份和天數');
+      return;
+    }
+    
+    const existingIndex = annualLeaveHistory.findIndex(item => item.year === year);
+    
+    if (existingIndex >= 0) {
+      // 更新現有年份
+      const newList = [...annualLeaveHistory];
+      newList[existingIndex] = { year, days };
+      setAnnualLeaveHistory(newList);
+    } else {
+      // 新增年份
+      const newList = [...annualLeaveHistory, { year, days }];
+      newList.sort((a, b) => b.year.localeCompare(a.year)); // 由新到舊排序
+      setAnnualLeaveHistory(newList);
+    }
+    
+    setNewLeaveYear('');
+    setNewLeaveDays('');
+  };
+
+  const handleRemoveLeaveYear = (index: number) => {
+    const newList = [...annualLeaveHistory];
+    newList.splice(index, 1);
+    setAnnualLeaveHistory(newList);
   };
 
   const handleSettle = async () => {
@@ -455,16 +582,23 @@ export default function LeaveView() {
                         {stat.remaining.toFixed(1)}
                       </td>
                       <td className="p-4 text-center">
-                        {stat.remaining > 0 ? (
+                        <div className="flex items-center justify-center gap-2">
                           <button
-                            onClick={() => handleOpenSettle(stat)}
-                            className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-bold hover:bg-green-700 transition flex items-center gap-1"
+                            onClick={() => handleOpenHistory(stat)}
+                            className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 transition flex items-center gap-1"
+                            title="查看歷年詳情與設定"
                           >
-                            <DollarSign size={14}/> 結算兌現
+                            <FileText size={14}/> 歷年詳情
                           </button>
-                        ) : (
-                          <span className="text-slate-400 text-xs">無可結算</span>
-                        )}
+                          {stat.remaining > 0 && (
+                            <button
+                              onClick={() => handleOpenSettle(stat)}
+                              className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-bold hover:bg-green-700 transition flex items-center gap-1"
+                            >
+                              <DollarSign size={14}/> 結算兌現
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -588,6 +722,187 @@ export default function LeaveView() {
               >
                 <DollarSign size={18}/> 確認結算
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 歷年特休詳情與設定 Modal */}
+      {showHistoryModal && selectedStaffForHistory && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-6 flex justify-between items-center">
+              <div>
+                <h3 className="text-2xl font-bold flex items-center gap-2">
+                  <FileText size={24}/> 特休歷年詳情與設定
+                </h3>
+                <p className="text-blue-100 mt-1">{selectedStaffForHistory.staff_name}</p>
+              </div>
+              <button 
+                onClick={() => {
+                  setShowHistoryModal(false);
+                  setSelectedStaffForHistory(null);
+                  setAnnualLeaveHistory([]);
+                  setSettlements([]);
+                }} 
+                className="p-2 hover:bg-white/20 rounded-full transition"
+              >
+                <X size={24}/>
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-6">
+              {loadingHistory ? (
+                <div className="text-center py-12 text-slate-400">載入中...</div>
+              ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* 左側：歷年額度設定 */}
+                  <div className="bg-teal-50 rounded-xl p-6 border border-teal-200">
+                    <h4 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                      <Calendar className="text-teal-600"/> 歷年額度設定
+                    </h4>
+                    
+                    {/* 現有紀錄列表 */}
+                    <div className="space-y-2 mb-4 max-h-64 overflow-y-auto">
+                      {annualLeaveHistory.length > 0 ? (
+                        annualLeaveHistory.map((item, index) => (
+                          <div key={index} className="flex items-center justify-between bg-white p-3 rounded-lg border border-teal-100">
+                            <span className="font-bold text-slate-700">
+                              {item.year} 年
+                            </span>
+                            <div className="flex items-center gap-3">
+                              <input
+                                type="number"
+                                value={item.days}
+                                onChange={(e) => {
+                                  const newList = [...annualLeaveHistory];
+                                  newList[index] = { ...item, days: Number(e.target.value) };
+                                  setAnnualLeaveHistory(newList);
+                                }}
+                                className="w-20 p-2 border rounded text-center font-bold"
+                                min="0"
+                                step="0.5"
+                              />
+                              <span className="text-sm text-slate-500">天</span>
+                              <button
+                                onClick={() => handleRemoveLeaveYear(index)}
+                                className="p-1 text-red-500 hover:bg-red-50 rounded transition"
+                                title="刪除"
+                              >
+                                <X size={16}/>
+                              </button>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="text-center py-4 text-slate-400 text-sm">尚無特休紀錄</div>
+                      )}
+                    </div>
+
+                    {/* 新增區域 */}
+                    <div className="border-t border-teal-200 pt-4">
+                      <div className="flex gap-2 mb-3">
+                        <div className="flex-1">
+                          <label className="block text-xs font-bold text-slate-600 mb-1">年份</label>
+                          <input
+                            type="number"
+                            value={newLeaveYear}
+                            onChange={e => setNewLeaveYear(e.target.value)}
+                            className="w-full p-2 border rounded bg-white"
+                            placeholder="例：2024"
+                            min="2000"
+                            max="2100"
+                          />
+                        </div>
+                        <div className="flex-1">
+                          <label className="block text-xs font-bold text-slate-600 mb-1">天數</label>
+                          <input
+                            type="number"
+                            value={newLeaveDays}
+                            onChange={e => setNewLeaveDays(e.target.value)}
+                            className="w-full p-2 border rounded bg-white"
+                            placeholder="例：7"
+                            min="0"
+                            step="0.5"
+                          />
+                        </div>
+                        <div className="flex items-end">
+                          <button
+                            onClick={handleAddLeaveYear}
+                            className="px-4 py-2 bg-teal-600 text-white rounded font-bold text-sm hover:bg-teal-700 transition whitespace-nowrap"
+                          >
+                            加入
+                          </button>
+                        </div>
+                      </div>
+                      <button
+                        onClick={handleSaveAnnualLeaveHistory}
+                        className="w-full px-4 py-2.5 bg-slate-800 text-white rounded-lg font-bold hover:bg-black transition flex items-center justify-center gap-2"
+                      >
+                        <Save size={18}/> 儲存設定
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 右側：特休使用與結算狀況 */}
+                  <div className="bg-purple-50 rounded-xl p-6 border border-purple-200">
+                    <h4 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                      <DollarSign className="text-purple-600"/> 結算紀錄
+                    </h4>
+                    
+                    <div className="overflow-x-auto">
+                      {settlements.length > 0 ? (
+                        <table className="w-full text-sm">
+                          <thead className="bg-white text-slate-600 font-bold">
+                            <tr>
+                              <th className="p-2 text-left">結算日期</th>
+                              <th className="p-2 text-right">天數</th>
+                              <th className="p-2 text-right">金額</th>
+                              <th className="p-2 text-center">發放月份</th>
+                              <th className="p-2 text-center">狀態</th>
+                              <th className="p-2 text-left">備註</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-purple-100">
+                            {settlements.map((settle: any) => (
+                              <tr key={settle.id} className="bg-white hover:bg-purple-50 transition">
+                                <td className="p-2 font-mono text-xs text-slate-600">
+                                  {settle.created_at ? new Date(settle.created_at).toLocaleDateString('zh-TW') : '-'}
+                                </td>
+                                <td className="p-2 text-right font-bold text-slate-800">{settle.days} 天</td>
+                                <td className="p-2 text-right font-bold text-green-600">
+                                  ${settle.amount?.toLocaleString() || '0'}
+                                </td>
+                                <td className="p-2 text-center font-mono text-xs text-slate-600">
+                                  {settle.pay_month || '-'}
+                                </td>
+                                <td className="p-2 text-center">
+                                  <span className={`px-2 py-1 rounded text-xs font-bold ${
+                                    settle.status === 'processed' 
+                                      ? 'bg-green-100 text-green-700'
+                                      : settle.status === 'pending'
+                                      ? 'bg-yellow-100 text-yellow-700'
+                                      : 'bg-slate-100 text-slate-700'
+                                  }`}>
+                                    {settle.status === 'processed' ? '已處理' : settle.status === 'pending' ? '待處理' : settle.status || '-'}
+                                  </span>
+                                </td>
+                                <td className="p-2 text-xs text-slate-500 max-w-xs truncate" title={settle.notes}>
+                                  {settle.notes || '-'}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      ) : (
+                        <div className="text-center py-8 text-slate-400 text-sm">尚無結算紀錄</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

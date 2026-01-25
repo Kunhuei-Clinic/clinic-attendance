@@ -71,6 +71,10 @@ function calculateCalendarLeave(startDate: Date, year: number): number {
 /**
  * GET /api/leave/stats
  * 取得特休統計資料
+ * 
+ * Query Parameters:
+ *   - action: 'details' (可選) - 如果為 'details'，則回傳特定員工的詳細資料
+ *   - staff_id: number (可選) - 當 action=details 時必需，指定要查詢的員工 ID
  */
 export async function GET(request: NextRequest) {
   try {
@@ -82,6 +86,67 @@ export async function GET(request: NextRequest) {
         { status: 401 }
       );
     }
+
+    const searchParams = request.nextUrl.searchParams;
+    const action = searchParams.get('action');
+    const staffId = searchParams.get('staff_id');
+
+    // 🟢 新模式：查詢特定員工的詳細結算紀錄
+    if (action === 'details' && staffId) {
+      const staffIdNum = Number(staffId);
+      if (isNaN(staffIdNum)) {
+        return NextResponse.json(
+          { error: '無效的員工 ID' },
+          { status: 400 }
+        );
+      }
+
+      // 1. 驗證員工屬於當前診所
+      const { data: staff, error: staffError } = await supabaseAdmin
+        .from('staff')
+        .select('id, name, annual_leave_history')
+        .eq('id', staffIdNum)
+        .eq('clinic_id', clinicId)
+        .single();
+
+      if (staffError || !staff) {
+        return NextResponse.json(
+          { error: '找不到員工資料或無權限查詢' },
+          { status: 404 }
+        );
+      }
+
+      // 2. 取得該員工的所有結算紀錄（依日期排序）
+      const { data: settlements, error: settleError } = await supabaseAdmin
+        .from('leave_settlements')
+        .select('*')
+        .eq('staff_id', staffIdNum)
+        .eq('clinic_id', clinicId)
+        .order('created_at', { ascending: false }); // 由新到舊排序
+
+      if (settleError) {
+        console.error('Fetch settlements error:', settleError);
+        return NextResponse.json(
+          { error: `查詢結算紀錄失敗: ${settleError.message}` },
+          { status: 500 }
+        );
+      }
+
+      // 3. 回傳詳細資料
+      return NextResponse.json({
+        data: {
+          staff: {
+            id: staff.id,
+            name: staff.name,
+            annual_leave_history: staff.annual_leave_history || null
+          },
+          settlements: settlements || [],
+          history: staff.annual_leave_history || null // 為了向後兼容，也單獨提供 history
+        }
+      });
+    }
+
+    // 🟢 原有模式：取得所有員工的統計列表
 
     // 1. 取得系統設定：特休計算制（加上 clinic_id 過濾）
     const { data: settingsData } = await supabaseAdmin

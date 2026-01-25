@@ -1,13 +1,15 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Save, Clock, CalendarDays, LayoutGrid, Stethoscope, Trash2, Plus } from 'lucide-react';
+import { Save, Clock, CalendarDays, LayoutGrid, Stethoscope, Trash2, Plus, User } from 'lucide-react';
 
 type Entity = { id: string; name: string };
 const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六'];
+const DEFAULT_JOB_TITLES = ['醫師', '護理師', '行政', '藥師', '清潔'];
 
 export default function SystemConfiguration() {
   const [entities, setEntities] = useState<Entity[]>([]);
+  const [jobTitles, setJobTitles] = useState<string[]>([]);
   const [specialClinics, setSpecialClinics] = useState<string[]>([]);
   const [businessHours, setBusinessHours] = useState({
     openDays: [1,2,3,4,5,6], 
@@ -37,6 +39,16 @@ export default function SystemConfiguration() {
           if (item.key === 'org_entities') {
             try { setEntities(JSON.parse(item.value)); } catch (e) { }
           }
+          if (item.key === 'job_titles') {
+            try { 
+              const titles = JSON.parse(item.value);
+              // 如果資料庫是空的，使用預設值
+              setJobTitles(Array.isArray(titles) && titles.length > 0 ? titles : DEFAULT_JOB_TITLES);
+            } catch (e) { 
+              // 解析失敗時使用預設值
+              setJobTitles(DEFAULT_JOB_TITLES);
+            }
+          }
           if (item.key === 'special_clinic_types') {
             try { setSpecialClinics(JSON.parse(item.value)); } catch (e) { }
           }
@@ -47,6 +59,15 @@ export default function SystemConfiguration() {
             setLeaveCalculationSystem(item.value === 'calendar' ? 'calendar' : 'anniversary');
           }
         });
+        
+        // 🟢 如果沒有找到 job_titles 設定，使用預設值
+        const hasJobTitles = result.data.some((item: any) => item.key === 'job_titles');
+        if (!hasJobTitles) {
+          setJobTitles(DEFAULT_JOB_TITLES);
+        }
+      } else {
+        // 如果完全沒有資料，使用預設值
+        setJobTitles(DEFAULT_JOB_TITLES);
       }
 
       // 取得診所設定（加班設定）
@@ -67,6 +88,7 @@ export default function SystemConfiguration() {
       // 系統設定
       const updates = [
         { key: 'org_entities', value: JSON.stringify(entities) },
+        { key: 'job_titles', value: JSON.stringify(jobTitles.length > 0 ? jobTitles : DEFAULT_JOB_TITLES) },
         { key: 'special_clinic_types', value: JSON.stringify(specialClinics) },
         { key: 'clinic_business_hours', value: JSON.stringify(businessHours) },
         { key: 'leave_calculation_system', value: leaveCalculationSystem }
@@ -113,6 +135,15 @@ export default function SystemConfiguration() {
   };
   const updateEntityName = (idx: number, val: string) => {
     const newArr = [...entities]; newArr[idx].name = val; setEntities(newArr);
+  };
+
+  const addJobTitle = () => setJobTitles([...jobTitles, '新職稱']);
+  const removeJobTitle = (idx: number) => {
+    if (jobTitles.length <= 1) return alert("至少保留一個職稱");
+    const newArr = [...jobTitles]; newArr.splice(idx, 1); setJobTitles(newArr);
+  };
+  const updateJobTitle = (idx: number, val: string) => {
+    const newArr = [...jobTitles]; newArr[idx] = val; setJobTitles(newArr);
   };
 
   const addSpecial = () => setSpecialClinics([...specialClinics, '新門診']);
@@ -174,6 +205,43 @@ export default function SystemConfiguration() {
               className="w-full py-3 border-2 border-dashed border-slate-300 text-slate-500 rounded-xl hover:bg-blue-50 font-bold flex items-center justify-center gap-2"
             >
               <Plus size={20}/> 新增單位
+            </button>
+          </div>
+        </div>
+
+        {/* 🟢 新增：人員職類設定 */}
+        <div>
+          <h3 className="text-lg font-bold text-slate-700 border-b pb-2 mb-4 flex items-center gap-2">
+            <User size={20}/> 人員職類設定 (Job Titles)
+          </h3>
+          <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 mb-4">
+            <p className="text-sm text-blue-800">
+              設定系統中可用的職稱選項。這些職稱將出現在員工資料編輯表單的下拉選單中。
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            {jobTitles.map((title, idx) => (
+              <div key={idx} className="flex gap-2 items-center">
+                <input 
+                  type="text" 
+                  value={title} 
+                  onChange={(e) => updateJobTitle(idx, e.target.value)} 
+                  className="flex-1 p-2 border rounded-lg font-bold outline-none focus:ring-2 focus:ring-blue-200" 
+                  placeholder="職稱名稱"
+                />
+                <button 
+                  onClick={() => removeJobTitle(idx)} 
+                  className="p-2 text-red-400 hover:bg-red-50 rounded-lg"
+                >
+                  <Trash2 size={18}/>
+                </button>
+              </div>
+            ))}
+            <button 
+              onClick={addJobTitle} 
+              className="py-2 border-2 border-dashed border-slate-300 text-slate-500 rounded-xl hover:bg-blue-50 font-bold flex items-center justify-center gap-2"
+            >
+              <Plus size={18}/> 新增職稱
             </button>
           </div>
         </div>

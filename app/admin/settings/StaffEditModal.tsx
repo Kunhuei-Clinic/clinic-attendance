@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Settings, Save, Plus, X, Calendar, User, Briefcase } from 'lucide-react';
+import { Settings, Save, Plus, User, Briefcase } from 'lucide-react';
 
 interface StaffEditModalProps {
   isOpen: boolean;
@@ -10,43 +10,62 @@ interface StaffEditModalProps {
   onSave: () => void; // 儲存成功後的回呼
 }
 
+const DEFAULT_JOB_TITLES = ['醫師', '護理師', '行政', '藥師', '清潔'];
+
 export default function StaffEditModal({ isOpen, onClose, initialData, onSave }: StaffEditModalProps) {
   const [editData, setEditData] = useState<any>(null);
+  const [jobTitles, setJobTitles] = useState<string[]>(DEFAULT_JOB_TITLES);
+
+  // 🟢 新增：讀取職稱列表
+  useEffect(() => {
+    const fetchJobTitles = async () => {
+      try {
+        const response = await fetch('/api/settings');
+        const result = await response.json();
+        if (result.data) {
+          const jobTitlesItem = result.data.find((item: any) => item.key === 'job_titles');
+          if (jobTitlesItem) {
+            try {
+              const titles = JSON.parse(jobTitlesItem.value);
+              if (Array.isArray(titles) && titles.length > 0) {
+                setJobTitles(titles);
+              } else {
+                setJobTitles(DEFAULT_JOB_TITLES);
+              }
+            } catch (e) {
+              console.error('Parse job_titles error:', e);
+              setJobTitles(DEFAULT_JOB_TITLES);
+            }
+          } else {
+            setJobTitles(DEFAULT_JOB_TITLES);
+          }
+        } else {
+          setJobTitles(DEFAULT_JOB_TITLES);
+        }
+      } catch (error) {
+        console.error('Fetch job titles error:', error);
+        setJobTitles(DEFAULT_JOB_TITLES);
+      }
+    };
+
+    if (isOpen) {
+      fetchJobTitles();
+    }
+  }, [isOpen]);
 
   // 當 initialData 改變時，更新 editData
   useEffect(() => {
     if (isOpen) {
       if (initialData) {
-        // 編輯模式：處理歷年特休歷史（將 JSON 轉為陣列格式供 UI 使用）
-        let annualLeaveList: Array<{ year: string; days: number }> = [];
-        if (initialData.annual_leave_history) {
-          if (typeof initialData.annual_leave_history === 'string') {
-            try {
-              const parsed = JSON.parse(initialData.annual_leave_history);
-              annualLeaveList = Object.entries(parsed).map(([year, days]) => ({
-                year: String(year),
-                days: Number(days)
-              }));
-            } catch (e) {
-              console.error('Parse annual_leave_history error:', e);
-            }
-          } else if (typeof initialData.annual_leave_history === 'object') {
-            annualLeaveList = Object.entries(initialData.annual_leave_history).map(([year, days]) => ({
-              year: String(year),
-              days: Number(days)
-            }));
-          }
-        }
-        
+        // 編輯模式
         setEditData({
-          ...initialData,
-          annualLeaveList: annualLeaveList // 用於 UI 顯示和編輯
+          ...initialData
         });
       } else {
         // 新增模式
         setEditData({
           name: '',
-          role: '護理師',
+          role: jobTitles.length > 0 ? jobTitles[0] : '護理師',
           entity: 'clinic',
           is_active: true,
           start_date: new Date().toISOString().slice(0, 10),
@@ -58,33 +77,16 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
           address: '',
           emergency_contact: '',
           bank_account: '',
-          id_number: '',
-          annual_leave_history: null,
-          annualLeaveList: []
+          id_number: ''
         });
       }
     }
-  }, [isOpen, initialData]);
+  }, [isOpen, initialData, jobTitles]);
 
   const handleSave = async () => {
     if (!editData?.name) {
       alert("請輸入姓名");
       return;
-    }
-    
-    // 處理歷年特休歷史（將陣列轉為 JSON）
-    let annualLeaveHistory = null;
-    if (editData.annualLeaveList && Array.isArray(editData.annualLeaveList) && editData.annualLeaveList.length > 0) {
-      const historyObj: Record<string, number> = {};
-      editData.annualLeaveList.forEach((item: { year: string; days: number }) => {
-        if (item.year && item.days !== undefined && item.days !== null) {
-          historyObj[item.year] = Number(item.days);
-        }
-      });
-      annualLeaveHistory = Object.keys(historyObj).length > 0 ? historyObj : null;
-    } else if (editData.annual_leave_history) {
-      // 如果已經有 JSON 格式的資料，直接使用
-      annualLeaveHistory = editData.annual_leave_history;
     }
     
     const payload = {
@@ -101,8 +103,7 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
       address: editData.address || null,
       emergency_contact: editData.emergency_contact || null,
       bank_account: editData.bank_account || null,
-      id_number: editData.id_number || null,
-      annual_leave_history: annualLeaveHistory
+      id_number: editData.id_number || null
     };
 
     try {
@@ -168,11 +169,9 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
                 onChange={e => setEditData({...editData, role: e.target.value})} 
                 className="w-full border p-2 rounded bg-white"
               >
-                <option value="護理師">護理師</option>
-                <option value="醫師">醫師</option>
-                <option value="行政">行政</option>
-                <option value="藥師">藥師</option>
-                <option value="清潔">清潔</option>
+                {jobTitles.map((title) => (
+                  <option key={title} value={title}>{title}</option>
+                ))}
               </select>
             </div>
           </div>
@@ -272,104 +271,6 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
                 />
               </div>
             </div>
-          </div>
-          
-          {/* 歷年特休設定區塊 */}
-          <div className="bg-teal-50 p-4 rounded-lg border border-teal-100">
-            <h4 className="text-xs font-bold text-slate-700 mb-3 flex items-center gap-2">
-              <Calendar size={14} className="text-teal-600"/>
-              歷年特休設定
-            </h4>
-            
-            {/* 現有紀錄清單 */}
-            <div className="space-y-2 mb-3 max-h-40 overflow-y-auto">
-              {(editData.annualLeaveList && editData.annualLeaveList.length > 0) ? (
-                editData.annualLeaveList.map((item: { year: string; days: number }, index: number) => (
-                  <div key={index} className="flex items-center justify-between bg-white p-2 rounded border border-slate-200">
-                    <span className="text-sm font-bold text-slate-700">
-                      {item.year} 年 - {item.days} 天
-                    </span>
-                    <button
-                      onClick={() => {
-                        const newList = [...(editData.annualLeaveList || [])];
-                        newList.splice(index, 1);
-                        setEditData({...editData, annualLeaveList: newList});
-                      }}
-                      className="p-1 text-red-500 hover:bg-red-50 rounded transition"
-                      title="刪除"
-                    >
-                      <X size={14}/>
-                    </button>
-                  </div>
-                ))
-              ) : (
-                <div className="text-xs text-slate-400 text-center py-2">尚無特休紀錄</div>
-              )}
-            </div>
-            
-            {/* 新增區域 */}
-            <div className="flex gap-2">
-              <div className="flex-1">
-                <label className="block text-xs font-bold text-slate-500 mb-1">年份</label>
-                <input 
-                  type="number" 
-                  value={editData.newLeaveYear || ''} 
-                  onChange={e => setEditData({...editData, newLeaveYear: e.target.value})} 
-                  className="w-full border p-2 rounded bg-white"
-                  placeholder="例：2024"
-                  min="2000"
-                  max="2100"
-                />
-              </div>
-              <div className="flex-1">
-                <label className="block text-xs font-bold text-slate-500 mb-1">天數</label>
-                <input 
-                  type="number" 
-                  value={editData.newLeaveDays || ''} 
-                  onChange={e => setEditData({...editData, newLeaveDays: e.target.value})} 
-                  className="w-full border p-2 rounded bg-white"
-                  placeholder="例：7"
-                  min="0"
-                  step="0.5"
-                />
-              </div>
-              <div className="flex items-end">
-                <button
-                  onClick={() => {
-                    const year = editData.newLeaveYear?.trim();
-                    const days = editData.newLeaveDays;
-                    
-                    if (!year || !days || Number(days) <= 0) {
-                      alert('請輸入有效的年份和天數');
-                      return;
-                    }
-                    
-                    const currentList = editData.annualLeaveList || [];
-                    // 檢查是否已存在該年份
-                    const existingIndex = currentList.findIndex((item: { year: string }) => item.year === year);
-                    
-                    if (existingIndex >= 0) {
-                      // 更新現有年份
-                      const newList = [...currentList];
-                      newList[existingIndex] = { year, days: Number(days) };
-                      setEditData({...editData, annualLeaveList: newList, newLeaveYear: '', newLeaveDays: ''});
-                    } else {
-                      // 新增年份
-                      const newList = [...currentList, { year, days: Number(days) }];
-                      // 按年份排序（由新到舊）
-                      newList.sort((a: { year: string }, b: { year: string }) => b.year.localeCompare(a.year));
-                      setEditData({...editData, annualLeaveList: newList, newLeaveYear: '', newLeaveDays: ''});
-                    }
-                  }}
-                  className="px-4 py-2 bg-teal-600 text-white rounded font-bold text-sm hover:bg-teal-700 transition whitespace-nowrap"
-                >
-                  加入
-                </button>
-              </div>
-            </div>
-            <p className="text-[10px] text-slate-400 mt-2">
-              * 特休紀錄將以 JSON 格式儲存（例如：{'{'}"2024": 7, "2023": 3{'}'}）
-            </p>
           </div>
 
           {/* 薪資設定（非醫師） */}
