@@ -1,4 +1,4 @@
-// File: C:\Users\user\clinic-attendance\app\layout.tsx
+// File: D:\FYC\FYC\clinic_attendence\clinic-attendance\app\layout.tsx
 import * as entry from '../../../app/layout.js'
 import type { ResolvingMetadata } from 'next/dist/lib/metadata/types/metadata-interface.js'
 
