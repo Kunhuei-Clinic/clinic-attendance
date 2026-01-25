@@ -47,9 +47,18 @@ export default function EmployeePortal() {
 
   const [leaveForm, setLeaveForm] = useState({ type: '事假', startDate: '', startTime: '09:00', endDate: '', endTime: '18:00', reason: '' });
   
-  // 🟢 修正：補打卡表單 (增加 endTime 支援補全天)
+  // 🟢 修正：補打卡表單 (新增補登項目選擇器)
   const [showMissedPunch, setShowMissedPunch] = useState(false);
-  const [missedForm, setMissedForm] = useState({ date: '', startTime: '', endTime: '', type: '上班', reason: '' });
+  const [missedForm, setMissedForm] = useState({ 
+    date: '', 
+    startTime: '', 
+    endTime: '', 
+    correctionType: 'check_in' as 'check_in' | 'check_out' | 'full', 
+    reason: '' 
+  });
+  
+  // 🟢 新增：請假統計資料
+  const [leaveStats, setLeaveStats] = useState<any>(null);
 
   useEffect(() => {
     const initLiff = async () => {
@@ -161,7 +170,21 @@ export default function EmployeePortal() {
           // 不傳 month 參數，會自動查詢今天之後的資料
           const response = await fetch(`/api/portal/data?type=roster&staffId=${staffUser.id}`);
           const result = await response.json();
-          setRosterData(result.data || []);
+          
+          // 🟢 優化：排序班表資料（按日期，同日期內按 AM -> PM -> NIGHT）
+          const sorted = (result.data || []).sort((a: any, b: any) => {
+              // 先按日期排序
+              if (a.date !== b.date) {
+                  return a.date.localeCompare(b.date);
+              }
+              // 同日期內按診別排序
+              const order: Record<string, number> = { 'AM': 1, 'PM': 2, 'NIGHT': 3 };
+              const aOrder = order[a.shift_code] || 999;
+              const bOrder = order[b.shift_code] || 999;
+              return aOrder - bOrder;
+          });
+          
+          setRosterData(sorted);
       } catch (error) {
           console.error('讀取班表失敗:', error);
           setRosterData([]);
@@ -202,25 +225,61 @@ export default function EmployeePortal() {
       try {
           const response = await fetch(`/api/portal/data?type=leave&staffId=${staffUser.id}`);
           const result = await response.json();
-          setLeaveHistory(result.data || []);
+          
+          // 🟢 新增：處理新的 API 回傳格式（包含 leaves 和 stats）
+          if (result.data && typeof result.data === 'object' && 'leaves' in result.data) {
+              setLeaveHistory(result.data.leaves || []);
+              setLeaveStats(result.data.stats || {});
+          } else {
+              // 向後兼容：如果 API 回傳的是舊格式（直接是陣列）
+              setLeaveHistory(result.data || []);
+              setLeaveStats({});
+          }
       } catch (error) {
           console.error('讀取請假記錄失敗:', error);
           setLeaveHistory([]);
+          setLeaveStats({});
       }
   };
 
-  // 🟢 修正：補打卡申請 (支援全天)
+  // 🟢 修正：補打卡申請 (支援選擇補登項目)
   const submitMissedPunch = async () => {
-      if(!missedForm.date || !missedForm.startTime || !missedForm.reason) return alert("請填寫完整資訊");
+      // 驗證邏輯：根據補登項目驗證對應欄位
+      if (!missedForm.date || !missedForm.reason) {
+          return alert("請填寫日期和原因");
+      }
       
-      const startFull = new Date(`${missedForm.date}T${missedForm.startTime}`).toISOString();
-      // 如果是全天或下班，endFull 使用 endTime，否則跟 startFull 一樣 (單點打卡)
-      const endFull = (missedForm.type === '全天' || missedForm.type === '下班') && missedForm.endTime
-          ? new Date(`${missedForm.date}T${missedForm.endTime}`).toISOString()
-          : startFull;
+      if (missedForm.correctionType === 'check_in' && !missedForm.startTime) {
+          return alert("請填寫上班時間");
+      }
+      
+      if (missedForm.correctionType === 'check_out' && !missedForm.endTime) {
+          return alert("請填寫下班時間");
+      }
+      
+      if (missedForm.correctionType === 'full' && (!missedForm.startTime || !missedForm.endTime)) {
+          return alert("補全天請填寫上班和下班時間");
+      }
 
-      // 如果是全天，必須檢查有沒有填下班時間
-      if (missedForm.type === '全天' && !missedForm.endTime) return alert("補全天請填寫下班時間");
+      // 根據補登項目構建時間
+      let startFull: string | null = null;
+      let endFull: string | null = null;
+      let leaveType = '';
+
+      if (missedForm.correctionType === 'check_in') {
+          startFull = new Date(`${missedForm.date}T${missedForm.startTime}`).toISOString();
+          endFull = startFull; // 只補上班，下班時間設為相同
+          leaveType = '上班';
+      } else if (missedForm.correctionType === 'check_out') {
+          // 只補下班，需要找到當天的上班記錄或使用預設時間
+          startFull = new Date(`${missedForm.date}T09:00`).toISOString(); // 預設上班時間
+          endFull = new Date(`${missedForm.date}T${missedForm.endTime}`).toISOString();
+          leaveType = '下班';
+      } else if (missedForm.correctionType === 'full') {
+          startFull = new Date(`${missedForm.date}T${missedForm.startTime}`).toISOString();
+          endFull = new Date(`${missedForm.date}T${missedForm.endTime}`).toISOString();
+          leaveType = '全天';
+      }
 
       try {
           const response = await fetch('/api/leave', {
@@ -230,7 +289,7 @@ export default function EmployeePortal() {
                   staff_id: staffUser.id,
                   staff_name: staffUser.name,
                   type: '補打卡',
-                  leave_type: missedForm.type, // '上班', '下班', '全天'
+                  leave_type: leaveType,
                   start_time: startFull,
                   end_time: endFull, 
                   hours: 0,
@@ -244,7 +303,7 @@ export default function EmployeePortal() {
           if (result.success) {
               alert("✅ 補打卡申請已送出，待主管審核。"); 
               setShowMissedPunch(false); 
-              setMissedForm({ date: '', startTime: '', endTime: '', type: '上班', reason: '' });
+              setMissedForm({ date: '', startTime: '', endTime: '', correctionType: 'check_in', reason: '' });
               fetchLeaveHistory();
           } else {
               alert("申請失敗: " + (result.message || result.error));
@@ -428,32 +487,98 @@ export default function EmployeePortal() {
       );
   }
 
-  // 🟢 補打卡 Modal (新增全天選項)
+  // 🟢 補打卡 Modal (新增補登項目選擇器)
   if (showMissedPunch) {
       return (
           <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
               <div className="bg-white w-full max-w-sm rounded-2xl p-6 space-y-4">
-                  <div className="flex justify-between items-center"><h3 className="text-xl font-bold text-slate-800">申請補登打卡</h3><button onClick={() => setShowMissedPunch(false)}><X/></button></div>
+                  <div className="flex justify-between items-center">
+                      <h3 className="text-xl font-bold text-slate-800">申請補登打卡</h3>
+                      <button onClick={() => setShowMissedPunch(false)}><X/></button>
+                  </div>
                   <div className="space-y-3">
-                      <div className="flex gap-2">
-                          {['上班','下班','全天'].map(t => (
-                              <button key={t} onClick={() => setMissedForm({...missedForm, type: t})} className={`flex-1 py-2 rounded font-bold border text-sm ${missedForm.type===t ? 'bg-teal-600 text-white' : 'bg-white text-slate-500'}`}>{t}</button>
-                          ))}
+                      {/* 🟢 新增：補登項目選擇器 */}
+                      <div>
+                          <label className="text-xs text-slate-400 mb-2 block">補登項目</label>
+                          <div className="flex gap-2">
+                              <button 
+                                  onClick={() => setMissedForm({...missedForm, correctionType: 'check_in'})} 
+                                  className={`flex-1 py-2 rounded font-bold border text-sm transition ${
+                                      missedForm.correctionType === 'check_in' 
+                                          ? 'bg-teal-600 text-white border-teal-600' 
+                                          : 'bg-white text-slate-500 border-slate-300'
+                                  }`}
+                              >
+                                  補上班
+                              </button>
+                              <button 
+                                  onClick={() => setMissedForm({...missedForm, correctionType: 'check_out'})} 
+                                  className={`flex-1 py-2 rounded font-bold border text-sm transition ${
+                                      missedForm.correctionType === 'check_out' 
+                                          ? 'bg-teal-600 text-white border-teal-600' 
+                                          : 'bg-white text-slate-500 border-slate-300'
+                                  }`}
+                              >
+                                  補下班
+                              </button>
+                              <button 
+                                  onClick={() => setMissedForm({...missedForm, correctionType: 'full'})} 
+                                  className={`flex-1 py-2 rounded font-bold border text-sm transition ${
+                                      missedForm.correctionType === 'full' 
+                                          ? 'bg-teal-600 text-white border-teal-600' 
+                                          : 'bg-white text-slate-500 border-slate-300'
+                                  }`}
+                              >
+                                  補全天
+                              </button>
+                          </div>
                       </div>
-                      <div><label className="text-xs text-slate-400">日期</label><input type="date" value={missedForm.date} onChange={e => setMissedForm({...missedForm, date: e.target.value})} className="w-full border p-2 rounded bg-slate-50"/></div>
+                      
+                      <div>
+                          <label className="text-xs text-slate-400">日期</label>
+                          <input 
+                              type="date" 
+                              value={missedForm.date} 
+                              onChange={e => setMissedForm({...missedForm, date: e.target.value})} 
+                              className="w-full border p-2 rounded bg-slate-50"
+                          />
+                      </div>
                       
                       <div className="grid grid-cols-2 gap-2">
                           <div>
                               <label className="text-xs text-slate-400">上班時間</label>
-                              <input type="time" value={missedForm.startTime} onChange={e => setMissedForm({...missedForm, startTime: e.target.value})} className="w-full border p-2 rounded bg-slate-50" disabled={missedForm.type === '下班'}/>
+                              <input 
+                                  type="time" 
+                                  value={missedForm.startTime} 
+                                  onChange={e => setMissedForm({...missedForm, startTime: e.target.value})} 
+                                  className="w-full border p-2 rounded bg-slate-50" 
+                                  disabled={missedForm.correctionType === 'check_out'}
+                                  required={missedForm.correctionType === 'check_in' || missedForm.correctionType === 'full'}
+                              />
                           </div>
                           <div>
                               <label className="text-xs text-slate-400">下班時間</label>
-                              <input type="time" value={missedForm.endTime} onChange={e => setMissedForm({...missedForm, endTime: e.target.value})} className="w-full border p-2 rounded bg-slate-50" disabled={missedForm.type === '上班'} placeholder="僅全天/下班"/>
+                              <input 
+                                  type="time" 
+                                  value={missedForm.endTime} 
+                                  onChange={e => setMissedForm({...missedForm, endTime: e.target.value})} 
+                                  className="w-full border p-2 rounded bg-slate-50" 
+                                  disabled={missedForm.correctionType === 'check_in'}
+                                  required={missedForm.correctionType === 'check_out' || missedForm.correctionType === 'full'}
+                              />
                           </div>
                       </div>
 
-                      <div><label className="text-xs text-slate-400">原因</label><input type="text" placeholder="例: 忘記帶手機" value={missedForm.reason} onChange={e => setMissedForm({...missedForm, reason: e.target.value})} className="w-full border p-2 rounded bg-slate-50"/></div>
+                      <div>
+                          <label className="text-xs text-slate-400">原因</label>
+                          <input 
+                              type="text" 
+                              placeholder="例: 忘記帶手機" 
+                              value={missedForm.reason} 
+                              onChange={e => setMissedForm({...missedForm, reason: e.target.value})} 
+                              className="w-full border p-2 rounded bg-slate-50"
+                          />
+                      </div>
                       <button onClick={submitMissedPunch} className="w-full bg-slate-800 text-white py-3 rounded-xl font-bold">送出申請</button>
                   </div>
               </div>
@@ -521,19 +646,39 @@ export default function EmployeePortal() {
                 <div className="space-y-4">
                     <h3 className="font-bold text-slate-700 flex items-center gap-2"><FileText size={18}/> 近期班表 ({staffUser.role})</h3>
                     <div className="space-y-2">
-                        {rosterData.map((r, i) => (
-                            <div key={i} className="bg-white p-3 rounded-xl border-l-4 border-teal-500 shadow-sm flex justify-between items-center">
-                                <div className="font-bold text-slate-700">{r.date}</div>
-                                {staffUser.role === '醫師' ? (
-                                    <>
-                                        <div className="text-sm font-mono bg-slate-100 px-2 py-1 rounded">{r.start_time}-{r.end_time}</div>
-                                        <div className="text-xs font-bold text-teal-600">{r.shift_code}</div>
-                                    </>
-                                ) : (
-                                    <div className="text-xs text-slate-500">{r.start_time ? `${r.start_time}-${r.end_time}` : '詳見班表'}</div>
-                                )}
-                            </div>
-                        ))}
+                        {rosterData.map((r, i) => {
+                            // 🟢 優化：翻譯診別名稱並加上顏色
+                            const getShiftLabel = (code: string) => {
+                                if (code === 'AM') return { label: '早診', color: 'bg-orange-100 text-orange-700 border-orange-300' };
+                                if (code === 'PM') return { label: '午診', color: 'bg-blue-100 text-blue-700 border-blue-300' };
+                                if (code === 'NIGHT') return { label: '晚診', color: 'bg-purple-100 text-purple-700 border-purple-300' };
+                                return { label: code, color: 'bg-slate-100 text-slate-700 border-slate-300' };
+                            };
+                            
+                            const shiftInfo = getShiftLabel(r.shift_code || '');
+                            
+                            return (
+                                <div key={i} className="bg-white p-3 rounded-xl border-l-4 border-teal-500 shadow-sm">
+                                    <div className="flex justify-between items-center mb-2">
+                                        <div className="font-bold text-slate-700">{r.date}</div>
+                                        {staffUser.role === '醫師' && r.shift_code && (
+                                            <span className={`text-xs font-bold px-2 py-1 rounded border ${shiftInfo.color}`}>
+                                                {shiftInfo.label}
+                                            </span>
+                                        )}
+                                    </div>
+                                    {staffUser.role === '醫師' ? (
+                                        <div className="text-sm font-mono bg-slate-100 px-2 py-1 rounded">
+                                            {r.start_time}-{r.end_time}
+                                        </div>
+                                    ) : (
+                                        <div className="text-xs text-slate-500">
+                                            {r.start_time ? `${r.start_time}-${r.end_time}` : '詳見班表'}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
                         {rosterData.length === 0 && <div className="text-center text-slate-400 py-4">近期無排班</div>}
                     </div>
                 </div>
@@ -542,6 +687,81 @@ export default function EmployeePortal() {
             {view === 'leave' && (
                 <div className="space-y-4">
                     <h3 className="font-bold text-slate-700 flex items-center gap-2"><Coffee size={18}/> 請假申請</h3>
+                    
+                    {/* 🟢 新增：我的休假概況統計卡片 */}
+                    {leaveStats && Object.keys(leaveStats).length > 0 && (
+                        <div className="bg-gradient-to-br from-teal-50 to-blue-50 p-4 rounded-xl shadow-sm border border-teal-100">
+                            <h4 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
+                                <Calendar size={16} className="text-teal-600"/>
+                                我的休假概況 (今年度)
+                            </h4>
+                            <div className="space-y-2">
+                                {leaveStats.annual && (
+                                    <div className="bg-white/80 p-2 rounded-lg border border-teal-200">
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-xs font-bold text-slate-600">特休</span>
+                                            <span className="text-sm font-black text-teal-700">
+                                                已用 {Number((leaveStats.annual.used || 0) / 8).toFixed(1)} 天
+                                                {leaveStats.annual.quota !== undefined && (
+                                                    <> / 額度 {Number(leaveStats.annual.quota).toFixed(1)} 天</>
+                                                )}
+                                            </span>
+                                        </div>
+                                        {leaveStats.annual.remaining !== undefined && (
+                                            <div className="text-xs text-slate-500 mt-1">
+                                                剩餘：<span className="font-bold text-teal-600">{Number(leaveStats.annual.remaining).toFixed(1)} 天</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                                {leaveStats.personal && (
+                                    <div className="bg-white/80 p-2 rounded-lg border border-slate-200">
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-xs font-bold text-slate-600">事假</span>
+                                            <span className="text-sm font-black text-slate-700">
+                                                已用 {Number((leaveStats.personal.used || 0) / 8).toFixed(1)} 天
+                                            </span>
+                                        </div>
+                                    </div>
+                                )}
+                                {leaveStats.sick && (
+                                    <div className="bg-white/80 p-2 rounded-lg border border-slate-200">
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-xs font-bold text-slate-600">病假</span>
+                                            <span className="text-sm font-black text-slate-700">
+                                                已用 {Number((leaveStats.sick.used || 0) / 8).toFixed(1)} 天
+                                            </span>
+                                        </div>
+                                    </div>
+                                )}
+                                {/* 顯示其他假別 */}
+                                {Object.entries(leaveStats).map(([key, value]: [string, any]) => {
+                                    if (['annual', 'personal', 'sick'].includes(key)) return null;
+                                    const typeLabels: Record<string, string> = {
+                                        'menstrual': '生理假',
+                                        'bereavement': '喪假',
+                                        'official': '公假',
+                                        'marriage': '婚假',
+                                        'maternity': '產假',
+                                        'family': '家庭照顧假'
+                                    };
+                                    return (
+                                        <div key={key} className="bg-white/80 p-2 rounded-lg border border-slate-200">
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-xs font-bold text-slate-600">
+                                                    {typeLabels[key] || key}
+                                                </span>
+                                                <span className="text-sm font-black text-slate-700">
+                                                    已用 {Number((value.used || 0) / 8).toFixed(1)} 天
+                                                </span>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+                    
                     <div className="bg-white p-4 rounded-xl shadow-sm space-y-3">
                         <div className="flex gap-2">
                             {['事假','病假','特休','補休'].map(t => (
@@ -562,13 +782,31 @@ export default function EmployeePortal() {
                         <h4 className="text-xs font-bold text-slate-400">申請紀錄</h4>
                         {leaveHistory.map((l,i) => (
                             <div key={i} className="bg-white p-3 rounded-lg border border-slate-100 flex justify-between items-center">
-                                <div>
-                                    <div className="font-bold text-sm text-slate-700">{l.type} <span className="text-xs font-normal text-slate-400">{l.leave_type && `(${l.leave_type}) `}{formatDateTime(l.start_time)}</span></div>
-                                    <div className="text-xs text-slate-400">{l.reason}</div>
+                                <div className="flex-1">
+                                    <div className="font-bold text-sm text-slate-700">
+                                        {l.type} 
+                                        <span className="text-xs font-normal text-slate-400 ml-1">
+                                            {l.leave_type && `(${l.leave_type}) `}
+                                            {formatDateTime(l.start_time)}
+                                        </span>
+                                    </div>
+                                    <div className="text-xs text-slate-400 mt-1">{l.reason}</div>
                                 </div>
-                                <span className={`text-xs px-2 py-1 rounded font-bold ${l.status==='approved'?'bg-green-100 text-green-700':(l.status==='rejected'?'bg-red-100 text-red-700':'bg-yellow-100 text-yellow-700')}`}>{getStatusLabel(l.status)}</span>
+                                {/* 🟢 優化：狀態標籤樣式 */}
+                                <span className={`text-xs px-2 py-1 rounded font-bold whitespace-nowrap ml-2 ${
+                                    l.status === 'approved' 
+                                        ? 'bg-green-100 text-green-700 border border-green-300' 
+                                        : l.status === 'rejected' 
+                                        ? 'bg-red-100 text-red-700 border border-red-300' 
+                                        : 'bg-yellow-100 text-yellow-700 border border-yellow-300'
+                                }`}>
+                                    {getStatusLabel(l.status)}
+                                </span>
                             </div>
                         ))}
+                        {leaveHistory.length === 0 && (
+                            <div className="text-center text-slate-400 py-4 text-sm">尚無請假記錄</div>
+                        )}
                     </div>
                 </div>
             )}

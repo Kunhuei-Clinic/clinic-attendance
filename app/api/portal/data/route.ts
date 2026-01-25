@@ -191,7 +191,7 @@ export async function GET(request: NextRequest) {
 
         query = query.order('created_at', { ascending: false });
 
-        const { data, error } = await query;
+        const { data: leaves, error } = await query;
         if (error) {
           console.error('Error fetching leave requests:', error);
           return NextResponse.json(
@@ -199,7 +199,98 @@ export async function GET(request: NextRequest) {
             { status: 500 }
           );
         }
-        queryResult = data || [];
+
+        // 🟢 新增：計算年度請假統計
+        const currentYear = new Date().getFullYear();
+        const yearStart = new Date(currentYear, 0, 1).toISOString();
+        const yearEnd = new Date(currentYear + 1, 0, 1).toISOString();
+
+        // 查詢今年度已核准的請假記錄
+        const { data: approvedLeaves, error: statsError } = await supabaseAdmin
+          .from('leave_requests')
+          .select('type, hours')
+          .eq('staff_id', staffIdNum)
+          .eq('clinic_id', staffClinicId)
+          .eq('status', 'approved')
+          .gte('start_time', yearStart)
+          .lt('start_time', yearEnd);
+
+        if (statsError) {
+          console.error('Error fetching leave stats:', statsError);
+          // 如果統計查詢失敗，仍然回傳列表，但統計為空
+          queryResult = {
+            leaves: leaves || [],
+            stats: {}
+          };
+          break;
+        }
+
+        // 計算各假別的已使用時數
+        const stats: Record<string, { used: number; quota?: number; remaining?: number }> = {};
+        
+        if (approvedLeaves && approvedLeaves.length > 0) {
+          approvedLeaves.forEach((leave: any) => {
+            const leaveType = leave.type || '';
+            const hours = Number(leave.hours || 0);
+            
+            // 將假別映射為英文 key（用於前端顯示）
+            let typeKey = '';
+            if (leaveType === '特休') {
+              typeKey = 'annual';
+            } else if (leaveType === '事假') {
+              typeKey = 'personal';
+            } else if (leaveType === '病假') {
+              typeKey = 'sick';
+            } else if (leaveType === '生理假') {
+              typeKey = 'menstrual';
+            } else if (leaveType === '喪假') {
+              typeKey = 'bereavement';
+            } else if (leaveType === '公假') {
+              typeKey = 'official';
+            } else if (leaveType === '婚假') {
+              typeKey = 'marriage';
+            } else if (leaveType === '產假') {
+              typeKey = 'maternity';
+            } else if (leaveType === '家庭照顧假') {
+              typeKey = 'family';
+            } else {
+              // 其他假別使用原始名稱（轉為小寫並替換空格）
+              typeKey = leaveType.toLowerCase().replace(/\s+/g, '_');
+            }
+
+            if (!stats[typeKey]) {
+              stats[typeKey] = { used: 0 };
+            }
+            stats[typeKey].used += hours;
+          });
+        }
+
+        // 查詢員工的特休額度（如果 staff 表有 annual_leave_quota 欄位）
+        const { data: staffWithQuota, error: quotaError } = await supabaseAdmin
+          .from('staff')
+          .select('annual_leave_quota')
+          .eq('id', staffIdNum)
+          .single();
+
+        // 如果有特休額度欄位，計算剩餘額度
+        if (!quotaError && staffWithQuota && staffWithQuota.annual_leave_quota !== null && staffWithQuota.annual_leave_quota !== undefined) {
+          const quota = Number(staffWithQuota.annual_leave_quota);
+          const used = stats.annual?.used || 0;
+          stats.annual = {
+            used: used,
+            quota: quota,
+            remaining: Math.max(0, quota - used)
+          };
+        } else if (stats.annual) {
+          // 如果沒有額度欄位，只回傳已使用時數
+          stats.annual = { used: stats.annual.used };
+        }
+
+        // 回傳格式：包含列表和統計
+        queryResult = {
+          leaves: leaves || [],
+          stats: stats
+        };
         break;
       }
 
