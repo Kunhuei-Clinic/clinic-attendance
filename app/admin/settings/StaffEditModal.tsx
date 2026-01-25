@@ -368,7 +368,7 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
               </div>
             </div>
             <p className="text-[10px] text-slate-400 mt-2">
-              * 特休紀錄將以 JSON 格式儲存（例如：{"2024": 7, "2023": 3}）
+              * 特休紀錄將以 JSON 格式儲存（例如：{'{'}"2024": 7, "2023": 3{'}'}）
             </p>
           </div>
 
