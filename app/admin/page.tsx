@@ -2,7 +2,14 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { createBrowserClient } from '@supabase/ssr';
 import { CheckCircle, Calendar, Stethoscope, BookOpen, DollarSign, Settings, FileText, Calculator, FileSpreadsheet, LogOut } from 'lucide-react';
+
+// 建立 Supabase 客戶端（使用 @supabase/ssr 確保 Session 寫入 Cookie）
+const supabase = createBrowserClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://ucpkvptnhgbtmghqgbof.supabase.co',
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVjcGt2cHRuaGdidG1naHFnYm9mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUzNDg5MTAsImV4cCI6MjA4MDkyNDkxMH0.zdLx86ey-QywuGD-S20JJa7ZD6xHFRalAMRN659bbuo'
+);
 
 import StaffRosterView from './StaffRoster';
 import DoctorRosterView from './DoctorRoster';
@@ -48,21 +55,25 @@ export default function AdminPage() {
     checkAuth();
   }, [router]);
 
-  // 登出處理
+  // 登出處理（使用 @supabase/ssr 的 createBrowserClient）
   const handleLogout = async () => {
     if (!confirm('確定要登出嗎？')) return;
 
     try {
-      const response = await fetch('/api/auth/logout', {
-        method: 'POST',
-      });
+      // 使用 Supabase Auth 直接登出（createBrowserClient 會自動清除 Cookie）
+      const { error } = await supabase.auth.signOut();
 
-      const data = await response.json();
-      if (data.success) {
-        router.push('/login');
-      } else {
-        alert('登出失敗');
+      if (error) {
+        console.error('Logout error:', error);
+        alert('登出失敗: ' + error.message);
+        return;
       }
+
+      // 登出成功，刷新路由以清除 Server 端的 Session
+      router.refresh();
+      
+      // 跳轉到登入頁
+      router.push('/login');
     } catch (error) {
       console.error('Logout error:', error);
       alert('登出失敗');
