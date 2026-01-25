@@ -1,9 +1,10 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { CheckCircle, XCircle, Clock, Calendar, FileText, Filter } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, Calendar, FileText, Filter, AlertCircle } from 'lucide-react';
 
 const formatDate = (iso: string) => new Date(iso).toLocaleString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+const formatTime = (iso: string) => new Date(iso).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' });
 
 const FILTER_LABELS: Record<string, string> = {
   pending: '待審核',
@@ -12,48 +13,95 @@ const FILTER_LABELS: Record<string, string> = {
   all: '全部'
 };
 
+const TYPE_LABELS: Record<string, string> = {
+  leave: '請假',
+  overtime: '加班',
+  anomaly: '異常'
+};
+
 export default function TasksView() {
-  const [requests, setRequests] = useState<any[]>([]);
+  const [tasks, setTasks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('pending');
+  const [typeFilter, setTypeFilter] = useState<'all' | 'leave' | 'overtime' | 'anomaly'>('all');
 
-  useEffect(() => { fetchRequests(); }, [filter]);
+  useEffect(() => { fetchTasks(); }, [filter, typeFilter]);
 
-  const fetchRequests = async () => {
+  const fetchTasks = async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({
-        statusFilter: filter === 'all' ? 'all' : filter
-      });
-      const response = await fetch(`/api/leave?${params.toString()}`);
+      const response = await fetch('/api/admin/tasks');
       const result = await response.json();
       if (result.error) {
         console.error('Error:', result.error);
-        setRequests([]);
+        setTasks([]);
       } else {
-        // 按 created_at 排序（最新的在前）
-        const sorted = (result.data || []).sort((a: any, b: any) => {
-          const dateA = new Date(a.created_at || a.start_time).getTime();
-          const dateB = new Date(b.created_at || b.start_time).getTime();
-          return dateB - dateA;
-        });
-        setRequests(sorted);
+        let filtered = result.data || [];
+        
+        // 根據狀態篩選
+        if (filter !== 'all') {
+          filtered = filtered.filter((task: any) => task.status === filter);
+        }
+        
+        // 根據類型篩選
+        if (typeFilter !== 'all') {
+          filtered = filtered.filter((task: any) => task.type === typeFilter);
+        }
+        
+        setTasks(filtered);
       }
     } catch (error) {
-      console.error('Fetch requests error:', error);
-      setRequests([]);
+      console.error('Fetch tasks error:', error);
+      setTasks([]);
     } finally {
       setLoading(false);
     }
   };
 
+  // 🟢 新增：處理加班審核
+  const handleOvertimeAction = async (taskId: number, action: 'approved' | 'rejected') => {
+    const task = tasks.find(t => t.id === taskId && t.type === 'overtime');
+    if (!task) return;
+    
+    const actionText = action === 'approved' ? '核准' : '駁回';
+    if (!confirm(`確定要${actionText} ${task.staff_name} 的加班申請嗎？`)) return;
+
+    try {
+      const response = await fetch('/api/attendance', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          id: taskId, 
+          overtime_status: action 
+        })
+      });
+      
+      const result = await response.json();
+      if (result.success) {
+        alert(`✅ 加班申請已${actionText}`);
+        fetchTasks();
+      } else {
+        alert(`❌ ${actionText}失敗: ${result.message || '未知錯誤'}`);
+      }
+    } catch (error: any) {
+      console.error('Overtime action error:', error);
+      alert(`❌ ${actionText}失敗: ${error.message}`);
+    }
+  };
+
   // 🟢 核心功能：核准案件 (智慧媒合邏輯)
   const handleApprove = async (req: any) => {
+    // 🟢 新增：如果是加班類型，使用專門的處理函數
+    if (req.type === 'overtime') {
+      await handleOvertimeAction(req.id, 'approved');
+      return;
+    }
+    
     const name = req.staff_name || '未知員工';
     if (!confirm(`確定要核准 ${name} 的 ${req.type}${req.leave_type ? ` (${req.leave_type})` : ''} 申請嗎？`)) return;
 
     try {
-      if (req.type === '補打卡') {
+      if (req.type === '補打卡' || (req._raw && req._raw.type === '補打卡')) {
         const dateStr = req.start_time.split('T')[0];
         const startTime = req.start_time;
         const endTime = req.end_time;
@@ -172,24 +220,30 @@ export default function TasksView() {
       if (!updateResult.success) throw new Error(updateResult.message || '更新申請單狀態失敗');
 
       alert("✅ 已核准，並同步至考勤系統！");
-      fetchRequests();
+      fetchTasks();
 
     } catch (err: any) {
       alert("❌ 核准失敗：" + err.message);
     }
   };
 
-  const handleReject = async (id: number) => {
+  const handleReject = async (task: any) => {
+    // 🟢 新增：如果是加班類型，使用專門的處理函數
+    if (task.type === 'overtime') {
+      await handleOvertimeAction(task.id, 'rejected');
+      return;
+    }
+    
     if (!confirm("確定要駁回此申請嗎？")) return;
     try {
       const response = await fetch('/api/leave', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, status: 'rejected' })
+        body: JSON.stringify({ id: task.id, status: 'rejected' })
       });
       const result = await response.json();
       if (result.success) {
-        fetchRequests();
+        fetchTasks();
       } else {
         alert('駁回失敗: ' + result.message);
       }
@@ -206,22 +260,41 @@ export default function TasksView() {
           <h1 className="text-3xl font-bold text-slate-800 flex items-center gap-3">
             <CheckCircle className="text-teal-600" size={32} /> 待辦事項審核
           </h1>
-          <p className="text-slate-500 mt-2">處理員工的請假與補打卡申請。</p>
+          <p className="text-slate-500 mt-2">處理員工的請假、加班與異常打卡申請。</p>
         </div>
-        <div className="flex bg-white rounded-lg shadow-sm p-1 border border-slate-200">
-          {['pending', 'approved', 'rejected', 'all'].map(f => (
-            <button 
-              key={f} 
-              onClick={() => setFilter(f)} 
-              className={`px-4 py-2 rounded-md text-sm font-bold transition ${
-                filter === f 
-                  ? 'bg-teal-100 text-teal-800' 
-                  : 'text-slate-500 hover:bg-slate-50'
-              }`}
-            >
-              {FILTER_LABELS[f]}
-            </button>
-          ))}
+        <div className="flex flex-col gap-2">
+          {/* 🟢 新增：類型篩選 */}
+          <div className="flex bg-white rounded-lg shadow-sm p-1 border border-slate-200">
+            {['all', 'leave', 'overtime', 'anomaly'].map(t => (
+              <button 
+                key={t} 
+                onClick={() => setTypeFilter(t as any)} 
+                className={`px-4 py-2 rounded-md text-sm font-bold transition whitespace-nowrap ${
+                  typeFilter === t 
+                    ? 'bg-blue-100 text-blue-800' 
+                    : 'text-slate-500 hover:bg-slate-50'
+                }`}
+              >
+                {t === 'all' ? '全部' : TYPE_LABELS[t]}
+              </button>
+            ))}
+          </div>
+          {/* 狀態篩選 */}
+          <div className="flex bg-white rounded-lg shadow-sm p-1 border border-slate-200">
+            {['pending', 'approved', 'rejected', 'all'].map(f => (
+              <button 
+                key={f} 
+                onClick={() => setFilter(f)} 
+                className={`px-4 py-2 rounded-md text-sm font-bold transition ${
+                  filter === f 
+                    ? 'bg-teal-100 text-teal-800' 
+                    : 'text-slate-500 hover:bg-slate-50'
+                }`}
+              >
+                {FILTER_LABELS[f]}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -234,80 +307,143 @@ export default function TasksView() {
         </div>
       ) : (
         <div className="grid gap-4">
-          {requests.map((req) => (
-            <div 
-              key={req.id} 
-              className={`bg-white p-6 rounded-xl shadow-sm border-l-4 flex justify-between items-center transition hover:shadow-md ${
-                req.status === 'pending' 
-                  ? 'border-yellow-400' 
-                  : (req.status === 'approved' 
-                      ? 'border-green-500' 
-                      : 'border-red-500')
-              }`}
-            >
-              <div className="flex items-start gap-4">
-                <div className={`w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold shrink-0 ${
-                  req.type === '補打卡' 
-                    ? 'bg-blue-100 text-blue-600' 
-                    : 'bg-purple-100 text-purple-600'
-                }`}>
-                  {req.type === '補打卡' ? <Clock size={24}/> : <Calendar size={24}/>}
-                </div>
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-lg font-bold text-slate-800">{req.staff_name}</span>
-                    <span className={`px-2 py-0.5 text-xs rounded font-bold ${
-                      req.type === '補打卡' 
-                        ? 'bg-blue-50 text-blue-700 border border-blue-200' 
-                        : 'bg-purple-50 text-purple-700 border border-purple-200'
-                    }`}>
-                      {req.type} {req.leave_type && `(${req.leave_type})`}
-                    </span>
-                    {req.status !== 'pending' && (
-                      <span className={`px-2 py-0.5 text-xs rounded font-bold ${
-                        req.status === 'approved'
-                          ? 'bg-green-100 text-green-700'
-                          : 'bg-red-100 text-red-700'
-                      }`}>
-                        {req.status === 'approved' ? '已通過' : '已駁回'}
-                      </span>
-                    )}
+          {tasks.map((task) => {
+            // 🟢 新增：根據類型決定顯示內容
+            const getTypeIcon = () => {
+              if (task.type === 'overtime') return <Clock size={24} className="text-orange-600"/>;
+              if (task.type === 'anomaly') return <AlertCircle size={24} className="text-red-600"/>;
+              return <Calendar size={24} className="text-purple-600"/>;
+            };
+            
+            const getTypeColor = () => {
+              if (task.type === 'overtime') return 'bg-orange-100 text-orange-600 border-orange-200';
+              if (task.type === 'anomaly') return 'bg-red-100 text-red-600 border-red-200';
+              return 'bg-purple-100 text-purple-600 border-purple-200';
+            };
+            
+            return (
+              <div 
+                key={`${task.type}-${task.id}`} 
+                className={`bg-white p-6 rounded-xl shadow-sm border-l-4 flex justify-between items-center transition hover:shadow-md ${
+                  task.status === 'pending' 
+                    ? 'border-yellow-400' 
+                    : (task.status === 'approved' 
+                        ? 'border-green-500' 
+                        : 'border-red-500')
+                }`}
+              >
+                <div className="flex items-start gap-4 flex-1">
+                  <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 ${
+                    task.type === 'overtime' 
+                      ? 'bg-orange-100' 
+                      : (task.type === 'anomaly' 
+                          ? 'bg-red-100' 
+                          : 'bg-purple-100')
+                  }`}>
+                    {getTypeIcon()}
                   </div>
-                  <div className="text-slate-500 text-sm space-y-1">
-                    <div className="flex items-center gap-2">
-                      <Clock size={14}/> 
-                      <span className="font-mono">
-                        {formatDate(req.start_time)} 
-                        {req.type === '補打卡' && req.leave_type === '全天' 
-                          ? ` ~ ${formatDate(req.end_time)}` 
-                          : (req.type !== '補打卡' && ` ~ ${formatDate(req.end_time)}`)
-                        }
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      <span className="text-lg font-bold text-slate-800">{task.staff_name}</span>
+                      <span className={`px-2 py-0.5 text-xs rounded font-bold border ${getTypeColor()}`}>
+                        {TYPE_LABELS[task.type]}
                       </span>
+                      {task.status !== 'pending' && (
+                        <span className={`px-2 py-0.5 text-xs rounded font-bold ${
+                          task.status === 'approved'
+                            ? 'bg-green-100 text-green-700'
+                            : 'bg-red-100 text-red-700'
+                        }`}>
+                          {task.status === 'approved' ? '已通過' : '已駁回'}
+                        </span>
+                      )}
                     </div>
-                    <div className="flex items-center gap-2 text-slate-700">
-                      <FileText size={14}/> 原因：{req.reason || '無'}
+                    <div className="text-slate-500 text-sm space-y-1">
+                      {/* 🟢 新增：加班顯示 */}
+                      {task.type === 'overtime' && (
+                        <>
+                          <div className="flex items-center gap-2">
+                            <Calendar size={14}/> 
+                            <span className="font-bold">日期：{task.date}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Clock size={14}/> 
+                            <span className="font-mono">
+                              上班：{task.clock_in_time ? formatTime(task.clock_in_time) : '--'} 
+                              {' → '}
+                              下班：{task.clock_out_time ? formatTime(task.clock_out_time) : '--'}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 text-orange-600 font-bold">
+                            <Clock size={14}/> 
+                            <span>總工時：{task.work_hours?.toFixed(1) || '0'} 小時</span>
+                            {task.overtime_hours > 0 && (
+                              <span className="text-orange-700">
+                                (加班：{task.overtime_hours.toFixed(1)} 小時)
+                              </span>
+                            )}
+                          </div>
+                        </>
+                      )}
+                      
+                      {/* 請假顯示 */}
+                      {task.type === 'leave' && (
+                        <>
+                          <div className="flex items-center gap-2">
+                            <Clock size={14}/> 
+                            <span className="font-mono">
+                              {formatDate(task.start_time)} 
+                              {task.end_time && ` ~ ${formatDate(task.end_time)}`}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 text-slate-700">
+                            <FileText size={14}/> 原因：{task.reason || '無'}
+                          </div>
+                        </>
+                      )}
+                      
+                      {/* 異常顯示 */}
+                      {task.type === 'anomaly' && (
+                        <>
+                          <div className="flex items-center gap-2">
+                            <Calendar size={14}/> 
+                            <span className="font-bold">日期：{task.date}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Clock size={14}/> 
+                            <span className="font-mono">
+                              {task.clock_in_time ? formatTime(task.clock_in_time) : '--'} 
+                              {' → '}
+                              {task.clock_out_time ? formatTime(task.clock_out_time) : '--'}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 text-red-600">
+                            <AlertCircle size={14}/> {task.description}
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
+                {task.status === 'pending' && (
+                  <div className="flex gap-2 shrink-0">
+                    <button 
+                      onClick={() => handleReject(task)} 
+                      className="px-4 py-2 text-red-600 font-bold hover:bg-red-50 rounded transition flex items-center gap-1"
+                    >
+                      <XCircle size={18}/> 駁回
+                    </button>
+                    <button 
+                      onClick={() => handleApprove(task)} 
+                      className="px-6 py-2 bg-teal-600 text-white font-bold rounded shadow hover:bg-teal-500 transition flex items-center gap-2 active:scale-95"
+                    >
+                      <CheckCircle size={18}/> 核准
+                    </button>
+                  </div>
+                )}
               </div>
-              {req.status === 'pending' && (
-                <div className="flex gap-2">
-                  <button 
-                    onClick={() => handleReject(req.id)} 
-                    className="px-4 py-2 text-red-600 font-bold hover:bg-red-50 rounded transition flex items-center gap-1"
-                  >
-                    <XCircle size={18}/> 駁回
-                  </button>
-                  <button 
-                    onClick={() => handleApprove(req)} 
-                    className="px-6 py-2 bg-teal-600 text-white font-bold rounded shadow hover:bg-teal-500 transition flex items-center gap-2 active:scale-95"
-                  >
-                    <CheckCircle size={18}/> 核准
-                  </button>
-                </div>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

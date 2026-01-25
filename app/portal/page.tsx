@@ -824,22 +824,35 @@ export default function EmployeePortal() {
         <div className="p-6 space-y-6">
             {view === 'home' && (
                 <>
-                    {/* 🟢 新增：最新公告區塊 */}
+                    {/* 🟢 優化：最新公告區塊（在打卡鐘上方，更醒目） */}
                     {announcements.length > 0 && (
-                        <div className="space-y-2 mb-4">
-                            <h3 className="text-sm font-bold text-slate-600 flex items-center gap-2">
-                                <Bell size={16} className="text-orange-500"/>
-                                最新公告
-                            </h3>
+                        <div className="space-y-3 mb-6">
+                            <div className="flex items-center gap-2 mb-2">
+                                <Bell size={18} className="text-orange-500"/>
+                                <h3 className="text-sm font-bold text-slate-700">最新公告</h3>
+                                {announcements.length > 1 && (
+                                    <span className="text-xs text-slate-400">({announcements.length} 則)</span>
+                                )}
+                            </div>
                             {announcements.map((ann, i) => (
-                                <div key={i} className="bg-gradient-to-r from-orange-50 to-yellow-50 border-l-4 border-orange-500 p-3 rounded-lg shadow-sm">
-                                    <div className="font-bold text-slate-800 text-sm mb-1">{ann.title}</div>
-                                    <div className="text-xs text-slate-600 leading-relaxed">{ann.content}</div>
-                                    {ann.created_at && (
-                                        <div className="text-[10px] text-slate-400 mt-1">
-                                            {new Date(ann.created_at).toLocaleDateString('zh-TW')}
-                                        </div>
-                                    )}
+                                <div 
+                                    key={i} 
+                                    className="bg-gradient-to-r from-orange-50 via-yellow-50 to-orange-50 border-l-4 border-orange-500 p-4 rounded-xl shadow-md hover:shadow-lg transition"
+                                >
+                                    <div className="flex items-start justify-between gap-2 mb-2">
+                                        <div className="font-bold text-slate-800 text-base flex-1">{ann.title}</div>
+                                        {ann.created_at && (
+                                            <div className="text-[10px] text-slate-400 whitespace-nowrap">
+                                                {new Date(ann.created_at).toLocaleDateString('zh-TW', { 
+                                                    month: 'short', 
+                                                    day: 'numeric' 
+                                                })}
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
+                                        {ann.content}
+                                    </div>
                                 </div>
                             ))}
                         </div>
@@ -1298,26 +1311,75 @@ export default function EmployeePortal() {
                             </div>
                         </div>
 
-                        {/* 歷年特休紀錄 */}
-                        {profile.annual_leave_history && (
-                            <div className="border-t border-slate-200 pt-4">
-                                <label className="text-xs text-slate-400 mb-2 block">歷年特休紀錄</label>
-                                <div className="space-y-2">
-                                    {typeof profile.annual_leave_history === 'string' ? (
-                                        <div className="text-xs text-slate-600 bg-slate-50 p-2 rounded">
-                                            {profile.annual_leave_history}
-                                        </div>
-                                    ) : (
-                                        Object.entries(profile.annual_leave_history).map(([year, days]: [string, any]) => (
-                                            <div key={year} className="flex justify-between items-center bg-slate-50 p-2 rounded text-xs">
-                                                <span className="font-bold text-slate-700">{year} 年</span>
-                                                <span className="text-teal-600 font-bold">{days} 天</span>
+                        {/* 🟢 優化：特休儀表板 */}
+                        <div className="border-t border-slate-200 pt-4">
+                            <h4 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
+                                <Calendar size={16} className="text-teal-600"/>
+                                特休儀表板
+                            </h4>
+                            
+                            {/* 到職日 */}
+                            {profile.start_date && (
+                                <div className="bg-slate-50 p-3 rounded-lg mb-3">
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-xs font-bold text-slate-600">到職日期</span>
+                                        <span className="text-sm font-black text-slate-800">
+                                            {new Date(profile.start_date).toLocaleDateString('zh-TW', { 
+                                                year: 'numeric', 
+                                                month: 'long', 
+                                                day: 'numeric' 
+                                            })}
+                                        </span>
+                                    </div>
+                                </div>
+                            )}
+                            
+                            {/* 今年額度（如果有 annual_leave_quota） */}
+                            {profile.annual_leave_quota !== null && profile.annual_leave_quota !== undefined && (
+                                <div className="bg-gradient-to-r from-teal-50 to-blue-50 p-3 rounded-lg border-2 border-teal-300 mb-3">
+                                    <div className="flex justify-between items-center mb-2">
+                                        <span className="text-xs font-bold text-slate-700">今年特休額度</span>
+                                        <span className="text-lg font-black text-teal-700">
+                                            {Number(profile.annual_leave_quota).toFixed(1)} 天
+                                        </span>
+                                    </div>
+                                </div>
+                            )}
+                            
+                            {/* 歷年特休紀錄 */}
+                            {profile.annual_leave_history && (
+                                <div className="mt-3">
+                                    <label className="text-xs font-bold text-slate-600 mb-2 block">歷年特休紀錄</label>
+                                    <div className="space-y-2 max-h-48 overflow-y-auto">
+                                        {typeof profile.annual_leave_history === 'string' ? (
+                                            <div className="text-xs text-slate-600 bg-slate-50 p-3 rounded-lg border border-slate-200">
+                                                {profile.annual_leave_history}
                                             </div>
-                                        ))
+                                        ) : (
+                                            Object.entries(profile.annual_leave_history)
+                                                .sort(([a], [b]) => b.localeCompare(a)) // 由新到舊排序
+                                                .map(([year, days]: [string, any]) => (
+                                                    <div 
+                                                        key={year} 
+                                                        className="flex justify-between items-center bg-gradient-to-r from-slate-50 to-slate-100 p-3 rounded-lg border border-slate-200 hover:shadow-sm transition"
+                                                    >
+                                                        <div className="flex items-center gap-2">
+                                                            <Calendar size={14} className="text-slate-400"/>
+                                                            <span className="text-sm font-bold text-slate-700">{year} 年</span>
+                                                        </div>
+                                                        <span className="text-base font-black text-teal-600">{Number(days).toFixed(1)} 天</span>
+                                                    </div>
+                                                ))
+                                        )}
+                                    </div>
+                                    {Object.keys(profile.annual_leave_history || {}).length === 0 && (
+                                        <div className="text-xs text-slate-400 text-center py-4 bg-slate-50 rounded-lg">
+                                            尚無特休紀錄
+                                        </div>
                                     )}
                                 </div>
-                            </div>
-                        )}
+                            )}
+                        </div>
 
                         {/* 編輯按鈕 */}
                         {isEditingProfile && (

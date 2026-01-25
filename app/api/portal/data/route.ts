@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
     if (type === 'home') {
       const result = await supabaseAdmin
         .from('staff')
-        .select('id, name, role, clinic_id, start_date, annual_leave_history, phone, address, emergency_contact, bank_account, id_number')
+        .select('id, name, role, clinic_id, start_date, annual_leave_history, annual_leave_quota, phone, address, emergency_contact, bank_account, id_number')
         .eq('id', staffIdNum)
         .single();
       staff = result.data;
@@ -86,34 +86,39 @@ export async function GET(request: NextRequest) {
 
     switch (type) {
       case 'home': {
-        // 🟢 新增：首頁資料（公告 + 個人資料）
-        // 查詢啟用的公告
+        // 🟢 優化：首頁資料（公告 + 個人資料）
+        
+        // 1. 查詢啟用的公告
+        // 條件：is_active = true 且 clinic_id 符合該員工診所
+        // 排序：created_at 倒序（最新的在上面）
         const { data: announcements, error: annError } = await supabaseAdmin
           .from('announcements')
           .select('*')
           .eq('clinic_id', staffClinicId)
           .eq('is_active', true)
-          .order('created_at', { ascending: false })
-          .limit(5); // 只回傳最新 5 筆
+          .order('created_at', { ascending: false });
 
         if (annError) {
           console.error('Error fetching announcements:', annError);
+          // 即使公告查詢失敗，仍然回傳個人資料
         }
 
-        // 回傳公告和個人資料
+        // 2. 回傳完整的個人資料
+        // 注意：這裡讀取的是員工自己的資料，不需要遮罩，遮罩邏輯在前端做即可
         queryResult = {
           announcements: announcements || [],
           profile: {
             id: staff.id,
-            name: staff.name,
-            role: staff.role,
+            name: staff.name || '',
+            role: staff.role || '',
             start_date: staff.start_date || null,
             annual_leave_history: staff.annual_leave_history || null,
-            phone: staff.phone || '',
-            address: staff.address || '',
-            emergency_contact: staff.emergency_contact || '',
-            bank_account: staff.bank_account || '',
-            id_number: staff.id_number || ''
+            annual_leave_quota: staff.annual_leave_quota || null,
+            phone: staff.phone || null,
+            address: staff.address || null,
+            emergency_contact: staff.emergency_contact || null,
+            bank_account: staff.bank_account || null,
+            id_number: staff.id_number || null
           }
         };
         break;
