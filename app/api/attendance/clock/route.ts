@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
-import { getClinicIdFromRequest } from '@/lib/clinicHelper';
 
 /**
  * POST /api/attendance/clock
@@ -21,15 +20,6 @@ import { getClinicIdFromRequest } from '@/lib/clinicHelper';
  */
 export async function POST(request: NextRequest) {
   try {
-    // 🟢 多租戶：取得當前使用者的 clinic_id
-    const clinicId = await getClinicIdFromRequest(request);
-    if (!clinicId) {
-      return NextResponse.json(
-        { success: false, message: '無法識別診所，請重新登入' },
-        { status: 401 }
-      );
-    }
-
     const body = await request.json();
     const {
       action,
@@ -49,18 +39,34 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 🟢 多租戶：驗證該員工是否屬於當前診所
-    const { data: staff } = await supabaseAdmin
+    // 🟢 多租戶：從 staffId 查詢員工資料並取得 clinic_id
+    const { data: staff, error: staffError } = await supabaseAdmin
       .from('staff')
-      .select('id, clinic_id')
+      .select('id, name, clinic_id, is_active')
       .eq('id', Number(staffId))
-      .eq('clinic_id', clinicId)
       .single();
 
-    if (!staff) {
+    if (staffError || !staff) {
       return NextResponse.json(
-        { success: false, message: '找不到該員工或無權限操作' },
+        { success: false, message: '找不到該員工' },
+        { status: 404 }
+      );
+    }
+
+    // 檢查員工是否啟用
+    if (!staff.is_active) {
+      return NextResponse.json(
+        { success: false, message: '該員工帳號已停用' },
         { status: 403 }
+      );
+    }
+
+    // 取得員工的 clinic_id
+    const clinicId = staff.clinic_id;
+    if (!clinicId) {
+      return NextResponse.json(
+        { success: false, message: '員工未關聯到診所' },
+        { status: 400 }
       );
     }
 
@@ -111,12 +117,13 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // 🟢 多租戶：先取得現有記錄以計算工時，並驗證該紀錄屬於當前診所
+      // 🟢 多租戶：先取得現有記錄以計算工時，並驗證該紀錄屬於該員工的診所
       const { data: existing } = await supabaseAdmin
         .from('attendance_logs')
-        .select('clock_in_time, clinic_id')
+        .select('clock_in_time, clinic_id, staff_id')
         .eq('id', logId)
         .eq('clinic_id', clinicId) // 🟢 確保只查詢該診所的紀錄
+        .eq('staff_id', Number(staffId)) // 🟢 確保是該員工的紀錄
         .single();
 
       if (!existing) {

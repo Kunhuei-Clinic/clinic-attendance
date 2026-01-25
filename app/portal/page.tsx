@@ -1,14 +1,9 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { createClient } from '@supabase/supabase-js';
 import liff from '@line/liff';
 import { Clock, Calendar, DollarSign, MapPin, AlertTriangle, History, FileText, Coffee, ChevronRight, X, User, PlusCircle } from 'lucide-react';
 import PortalSalaryView from './components/SalaryView';
-
-const supabaseUrl = 'https://ucpkvptnhgbtmghqgbof.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVjcGt2cHRuaGdidG1naHFnYm9mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUzNDg5MTAsImV4cCI6MjA4MDkyNDkxMH0.zdLx86ey-QywuGD-S20JJa7ZD6xHFRalAMRN659bbuo';
-const supabase = createClient(supabaseUrl, supabaseKey);
 
 const LIFF_ID = '2008669814-8OqQmkaL'; 
 const CLINIC_LAT = 25.00606566310205; 
@@ -69,26 +64,55 @@ export default function EmployeePortal() {
   }, []);
 
   const checkBinding = async (lineId: string) => {
-      const { data } = await supabase.from('staff').select('*').eq('line_user_id', lineId).single();
-      if (data) {
-          setStaffUser(data);
-          setStatus('ready');
-          fetchTodayLogs(data.name);
-      } else {
-          const { data: list } = await supabase.from('staff').select('id, name').is('line_user_id', null).eq('is_active', true);
-          setUnboundList(list || []);
-          setStatus('bind_needed');
+      try {
+          const response = await fetch(`/api/portal/auth?lineUserId=${lineId}`);
+          const result = await response.json();
+          
+          if (result.status === 'bound' && result.staff) {
+              // 已綁定，設定員工資料
+              setStaffUser(result.staff);
+              setStatus('ready');
+              fetchTodayLogs(result.staff.id);
+          } else if (result.status === 'unbound' && result.unboundList) {
+              // 未綁定，顯示綁定選單
+              setUnboundList(result.unboundList || []);
+              setStatus('bind_needed');
+          } else {
+              console.error('Unknown binding status:', result);
+              setStatus('error');
+          }
+      } catch (error) {
+          console.error('Check binding error:', error);
+          setStatus('error');
       }
   };
 
   const handleBind = async () => {
       if (!bindForm.id || !bindForm.password) return alert('請選擇姓名並輸入密碼');
-      const { data: verify } = await supabase.from('staff').select('password').eq('id', bindForm.id).single();
-      const dbPass = verify?.password || '0000';
-      if (dbPass !== bindForm.password) return alert('❌ 密碼錯誤');
-      const profile = await liff.getProfile();
-      const { error } = await supabase.from('staff').update({ line_user_id: profile.userId }).eq('id', bindForm.id);
-      if (error) alert('綁定失敗'); else window.location.reload();
+      
+      try {
+          const profile = await liff.getProfile();
+          const response = await fetch('/api/portal/auth', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                  staffId: Number(bindForm.id),
+                  password: bindForm.password,
+                  lineUserId: profile.userId
+              })
+          });
+          
+          const result = await response.json();
+          
+          if (result.success) {
+              window.location.reload();
+          } else {
+              alert(result.message || '綁定失敗');
+          }
+      } catch (error) {
+          console.error('Bind error:', error);
+          alert('綁定失敗，請稍後再試');
+      }
   };
 
   useEffect(() => {
@@ -99,62 +123,90 @@ export default function EmployeePortal() {
       if (view === 'payslip') fetchSalaryHistory();
   }, [view, selectedMonth, staffUser]);
 
-  const fetchTodayLogs = async (name: string) => {
+  const fetchTodayLogs = async (staffId: number) => {
       try {
-          const today = new Date().toISOString().slice(0, 10);
-          // 使用 API 路由讀取，避免 RLS 限制
-          const response = await fetch(`/api/attendance?useDateFilter=true&startDate=${today}&endDate=${today}&selectedStaffId=all&selectedRole=all`);
+          const today = new Date().toISOString().slice(0, 7); // YYYY-MM
+          const response = await fetch(`/api/portal/data?type=history&staffId=${staffId}&month=${today}`);
           const result = await response.json();
+          
           if (result.data) {
-              // 過濾出當前員工的記錄
-              const todayLogs = result.data.filter((log: any) => log.staff_name === name);
+              // 過濾出今天的記錄
+              const today = new Date().toISOString().slice(0, 10);
+              const todayLogs = result.data.filter((log: any) => 
+                  log.clock_in_time && log.clock_in_time.startsWith(today)
+              );
               setLogs(todayLogs || []);
           } else {
               setLogs([]);
           }
       } catch (error) {
           console.error('讀取打卡記錄失敗:', error);
-          // 如果 API 失敗，嘗試使用客戶端讀取
-          const today = new Date().toISOString().slice(0, 10);
-          const { data } = await supabase.from('attendance_logs').select('*').eq('staff_name', name).gte('clock_in_time', `${today}T00:00:00`).order('clock_in_time', { ascending: false });
-          setLogs(data || []);
+          setLogs([]);
       }
   };
 
   const fetchHistory = async () => {
-      const start = `${selectedMonth}-01T00:00:00`;
-      const [y, m] = selectedMonth.split('-').map(Number);
-      const nextMonth = new Date(y, m+1, 1).toISOString(); 
-      const { data } = await supabase.from('attendance_logs').select('*').eq('staff_name', staffUser.name).gte('clock_in_time', start).lt('clock_in_time', nextMonth).order('clock_in_time', { ascending: false });
-      setHistoryLogs(data || []);
+      try {
+          const response = await fetch(`/api/portal/data?type=history&staffId=${staffUser.id}&month=${selectedMonth}`);
+          const result = await response.json();
+          setHistoryLogs(result.data || []);
+      } catch (error) {
+          console.error('讀取歷史記錄失敗:', error);
+          setHistoryLogs([]);
+      }
   };
 
   const fetchRoster = async () => {
-      const start = new Date().toISOString().slice(0, 10);
-      if (staffUser.role === '醫師') {
-          const { data } = await supabase.from('doctor_roster').select('*').eq('doctor_id', staffUser.id).gte('date', start).order('date').limit(20);
-          setRosterData(data || []);
-      } else {
-          const { data } = await supabase.from('roster').select('*').eq('staff_id', staffUser.id).gte('date', start).order('date').limit(20);
-          setRosterData(data || []);
+      try {
+          // 不傳 month 參數，會自動查詢今天之後的資料
+          const response = await fetch(`/api/portal/data?type=roster&staffId=${staffUser.id}`);
+          const result = await response.json();
+          setRosterData(result.data || []);
+      } catch (error) {
+          console.error('讀取班表失敗:', error);
+          setRosterData([]);
       }
   };
 
   const fetchSalaryHistory = async () => {
-      if (staffUser.role === '醫師') {
-          const { data } = await supabase.from('doctor_ppf').select('*').eq('doctor_id', staffUser.id).order('target_month', { ascending: false });
-          const formatted = (data || []).map(item => ({ id: item.id, year_month: item.target_month, is_doctor_ppf: true, data: item }));
+      try {
+          const response = await fetch(`/api/portal/data?type=salary&staffId=${staffUser.id}`);
+          const result = await response.json();
+          
+          // 格式化資料以符合現有的顯示邏輯
+          const formatted = (result.data || []).map((item: any) => {
+              if (staffUser.role === '醫師') {
+                  return {
+                      id: item.id,
+                      year_month: item.paid_in_month,
+                      is_doctor_ppf: true,
+                      data: item
+                  };
+              } else {
+                  return {
+                      id: item.id,
+                      year_month: item.year_month,
+                      is_doctor_ppf: false,
+                      snapshot: item.snapshot
+                  };
+              }
+          });
           setSalaryList(formatted);
-      } else {
-          const { data } = await supabase.from('salary_history').select('*').eq('staff_id', staffUser.id).order('year_month', { ascending: false });
-          const formatted = (data || []).map(item => ({ id: item.id, year_month: item.year_month, is_doctor_ppf: false, snapshot: item.snapshot }));
-          setSalaryList(formatted);
+      } catch (error) {
+          console.error('讀取薪資歷史失敗:', error);
+          setSalaryList([]);
       }
   };
 
   const fetchLeaveHistory = async () => {
-      const { data } = await supabase.from('leave_requests').select('*').eq('staff_id', staffUser.id).order('created_at', { ascending: false });
-      setLeaveHistory(data || []);
+      try {
+          const response = await fetch(`/api/portal/data?type=leave&staffId=${staffUser.id}`);
+          const result = await response.json();
+          setLeaveHistory(result.data || []);
+      } catch (error) {
+          console.error('讀取請假記錄失敗:', error);
+          setLeaveHistory([]);
+      }
   };
 
   // 🟢 修正：補打卡申請 (支援全天)
@@ -170,32 +222,64 @@ export default function EmployeePortal() {
       // 如果是全天，必須檢查有沒有填下班時間
       if (missedForm.type === '全天' && !missedForm.endTime) return alert("補全天請填寫下班時間");
 
-      const { error } = await supabase.from('leave_requests').insert([{
-          staff_id: staffUser.id,
-          staff_name: staffUser.name,
-          type: '補打卡',
-          leave_type: missedForm.type, // '上班', '下班', '全天'
-          start_time: startFull,
-          end_time: endFull, 
-          hours: 0,
-          reason: missedForm.reason,
-          status: 'pending'
-      }]);
+      try {
+          const response = await fetch('/api/leave', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                  staff_id: staffUser.id,
+                  staff_name: staffUser.name,
+                  type: '補打卡',
+                  leave_type: missedForm.type, // '上班', '下班', '全天'
+                  start_time: startFull,
+                  end_time: endFull, 
+                  hours: 0,
+                  reason: missedForm.reason,
+                  status: 'pending'
+              })
+          });
 
-      if(error) alert("申請失敗: " + error.message);
-      else { 
-          alert("✅ 補打卡申請已送出，待主管審核。"); 
-          setShowMissedPunch(false); 
-          setMissedForm({ date: '', startTime: '', endTime: '', type: '上班', reason: '' });
-          fetchLeaveHistory(); 
+          const result = await response.json();
+          
+          if (result.success) {
+              alert("✅ 補打卡申請已送出，待主管審核。"); 
+              setShowMissedPunch(false); 
+              setMissedForm({ date: '', startTime: '', endTime: '', type: '上班', reason: '' });
+              fetchLeaveHistory();
+          } else {
+              alert("申請失敗: " + (result.message || result.error));
+          }
+      } catch (error: any) {
+          console.error('Submit missed punch error:', error);
+          alert("申請失敗: " + error.message);
       }
   };
 
   const reportAnomaly = async (logId: number) => {
       const reason = prompt("請輸入異常原因 (例如: 忘記打卡)");
       if (!reason) return;
-      await supabase.from('attendance_logs').update({ anomaly_reason: reason }).eq('id', logId);
-      alert("已送出"); fetchHistory();
+      
+      try {
+          const response = await fetch('/api/attendance', {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                  id: logId,
+                  anomaly_reason: reason
+              })
+          });
+          
+          const result = await response.json();
+          if (result.success) {
+              alert("已送出");
+              fetchHistory();
+          } else {
+              alert("更新失敗: " + (result.message || result.error));
+          }
+      } catch (error: any) {
+          console.error('Report anomaly error:', error);
+          alert("更新失敗: " + error.message);
+      }
   };
 
   const submitLeave = async () => {
@@ -204,18 +288,35 @@ export default function EmployeePortal() {
       const endT = new Date(`${leaveForm.endDate}T${leaveForm.endTime}`).toISOString();
       const diff = (new Date(endT).getTime() - new Date(startT).getTime()) / 3600000;
 
-      const { error } = await supabase.from('leave_requests').insert([{
-          staff_id: staffUser.id,
-          staff_name: staffUser.name,
-          type: leaveForm.type,
-          start_time: startT,
-          end_time: endT,
-          hours: diff.toFixed(1),
-          reason: leaveForm.reason,
-          status: 'pending'
-      }]);
-      if(error) alert("申請失敗: " + error.message);
-      else { alert("假單已送出"); setLeaveForm({ ...leaveForm, reason: '' }); fetchLeaveHistory(); }
+      try {
+          const response = await fetch('/api/leave', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                  staff_id: staffUser.id,
+                  staff_name: staffUser.name,
+                  type: leaveForm.type,
+                  start_time: startT,
+                  end_time: endT,
+                  hours: diff.toFixed(1),
+                  reason: leaveForm.reason,
+                  status: 'pending'
+              })
+          });
+
+          const result = await response.json();
+          
+          if (result.success) {
+              alert("假單已送出");
+              setLeaveForm({ ...leaveForm, reason: '' });
+              fetchLeaveHistory();
+          } else {
+              alert("申請失敗: " + (result.message || result.error));
+          }
+      } catch (error: any) {
+          console.error('Submit leave error:', error);
+          alert("申請失敗: " + error.message);
+      }
   };
 
   const executeClock = async (action: 'in' | 'out') => {
@@ -277,7 +378,7 @@ export default function EmployeePortal() {
             alert('下班打卡成功！'); 
         }
         // 等待資料更新完成
-        await fetchTodayLogs(staffUser.name);
+        await fetchTodayLogs(staffUser.id);
         setGpsStatus('idle');
         setBypassMode(false);
       } catch (err: any) { 

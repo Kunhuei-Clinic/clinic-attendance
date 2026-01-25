@@ -1,13 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { createClient } from '@supabase/supabase-js';
 import { DollarSign, ChevronRight, X, Calendar, FileText, TrendingUp, ShieldAlert, Lock, Unlock, Eye, EyeOff } from 'lucide-react';
-
-// --- 設定區 ---
-const supabaseUrl = 'https://ucpkvptnhgbtmghqgbof.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVjcGt2cHRuaGdidG1naHFnYm9mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUzNDg5MTAsImV4cCI6MjA4MDkyNDkxMH0.zdLx86ey-QywuGD-S20JJa7ZD6xHFRalAMRN659bbuo';
-const supabase = createClient(supabaseUrl, supabaseKey);
 
 // 輔助函式
 const fmt = (val: any) => Number(val || 0).toLocaleString();
@@ -42,14 +36,39 @@ export default function PortalSalaryView({ user }: { user: any }) {
 
     const fetchSalaryList = async () => {
         setLoading(true);
-        if (user.role === '醫師') {
-            const { data } = await supabase.from('doctor_ppf').select('*').eq('doctor_id', user.id).order('paid_in_month', { ascending: false });
-            setList(data || []);
-        } else {
-            const { data } = await supabase.from('salary_history').select('*').eq('staff_id', user.id).order('year_month', { ascending: false });
-            setList(data || []);
+        try {
+            const response = await fetch(`/api/portal/data?type=salary&staffId=${user.id}`);
+            const result = await response.json();
+            
+            // 格式化資料以符合現有的顯示邏輯
+            const formatted = (result.data || []).map((item: any) => {
+                if (user.role === '醫師') {
+                    return {
+                        id: item.id,
+                        year_month: item.paid_in_month,
+                        is_doctor_ppf: true,
+                        data: item,
+                        // 保留原始資料供 Modal 使用
+                        ...item
+                    };
+                } else {
+                    return {
+                        id: item.id,
+                        year_month: item.year_month,
+                        is_doctor_ppf: false,
+                        snapshot: item.snapshot,
+                        // 保留原始資料供 Modal 使用
+                        ...item
+                    };
+                }
+            });
+            setList(formatted);
+        } catch (error) {
+            console.error('讀取薪資列表失敗:', error);
+            setList([]);
+        } finally {
+            setLoading(false);
         }
-        setLoading(false);
     };
 
     // 🔒 1. 上鎖狀態畫面
