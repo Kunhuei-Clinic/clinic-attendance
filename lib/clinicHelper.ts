@@ -1,14 +1,59 @@
 import { supabaseAdmin } from './supabaseAdmin';
+import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { NextRequest } from 'next/server';
 
 /**
- * 取得使用者的 clinic_id
+ * 取得使用者的 clinic_id（從 Cookie 讀取 Session）
+ * 
+ * @returns clinic_id (uuid) 或 null
+ */
+export async function getClinicId(): Promise<string | null> {
+  try {
+    const cookieStore = cookies();
+    
+    // 建立一個暫時的 Client 來讀取 Auth Cookie
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            return cookieStore.get(name)?.value;
+          },
+        },
+      }
+    );
+
+    // 取得使用者
+    const { data: { user }, error } = await supabase.auth.getUser();
+    
+    if (error || !user) {
+      console.error('Auth error:', error);
+      return null;
+    }
+
+    // 查詢 Profile 取得 Clinic ID (使用 Admin Client 繞過 RLS)
+    const { data: profile } = await supabaseAdmin
+      .from('profiles')
+      .select('clinic_id')
+      .eq('id', user.id)
+      .single();
+
+    return profile?.clinic_id || null;
+  } catch (error) {
+    console.error('getClinicId error:', error);
+    return null;
+  }
+}
+
+/**
+ * 取得使用者的 clinic_id（從 userId）
  * 
  * @param userId - Supabase Auth 的 user ID (uuid)
  * @returns clinic_id (uuid) 或 null
  */
-export async function getClinicId(userId: string): Promise<string | null> {
+export async function getClinicIdByUserId(userId: string): Promise<string | null> {
   try {
     const { data, error } = await supabaseAdmin
       .from('profiles')
@@ -23,7 +68,7 @@ export async function getClinicId(userId: string): Promise<string | null> {
 
     return data?.clinic_id || null;
   } catch (error) {
-    console.error('getClinicId error:', error);
+    console.error('getClinicIdByUserId error:', error);
     return null;
   }
 }
@@ -92,7 +137,7 @@ async function getUserIdFromSession(request: NextRequest): Promise<string | null
  * 從 Request 中取得當前使用者的 clinic_id
  * 
  * 此函數會依序嘗試：
- * 1. 從 Supabase Session Cookie 取得 user ID，查詢 profiles 表取得 clinic_id
+ * 1. 從 Supabase Session Cookie 取得 user ID，查詢 profiles 表取得 clinic_id（使用 @supabase/ssr）
  * 2. 從 Authorization header 取得 Supabase token，解析 user ID
  * 3. 從 cookie 取得 user_id (向後兼容)
  * 
@@ -101,10 +146,24 @@ async function getUserIdFromSession(request: NextRequest): Promise<string | null
  */
 export async function getClinicIdFromRequest(request: NextRequest): Promise<string | null> {
   try {
-    // 方法 1: 從 Supabase Session Cookie 取得 user ID (主要方法)
-    const userId = await getUserIdFromSession(request);
-    if (userId) {
-      const clinicId = await getClinicId(userId);
+    // 方法 1: 從 Supabase Session Cookie 取得 user ID (主要方法，使用 @supabase/ssr)
+    const cookieStore = cookies();
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            return cookieStore.get(name)?.value;
+          },
+        },
+      }
+    );
+
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    
+    if (!authError && user) {
+      const clinicId = await getClinicIdByUserId(user.id);
       if (clinicId) {
         return clinicId;
       }
@@ -119,16 +178,15 @@ export async function getClinicIdFromRequest(request: NextRequest): Promise<stri
       const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
       
       if (!error && user) {
-        return await getClinicId(user.id);
+        return await getClinicIdByUserId(user.id);
       }
     }
 
     // 方法 3: 向後兼容 - 從 cookie 取得 user_id (舊系統)
-    const cookieStore = await cookies();
     const userIdCookie = cookieStore.get('user_id');
     
     if (userIdCookie?.value) {
-      return await getClinicId(userIdCookie.value);
+      return await getClinicIdByUserId(userIdCookie.value);
     }
 
     // 無法取得 clinic_id，回傳 null

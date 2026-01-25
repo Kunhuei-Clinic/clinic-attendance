@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
-import { getClinicId } from '@/lib/clinicHelper';
+import { getClinicIdByUserId } from '@/lib/clinicHelper';
 
 /**
  * POST /api/auth/login
@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 取得使用者的 clinic_id
-    const clinicId = await getClinicId(authData.user.id);
+    const clinicId = await getClinicIdByUserId(authData.user.id);
     
     if (!clinicId) {
       return NextResponse.json(
