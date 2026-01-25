@@ -13,7 +13,8 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin';
  *     gpsLat?: number,
  *     gpsLng?: number,
  *     isBypass?: boolean,
- *     logId?: number (下班時需要，指定要更新的記錄 ID)
+ *     logId?: number (下班時需要，指定要更新的記錄 ID),
+ *     applyOvertime?: boolean (下班時，是否申請加班)
  *   }
  * 
  * Response: { success: boolean, message?: string, data?: any }
@@ -28,7 +29,8 @@ export async function POST(request: NextRequest) {
       gpsLat,
       gpsLng,
       isBypass,
-      logId
+      logId,
+      applyOvertime
     } = body;
 
     // 驗證必要欄位
@@ -137,6 +139,7 @@ export async function POST(request: NextRequest) {
       const clockInTime = new Date(existing.clock_in_time);
       const workHours = (now.getTime() - clockInTime.getTime()) / (1000 * 60 * 60);
 
+      // 🟢 修正：永遠優先寫入下班時間和工時
       const updatePayload: any = {
         clock_out_time: now.toISOString(),
         work_hours: workHours.toFixed(2),
@@ -148,24 +151,68 @@ export async function POST(request: NextRequest) {
       if (gpsLng !== null && gpsLng !== undefined) updatePayload.gps_lng = gpsLng;
       if (isBypass !== undefined) updatePayload.is_bypass = isBypass;
 
-      // 🟢 多租戶：更新時也要驗證該紀錄屬於當前診所
-      const { error } = await supabaseAdmin
+      // 🟢 多租戶：先更新基本資料（永遠寫入）
+      const { error: updateError } = await supabaseAdmin
         .from('attendance_logs')
         .update(updatePayload)
         .eq('id', logId)
         .eq('clinic_id', clinicId); // 🟢 確保只更新該診所的紀錄
 
-      if (error) {
-        console.error('Clock out error:', error);
+      if (updateError) {
+        console.error('Clock out error:', updateError);
         return NextResponse.json(
-          { success: false, message: `打卡失敗: ${error.message}` },
+          { success: false, message: `打卡失敗: ${updateError.message}` },
           { status: 500 }
         );
       }
 
+      // 🟢 新增：處理加班標記（根據 applyOvertime）
+      if (applyOvertime === true) {
+        // 取得診所加班設定
+        const { data: clinic } = await supabaseAdmin
+          .from('clinics')
+          .select('settings')
+          .eq('id', clinicId)
+          .single();
+
+        const clinicSettings = clinic?.settings || {};
+        const overtimeApprovalRequired = clinicSettings.overtime_approval_required ?? true;
+
+        const overtimeUpdate: any = {
+          is_overtime: true,
+          overtime_status: overtimeApprovalRequired ? 'pending' : 'approved'
+        };
+
+        // 更新加班標記
+        const { error: overtimeError } = await supabaseAdmin
+          .from('attendance_logs')
+          .update(overtimeUpdate)
+          .eq('id', logId)
+          .eq('clinic_id', clinicId);
+
+        if (overtimeError) {
+          console.error('Update overtime status error:', overtimeError);
+          // 不影響打卡成功，只記錄錯誤
+        }
+      } else if (applyOvertime === false) {
+        // 明確標記為非加班
+        const { error: overtimeError } = await supabaseAdmin
+          .from('attendance_logs')
+          .update({
+            is_overtime: false,
+            overtime_status: 'none'
+          })
+          .eq('id', logId)
+          .eq('clinic_id', clinicId);
+
+        if (overtimeError) {
+          console.error('Update overtime status error:', overtimeError);
+        }
+      }
+
       return NextResponse.json({
         success: true,
-        message: '下班打卡成功！',
+        message: applyOvertime ? '下班打卡成功！加班申請已送出。' : '下班打卡成功！',
         data: { workHours: workHours.toFixed(2) }
       });
 

@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { createBrowserClient } from '@supabase/ssr';
-import { CheckCircle, Calendar, Stethoscope, BookOpen, DollarSign, Settings, FileText, Calculator, FileSpreadsheet, LogOut } from 'lucide-react';
+import { CheckCircle, Calendar, Stethoscope, BookOpen, DollarSign, Settings, FileText, Calculator, FileSpreadsheet, LogOut, Bell } from 'lucide-react';
 
 // 建立 Supabase 客戶端（使用 @supabase/ssr 確保 Session 寫入 Cookie）
 const supabase = createBrowserClient(
@@ -20,13 +20,14 @@ import SettingsView from './SettingsView';
 import LeaveView from './LeaveView';
 import DoctorSalaryView from '@/components/views/DoctorSalaryView';
 import SalaryReportView from './SalaryReport';
-import TasksView from './TasksView'; 
+import TasksView from './TasksView';
+import AnnouncementsView from './AnnouncementsView'; 
 
 export default function AdminPage() {
   const router = useRouter();
   const [authLevel, setAuthLevel] = useState<'boss' | 'manager' | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'tasks' | 'attendance' | 'staff_roster' | 'doctor_roster' | 'labor_rules' | 'salary' | 'settings' | 'leave' | 'doctor_salary' | 'salary_report'>('tasks');
+  const [activeTab, setActiveTab] = useState<'tasks' | 'attendance' | 'staff_roster' | 'doctor_roster' | 'labor_rules' | 'salary' | 'settings' | 'leave' | 'doctor_salary' | 'salary_report' | 'announcements'>('tasks');
 
   // 檢查認證狀態
   useEffect(() => {
@@ -158,6 +159,9 @@ export default function AdminPage() {
               <button onClick={() => setActiveTab('labor_rules')} className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 whitespace-nowrap ${activeTab === 'labor_rules' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:bg-slate-50'}`}>
                 <BookOpen size={16}/> 法規
               </button>
+              <button onClick={() => setActiveTab('announcements')} className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 whitespace-nowrap ${activeTab === 'announcements' ? 'bg-yellow-100 text-yellow-700' : 'text-slate-500 hover:bg-slate-50'}`}>
+                <Bell size={16}/> 公告
+              </button>
               <button onClick={() => setActiveTab('settings')} className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 whitespace-nowrap ${activeTab === 'settings' ? 'bg-gray-200 text-gray-800' : 'text-slate-500 hover:bg-slate-50'}`}>
                 <Settings size={16}/> 設定
               </button>
@@ -183,6 +187,7 @@ export default function AdminPage() {
             {activeTab === 'leave' && authLevel === 'boss' && <LeaveView />}
             {activeTab === 'doctor_salary' && authLevel === 'boss' && <DoctorSalaryView />}
             {activeTab === 'salary_report' && authLevel === 'boss' && <SalaryReportView />}
+            {activeTab === 'announcements' && authLevel === 'boss' && <AnnouncementsView />}
           </div>
         </div>
       </div>

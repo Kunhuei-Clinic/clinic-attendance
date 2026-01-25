@@ -241,6 +241,86 @@ export async function POST(request: NextRequest) {
 }
 
 /**
+ * PATCH /api/attendance
+ * 更新考勤紀錄（部分更新，例如加班審核）
+ * 
+ * Request Body:
+ *   {
+ *     id: number (required),
+ *     overtime_status?: 'pending' | 'approved' | 'rejected',
+ *     anomaly_reason?: string,
+ *     ... (其他可更新欄位)
+ *   }
+ * 
+ * Response: { success: boolean, message?: string }
+ */
+export async function PATCH(request: NextRequest) {
+  try {
+    // 🟢 多租戶：取得當前使用者的 clinic_id
+    const clinicId = await getClinicIdFromRequest(request);
+    if (!clinicId) {
+      return NextResponse.json(
+        { success: false, message: '無法識別診所，請重新登入' },
+        { status: 401 }
+      );
+    }
+
+    const body = await request.json();
+    const { id, ...updateFields } = body;
+
+    if (!id) {
+      return NextResponse.json(
+        { success: false, message: '缺少紀錄 ID' },
+        { status: 400 }
+      );
+    }
+
+    // 🟢 多租戶：驗證該紀錄屬於當前診所
+    const { data: existingLog } = await supabaseAdmin
+      .from('attendance_logs')
+      .select('id, clinic_id')
+      .eq('id', id)
+      .eq('clinic_id', clinicId)
+      .single();
+
+    if (!existingLog) {
+      return NextResponse.json(
+        { success: false, message: '找不到該紀錄或無權限操作' },
+        { status: 403 }
+      );
+    }
+
+    // 更新欄位（移除 clinic_id，不允許前端修改）
+    const { clinic_id, ...safeUpdateFields } = updateFields;
+
+    const { error } = await supabaseAdmin
+      .from('attendance_logs')
+      .update(safeUpdateFields)
+      .eq('id', id)
+      .eq('clinic_id', clinicId); // 🟢 確保只更新該診所的紀錄
+
+    if (error) {
+      console.error('Update attendance log error:', error);
+      return NextResponse.json(
+        { success: false, message: `更新失敗: ${error.message}` },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: '更新成功'
+    });
+  } catch (error: any) {
+    console.error('Attendance PATCH API Error:', error);
+    return NextResponse.json(
+      { success: false, message: `處理失敗: ${error.message}` },
+      { status: 500 }
+    );
+  }
+}
+
+/**
  * DELETE /api/attendance
  * 刪除考勤紀錄
  * 

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import liff from '@line/liff';
-import { Clock, Calendar, DollarSign, MapPin, AlertTriangle, History, FileText, Coffee, ChevronRight, X, User, PlusCircle } from 'lucide-react';
+import { Clock, Calendar, DollarSign, MapPin, AlertTriangle, History, FileText, Coffee, ChevronRight, X, User, PlusCircle, Bell, Edit2, Save } from 'lucide-react';
 import PortalSalaryView from './components/SalaryView';
 
 const LIFF_ID = '2008669814-8OqQmkaL'; 
@@ -27,7 +27,7 @@ const getDist = (lat1: number, lon1: number, lat2: number, lon2: number) => {
 };
 
 export default function EmployeePortal() {
-  const [view, setView] = useState<'home' | 'history' | 'roster' | 'leave' | 'payslip'>('home');
+  const [view, setView] = useState<'home' | 'history' | 'roster' | 'leave' | 'payslip' | 'profile'>('home');
   const [status, setStatus] = useState<'loading' | 'bind_needed' | 'ready' | 'error'>('loading');
   const [staffUser, setStaffUser] = useState<any>(null);
   const [unboundList, setUnboundList] = useState<any[]>([]);
@@ -59,6 +59,14 @@ export default function EmployeePortal() {
   
   // 🟢 新增：請假統計資料
   const [leaveStats, setLeaveStats] = useState<any>(null);
+  const [staffLeaveInfo, setStaffLeaveInfo] = useState<{ start_date: string | null; annual_leave_history: any; annual_leave_quota: number | null } | null>(null);
+  const [showAnnualHistory, setShowAnnualHistory] = useState(false);
+  
+  // 🟢 新增：公告和個人資料
+  const [announcements, setAnnouncements] = useState<any[]>([]);
+  const [profile, setProfile] = useState<any>(null);
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [profileForm, setProfileForm] = useState({ phone: '', address: '', emergency_contact: '' });
 
   useEffect(() => {
     const initLiff = async () => {
@@ -130,6 +138,8 @@ export default function EmployeePortal() {
       if (view === 'roster') fetchRoster();
       if (view === 'leave') fetchLeaveHistory();
       if (view === 'payslip') fetchSalaryHistory();
+      if (view === 'home') fetchHomeData();
+      if (view === 'profile') fetchProfile();
   }, [view, selectedMonth, staffUser]);
 
   const fetchTodayLogs = async (staffId: number) => {
@@ -226,14 +236,16 @@ export default function EmployeePortal() {
           const response = await fetch(`/api/portal/data?type=leave&staffId=${staffUser.id}`);
           const result = await response.json();
           
-          // 🟢 新增：處理新的 API 回傳格式（包含 leaves 和 stats）
+          // 🟢 新增：處理新的 API 回傳格式（包含 leaves、stats 和 staffInfo）
           if (result.data && typeof result.data === 'object' && 'leaves' in result.data) {
               setLeaveHistory(result.data.leaves || []);
               setLeaveStats(result.data.stats || {});
+              setStaffLeaveInfo(result.data.staffInfo || null);
           } else {
               // 向後兼容：如果 API 回傳的是舊格式（直接是陣列）
               setLeaveHistory(result.data || []);
               setLeaveStats({});
+              setStaffLeaveInfo(null);
           }
       } catch (error) {
           console.error('讀取請假記錄失敗:', error);
@@ -241,6 +253,108 @@ export default function EmployeePortal() {
           setLeaveStats({});
       }
   };
+
+  // 🟢 新增：取得首頁資料（公告 + 個人資料）
+  const fetchHomeData = async () => {
+      try {
+          const response = await fetch(`/api/portal/data?type=home&staffId=${staffUser.id}`);
+          const result = await response.json();
+          
+          if (result.data) {
+              setAnnouncements(result.data.announcements || []);
+              if (result.data.profile) {
+                  setProfile(result.data.profile);
+                  setProfileForm({
+                      phone: result.data.profile.phone || '',
+                      address: result.data.profile.address || '',
+                      emergency_contact: result.data.profile.emergency_contact || ''
+                  });
+              }
+          }
+      } catch (error) {
+          console.error('讀取首頁資料失敗:', error);
+          setAnnouncements([]);
+      }
+  };
+
+  // 🟢 新增：取得個人資料
+  const fetchProfile = async () => {
+      try {
+          const response = await fetch(`/api/portal/data?type=home&staffId=${staffUser.id}`);
+          const result = await response.json();
+          
+          if (result.data && result.data.profile) {
+              setProfile(result.data.profile);
+              setProfileForm({
+                  phone: result.data.profile.phone || '',
+                  address: result.data.profile.address || '',
+                  emergency_contact: result.data.profile.emergency_contact || ''
+              });
+          }
+      } catch (error) {
+          console.error('讀取個人資料失敗:', error);
+      }
+  };
+
+  // 🟢 新增：更新個人資料
+  const updateProfile = async () => {
+      try {
+          const response = await fetch('/api/staff', {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                  id: staffUser.id,
+                  phone: profileForm.phone,
+                  address: profileForm.address,
+                  emergency_contact: profileForm.emergency_contact
+              })
+          });
+          
+          const result = await response.json();
+          
+          if (result.success) {
+              alert('個人資料已更新');
+              setIsEditingProfile(false);
+              fetchProfile();
+          } else {
+              alert('更新失敗: ' + (result.message || result.error));
+          }
+      } catch (error: any) {
+          console.error('更新個人資料失敗:', error);
+          alert('更新失敗: ' + error.message);
+      }
+  };
+
+  // 🟢 新增：遮罩敏感資料
+  const maskSensitiveData = (value: string | null | undefined, showLength: number = 3) => {
+      if (!value) return '未設定';
+      if (value.length <= showLength * 2) return value;
+      const start = value.slice(0, showLength);
+      const end = value.slice(-showLength);
+      return `${start}${'*'.repeat(Math.max(4, value.length - showLength * 2))}${end}`;
+  };
+
+  // 🟢 新增：加班設定和確認 Modal
+  const [overtimeSettings, setOvertimeSettings] = useState<{ threshold: number; approvalRequired: boolean } | null>(null);
+  const [showOvertimeConfirm, setShowOvertimeConfirm] = useState(false);
+  const [pendingClockOut, setPendingClockOut] = useState<{ lat: number | null; lng: number | null; isBypass: boolean } | null>(null);
+
+  // 🟢 新增：取得加班設定
+  useEffect(() => {
+      if (staffUser) {
+          fetch('/api/settings?type=clinic')
+              .then(res => res.json())
+              .then(result => {
+                  if (result.data) {
+                      setOvertimeSettings({
+                          threshold: result.data.overtime_threshold || 9,
+                          approvalRequired: result.data.overtime_approval_required !== false
+                      });
+                  }
+              })
+              .catch(err => console.error('Error fetching overtime settings:', err));
+      }
+  }, [staffUser]);
 
   // 🟢 修正：補打卡申請 (支援選擇補登項目)
   const submitMissedPunch = async () => {
@@ -380,23 +494,78 @@ export default function EmployeePortal() {
 
   const executeClock = async (action: 'in' | 'out') => {
       const isVip = staffUser.role === '醫師' || staffUser.role === '主管';
-      if (isVip || bypassMode) { await submitLog(action, null, null, bypassMode); return; }
+      
+      // 🟢 新增：下班時先檢查工時
+      if (action === 'out' && logs.length > 0 && logs[0].clock_in_time) {
+          const clockInTime = new Date(logs[0].clock_in_time);
+          const now = new Date();
+          const workHours = (now.getTime() - clockInTime.getTime()) / (1000 * 60 * 60);
+          const threshold = overtimeSettings?.threshold || 9;
+
+          // 如果超過門檻，顯示確認 Modal
+          if (workHours > threshold) {
+              setPendingClockOut({ lat: null, lng: null, isBypass: false });
+              setShowOvertimeConfirm(true);
+              return; // 先不執行打卡，等待用戶確認
+          }
+      }
+
+      // 原有的打卡邏輯
+      if (isVip || bypassMode) { 
+          await submitLog(action, null, null, bypassMode, false); 
+          return; 
+      }
       setGpsStatus('locating');
-      if (!navigator.geolocation) { alert("GPS 未開"); setGpsStatus('error'); return; }
+      if (!navigator.geolocation) { 
+          alert("GPS 未開"); 
+          setGpsStatus('error'); 
+          return; 
+      }
       navigator.geolocation.getCurrentPosition(
           async (pos) => {
               const { latitude, longitude } = pos.coords;
               const d = getDist(latitude, longitude, CLINIC_LAT, CLINIC_LNG);
               setDist(Math.round(d));
-              if (d <= ALLOWED_RADIUS) { setGpsStatus('ok'); await submitLog(action, latitude, longitude, false); }
-              else { setGpsStatus('out_of_range'); alert(`距離太遠 (${Math.round(d)}m)`); }
+              if (d <= ALLOWED_RADIUS) { 
+                  setGpsStatus('ok'); 
+                  // 🟢 新增：如果是下班且超過門檻，先顯示確認 Modal
+                  if (action === 'out' && logs.length > 0 && logs[0].clock_in_time) {
+                      const clockInTime = new Date(logs[0].clock_in_time);
+                      const now = new Date();
+                      const workHours = (now.getTime() - clockInTime.getTime()) / (1000 * 60 * 60);
+                      const threshold = overtimeSettings?.threshold || 9;
+                      if (workHours > threshold) {
+                          setPendingClockOut({ lat: latitude, lng: longitude, isBypass: false });
+                          setShowOvertimeConfirm(true);
+                          return;
+                      }
+                  }
+                  await submitLog(action, latitude, longitude, false, false); 
+              }
+              else { 
+                  setGpsStatus('out_of_range'); 
+                  alert(`距離太遠 (${Math.round(d)}m)`); 
+              }
           },
-          (err) => { console.error(err); setGpsStatus('error'); alert("定位失敗"); },
+          (err) => { 
+              console.error(err); 
+              setGpsStatus('error'); 
+              alert("定位失敗"); 
+          },
           { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
       );
   };
 
-  const submitLog = async (action: 'in' | 'out', lat: number|null, lng: number|null, isBypass: boolean) => {
+  // 🟢 修正：處理加班確認（參數名稱改為 applyOvertime）
+  const handleOvertimeConfirm = async (apply: boolean) => {
+      setShowOvertimeConfirm(false);
+      if (pendingClockOut) {
+          await submitLog('out', pendingClockOut.lat, pendingClockOut.lng, pendingClockOut.isBypass, apply);
+          setPendingClockOut(null);
+      }
+  };
+
+  const submitLog = async (action: 'in' | 'out', lat: number|null, lng: number|null, isBypass: boolean, applyOvertime: boolean = false) => {
       try {
         // 使用 API 路由來避免 RLS 政策限制
         if (action === 'in') {
@@ -429,7 +598,8 @@ export default function EmployeePortal() {
                     logId: lastLog.id,
                     gpsLat: lat,
                     gpsLng: lng,
-                    isBypass: isBypass
+                    isBypass: isBypass,
+                    applyOvertime: applyOvertime // 🟢 修正：傳遞加班申請
                 })
             });
             const result = await response.json();
@@ -481,6 +651,50 @@ export default function EmployeePortal() {
                       ) : (
                           <><div className="text-center border-b pb-4"><p className="text-sm text-slate-500">實領金額</p><p className="text-4xl font-black text-slate-800">${Number(data.netPay || 0).toLocaleString()}</p></div><div className="space-y-2 text-sm"><div className="flex justify-between"><span>底薪/保障薪</span><span>${Number(data.baseAmount || 0).toLocaleString()}</span></div><div className="flex justify-between"><span>加班/工時費</span><span>${Number(data.workAmount || 0).toLocaleString()}</span></div><div className="flex justify-between text-blue-600"><span>獎金</span><span>+${Number(data.bonusesTotal || 0).toLocaleString()}</span></div><div className="flex justify-between text-red-500"><span>勞健保自付</span><span>-${Number(data.insLabor + data.insHealth || 0).toLocaleString()}</span></div></div></>
                       )}
+                  </div>
+              </div>
+          </div>
+      );
+  }
+
+  // 🟢 新增：加班確認 Modal
+  if (showOvertimeConfirm && logs.length > 0 && logs[0].clock_in_time) {
+      const clockInTime = new Date(logs[0].clock_in_time);
+      const now = new Date();
+      const workHours = (now.getTime() - clockInTime.getTime()) / (1000 * 60 * 60);
+      const threshold = overtimeSettings?.threshold || 9;
+
+      return (
+          <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+              <div className="bg-white w-full max-w-sm rounded-2xl p-6 space-y-4">
+                  <div className="text-center">
+                      <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                          <Clock size={32} className="text-orange-600"/>
+                      </div>
+                      <h3 className="text-xl font-bold text-slate-800 mb-2">加班確認</h3>
+                      <p className="text-sm text-slate-600">
+                          今日工時已達 <span className="font-bold text-orange-600">{workHours.toFixed(1)}</span> 小時。
+                      </p>
+                      <p className="text-sm text-slate-700 font-bold mt-2">
+                          是否申請加班？
+                      </p>
+                      <p className="text-xs text-slate-400 mt-1">
+                          (加班門檻: {threshold} 小時)
+                      </p>
+                  </div>
+                  <div className="space-y-2">
+                      <button
+                          onClick={() => handleOvertimeConfirm(true)}
+                          className="w-full bg-orange-600 text-white py-3 rounded-xl font-bold hover:bg-orange-700 transition"
+                      >
+                          是，申請加班
+                      </button>
+                      <button
+                          onClick={() => handleOvertimeConfirm(false)}
+                          className="w-full bg-slate-200 text-slate-700 py-3 rounded-xl font-bold hover:bg-slate-300 transition"
+                      >
+                          否，正常下班
+                      </button>
                   </div>
               </div>
           </div>
@@ -610,6 +824,27 @@ export default function EmployeePortal() {
         <div className="p-6 space-y-6">
             {view === 'home' && (
                 <>
+                    {/* 🟢 新增：最新公告區塊 */}
+                    {announcements.length > 0 && (
+                        <div className="space-y-2 mb-4">
+                            <h3 className="text-sm font-bold text-slate-600 flex items-center gap-2">
+                                <Bell size={16} className="text-orange-500"/>
+                                最新公告
+                            </h3>
+                            {announcements.map((ann, i) => (
+                                <div key={i} className="bg-gradient-to-r from-orange-50 to-yellow-50 border-l-4 border-orange-500 p-3 rounded-lg shadow-sm">
+                                    <div className="font-bold text-slate-800 text-sm mb-1">{ann.title}</div>
+                                    <div className="text-xs text-slate-600 leading-relaxed">{ann.content}</div>
+                                    {ann.created_at && (
+                                        <div className="text-[10px] text-slate-400 mt-1">
+                                            {new Date(ann.created_at).toLocaleDateString('zh-TW')}
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                    
                     {!isWorking ? (
                         <button onClick={() => executeClock('in')} className="w-full aspect-square rounded-full bg-gradient-to-b from-teal-400 to-teal-600 shadow-2xl flex flex-col items-center justify-center text-white active:scale-95 transition border-8 border-teal-100/50"><Clock size={56} className="mb-2 opacity-90"/><span className="text-3xl font-black tracking-widest">上班</span><span className="text-sm opacity-80 mt-2 font-mono">{new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span></button>
                     ) : (
@@ -622,22 +857,83 @@ export default function EmployeePortal() {
 
             {view === 'history' && (
                 <div className="space-y-4">
-                    <div className="flex justify-between items-center"><h3 className="font-bold text-slate-700 flex items-center gap-2"><History size={18}/> 歷史紀錄</h3><input type="month" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} className="bg-white border rounded px-2 py-1 text-sm font-bold text-slate-600"/></div>
-                    <button onClick={() => setShowMissedPunch(true)} className="w-full py-3 border-2 border-dashed border-slate-300 rounded-xl text-slate-500 font-bold flex items-center justify-center gap-2 hover:bg-slate-50 hover:border-slate-400 transition"><PlusCircle size={18}/> 申請補登打卡 (忘記打卡)</button>
+                    <div className="flex justify-between items-center">
+                        <h3 className="font-bold text-slate-700 flex items-center gap-2">
+                            <History size={18}/> 歷史紀錄
+                        </h3>
+                        <input 
+                            type="month" 
+                            value={selectedMonth} 
+                            onChange={e => setSelectedMonth(e.target.value)} 
+                            className="bg-white border rounded px-2 py-1 text-sm font-bold text-slate-600"
+                        />
+                    </div>
+                    <button 
+                        onClick={() => setShowMissedPunch(true)} 
+                        className="w-full py-3 border-2 border-dashed border-slate-300 rounded-xl text-slate-500 font-bold flex items-center justify-center gap-2 hover:bg-slate-50 hover:border-slate-400 transition"
+                    >
+                        <PlusCircle size={18}/> 申請補登打卡 (忘記打卡)
+                    </button>
                     <div className="space-y-3">
-                        {historyLogs.map(log => (
-                            <div key={log.id} className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 relative overflow-hidden">
-                                {log.anomaly_reason && <div className="absolute top-0 right-0 bg-red-500 text-white text-[9px] px-2 py-0.5 rounded-bl-lg">已回報</div>}
-                                <div className="flex justify-between items-center mb-2">
-                                    <div className="font-bold text-slate-800">{new Date(log.clock_in_time).getDate()}日</div>
-                                    <div className="font-mono text-slate-600 text-sm">{formatTime(log.clock_in_time)} - {formatTime(log.clock_out_time)}</div>
+                        {historyLogs.map(log => {
+                            // 🟢 優化：狀態標籤函數
+                            const getStatusBadge = (logItem: any) => {
+                                // 加班狀態
+                                if (logItem.is_overtime) {
+                                    if (logItem.overtime_status === 'pending') {
+                                        return { text: '加班審核中', color: 'bg-yellow-100 text-orange-700 border-orange-300' };
+                                    } else if (logItem.overtime_status === 'approved') {
+                                        return { text: '加班已核准', color: 'bg-green-100 text-green-700 border-green-300' };
+                                    } else if (logItem.overtime_status === 'rejected') {
+                                        return { text: '加班已駁回', color: 'bg-red-100 text-red-700 border-red-300' };
+                                    }
+                                }
+                                // 異常回報
+                                if (logItem.anomaly_reason) {
+                                    return { text: '已回報異常', color: 'bg-slate-100 text-slate-600 border-slate-300' };
+                                }
+                                return null;
+                            };
+
+                            const statusBadge = getStatusBadge(log);
+
+                            return (
+                                <div key={log.id} className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 relative overflow-hidden">
+                                    <div className="flex justify-between items-start mb-2">
+                                        <div>
+                                            <div className="font-bold text-slate-800">
+                                                {new Date(log.clock_in_time).getDate()}日
+                                            </div>
+                                            <div className="font-mono text-slate-600 text-sm mt-1">
+                                                {formatTime(log.clock_in_time)} - {formatTime(log.clock_out_time)}
+                                            </div>
+                                        </div>
+                                        {/* 🟢 優化：狀態標籤 */}
+                                        <div className="flex flex-col items-end gap-1">
+                                            {statusBadge && (
+                                                <span className={`text-[10px] px-2 py-0.5 rounded font-bold border ${statusBadge.color}`}>
+                                                    {statusBadge.text}
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="flex justify-between items-center border-t border-slate-100 pt-2 mt-2">
+                                        <div className="text-xs font-bold text-teal-600">
+                                            工時 {Number(log.work_hours || 0).toFixed(1)} hr
+                                        </div>
+                                        <button 
+                                            onClick={() => reportAnomaly(log.id)} 
+                                            className="text-xs text-slate-400 hover:text-red-500 underline"
+                                        >
+                                            回報異常
+                                        </button>
+                                    </div>
                                 </div>
-                                <div className="flex justify-between items-center border-t border-slate-100 pt-2">
-                                    <div className="text-xs font-bold text-teal-600">工時 {Number(log.work_hours || 0).toFixed(1)} hr</div>
-                                    <button onClick={() => reportAnomaly(log.id)} className="text-xs text-slate-400 hover:text-red-500 underline">回報異常</button>
-                                </div>
-                            </div>
-                        ))}
+                            );
+                        })}
+                        {historyLogs.length === 0 && (
+                            <div className="text-center text-slate-400 py-8 text-sm">尚無打卡記錄</div>
+                        )}
                     </div>
                 </div>
             )}
@@ -688,32 +984,107 @@ export default function EmployeePortal() {
                 <div className="space-y-4">
                     <h3 className="font-bold text-slate-700 flex items-center gap-2"><Coffee size={18}/> 請假申請</h3>
                     
-                    {/* 🟢 新增：我的休假概況統計卡片 */}
-                    {leaveStats && Object.keys(leaveStats).length > 0 && (
-                        <div className="bg-gradient-to-br from-teal-50 to-blue-50 p-4 rounded-xl shadow-sm border border-teal-100">
-                            <h4 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
-                                <Calendar size={16} className="text-teal-600"/>
-                                我的休假概況 (今年度)
-                            </h4>
-                            <div className="space-y-2">
-                                {leaveStats.annual && (
-                                    <div className="bg-white/80 p-2 rounded-lg border border-teal-200">
-                                        <div className="flex justify-between items-center">
-                                            <span className="text-xs font-bold text-slate-600">特休</span>
-                                            <span className="text-sm font-black text-teal-700">
-                                                已用 {Number((leaveStats.annual.used || 0) / 8).toFixed(1)} 天
-                                                {leaveStats.annual.quota !== undefined && (
-                                                    <> / 額度 {Number(leaveStats.annual.quota).toFixed(1)} 天</>
-                                                )}
-                                            </span>
-                                        </div>
-                                        {leaveStats.annual.remaining !== undefined && (
-                                            <div className="text-xs text-slate-500 mt-1">
-                                                剩餘：<span className="font-bold text-teal-600">{Number(leaveStats.annual.remaining).toFixed(1)} 天</span>
-                                            </div>
-                                        )}
+                    {/* 🟢 優化：年休儀表板 (特休概況卡片) */}
+                    <div className="bg-gradient-to-br from-teal-50 via-blue-50 to-indigo-50 p-5 rounded-xl shadow-lg border-2 border-teal-200">
+                        <h4 className="text-base font-bold text-slate-800 mb-4 flex items-center gap-2">
+                            <Calendar size={18} className="text-teal-600"/>
+                            特休概況
+                        </h4>
+                        
+                        <div className="space-y-3">
+                            {/* 到職日期 */}
+                            {staffLeaveInfo?.start_date && (
+                                <div className="bg-white/90 p-3 rounded-lg border border-slate-200">
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-xs font-bold text-slate-600">到職日期</span>
+                                        <span className="text-sm font-black text-slate-800">
+                                            {new Date(staffLeaveInfo.start_date).toLocaleDateString('zh-TW', { 
+                                                year: 'numeric', 
+                                                month: 'long', 
+                                                day: 'numeric' 
+                                            })}
+                                        </span>
                                     </div>
-                                )}
+                                </div>
+                            )}
+
+                            {/* 今年特休 */}
+                            {(leaveStats?.annual || staffLeaveInfo?.annual_leave_quota) && (
+                                <div className="bg-white/90 p-3 rounded-lg border-2 border-teal-300">
+                                    <div className="flex justify-between items-center mb-2">
+                                        <span className="text-sm font-bold text-slate-700">今年特休</span>
+                                        <span className="text-lg font-black text-teal-700">
+                                            {staffLeaveInfo?.annual_leave_quota !== null && staffLeaveInfo?.annual_leave_quota !== undefined
+                                                ? `${Number(staffLeaveInfo.annual_leave_quota).toFixed(1)} 天`
+                                                : leaveStats?.annual?.quota !== undefined
+                                                ? `${Number(leaveStats.annual.quota).toFixed(1)} 天`
+                                                : '未設定額度'}
+                                        </span>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-2 text-xs">
+                                        <div className="bg-slate-50 p-2 rounded">
+                                            <div className="text-slate-500 mb-0.5">已用</div>
+                                            <div className="font-bold text-orange-600">
+                                                {leaveStats?.annual 
+                                                    ? `${Number((leaveStats.annual.used || 0) / 8).toFixed(1)} 天`
+                                                    : '0 天'}
+                                            </div>
+                                        </div>
+                                        <div className="bg-teal-50 p-2 rounded">
+                                            <div className="text-slate-500 mb-0.5">剩餘</div>
+                                            <div className="font-bold text-teal-700">
+                                                {leaveStats?.annual?.remaining !== undefined 
+                                                    ? `${Number(leaveStats.annual.remaining).toFixed(1)} 天`
+                                                    : staffLeaveInfo?.annual_leave_quota !== null && staffLeaveInfo?.annual_leave_quota !== undefined
+                                                    ? `${Number(staffLeaveInfo.annual_leave_quota).toFixed(1)} 天`
+                                                    : '--'}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* 歷年紀錄（可展開） */}
+                            {staffLeaveInfo?.annual_leave_history && (
+                                <div className="bg-white/90 p-3 rounded-lg border border-slate-200">
+                                    <button
+                                        onClick={() => setShowAnnualHistory(!showAnnualHistory)}
+                                        className="w-full flex justify-between items-center"
+                                    >
+                                        <span className="text-xs font-bold text-slate-600">歷年特休紀錄</span>
+                                        <ChevronRight 
+                                            size={16} 
+                                            className={`text-slate-400 transition-transform ${showAnnualHistory ? 'rotate-90' : ''}`}
+                                        />
+                                    </button>
+                                    {showAnnualHistory && (
+                                        <div className="mt-3 space-y-2 pt-3 border-t border-slate-200">
+                                            {typeof staffLeaveInfo.annual_leave_history === 'string' ? (
+                                                <div className="text-xs text-slate-600 bg-slate-50 p-2 rounded">
+                                                    {staffLeaveInfo.annual_leave_history}
+                                                </div>
+                                            ) : (
+                                                Object.entries(staffLeaveInfo.annual_leave_history)
+                                                    .sort(([a], [b]) => b.localeCompare(a)) // 由新到舊排序
+                                                    .map(([year, days]: [string, any]) => (
+                                                        <div key={year} className="flex justify-between items-center bg-slate-50 p-2 rounded text-xs">
+                                                            <span className="font-bold text-slate-700">{year} 年</span>
+                                                            <span className="text-teal-600 font-bold">{days} 天</span>
+                                                        </div>
+                                                    ))
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                    
+                    {/* 🟢 其他假別統計（保留原有設計） */}
+                    {leaveStats && Object.keys(leaveStats).length > 0 && (
+                        <div className="bg-gradient-to-br from-slate-50 to-gray-50 p-4 rounded-xl shadow-sm border border-slate-200">
+                            <h4 className="text-xs font-bold text-slate-600 mb-2">其他假別 (今年度)</h4>
+                            <div className="space-y-2">
                                 {leaveStats.personal && (
                                     <div className="bg-white/80 p-2 rounded-lg border border-slate-200">
                                         <div className="flex justify-between items-center">
@@ -781,27 +1152,38 @@ export default function EmployeePortal() {
                     <div className="space-y-2 mt-4">
                         <h4 className="text-xs font-bold text-slate-400">申請紀錄</h4>
                         {leaveHistory.map((l,i) => (
-                            <div key={i} className="bg-white p-3 rounded-lg border border-slate-100 flex justify-between items-center">
-                                <div className="flex-1">
-                                    <div className="font-bold text-sm text-slate-700">
-                                        {l.type} 
-                                        <span className="text-xs font-normal text-slate-400 ml-1">
-                                            {l.leave_type && `(${l.leave_type}) `}
-                                            {formatDateTime(l.start_time)}
-                                        </span>
+                            <div key={i} className="bg-white p-3 rounded-lg border border-slate-100">
+                                <div className="flex justify-between items-start mb-2">
+                                    <div className="flex-1">
+                                        <div className="font-bold text-sm text-slate-700">
+                                            {l.type} 
+                                            <span className="text-xs font-normal text-slate-400 ml-1">
+                                                {l.leave_type && `(${l.leave_type}) `}
+                                                {formatDateTime(l.start_time)}
+                                            </span>
+                                        </div>
+                                        <div className="text-xs text-slate-400 mt-1">{l.reason}</div>
                                     </div>
-                                    <div className="text-xs text-slate-400 mt-1">{l.reason}</div>
+                                    {/* 🟢 優化：狀態標籤樣式（更醒目的設計） */}
+                                    <span className={`text-[10px] px-2.5 py-1 rounded font-bold whitespace-nowrap ml-2 border ${
+                                        l.status === 'approved' 
+                                            ? 'bg-green-100 text-green-700 border-green-300' 
+                                            : l.status === 'rejected' 
+                                            ? 'bg-red-100 text-red-700 border-red-300' 
+                                            : 'bg-yellow-100 text-orange-700 border-orange-300'
+                                    }`}>
+                                        {l.status === 'approved' 
+                                            ? '✓ 已通過' 
+                                            : l.status === 'rejected' 
+                                            ? '✗ 已駁回' 
+                                            : '⏳ 請假簽核中'}
+                                    </span>
                                 </div>
-                                {/* 🟢 優化：狀態標籤樣式 */}
-                                <span className={`text-xs px-2 py-1 rounded font-bold whitespace-nowrap ml-2 ${
-                                    l.status === 'approved' 
-                                        ? 'bg-green-100 text-green-700 border border-green-300' 
-                                        : l.status === 'rejected' 
-                                        ? 'bg-red-100 text-red-700 border border-red-300' 
-                                        : 'bg-yellow-100 text-yellow-700 border border-yellow-300'
-                                }`}>
-                                    {getStatusLabel(l.status)}
-                                </span>
+                                {l.hours && (
+                                    <div className="text-xs text-slate-500 mt-1">
+                                        時數：{Number(l.hours).toFixed(1)} 小時
+                                    </div>
+                                )}
                             </div>
                         ))}
                         {leaveHistory.length === 0 && (
@@ -817,6 +1199,154 @@ export default function EmployeePortal() {
                     <PortalSalaryView user={staffUser} />
                 </div>
             )}
+
+            {/* 🟢 新增：個人資料頁面 */}
+            {view === 'profile' && profile && (
+                <div className="space-y-4">
+                    <div className="flex justify-between items-center">
+                        <h3 className="font-bold text-slate-700 flex items-center gap-2">
+                            <User size={18}/>
+                            個人資料
+                        </h3>
+                        {!isEditingProfile && (
+                            <button 
+                                onClick={() => setIsEditingProfile(true)}
+                                className="text-sm text-teal-600 font-bold flex items-center gap-1"
+                            >
+                                <Edit2 size={14}/>
+                                編輯
+                            </button>
+                        )}
+                    </div>
+
+                    <div className="bg-white p-4 rounded-xl shadow-sm space-y-4">
+                        {/* 唯讀欄位 */}
+                        <div>
+                            <label className="text-xs text-slate-400 mb-1 block">姓名</label>
+                            <div className="text-sm font-bold text-slate-800">{profile.name}</div>
+                        </div>
+                        <div>
+                            <label className="text-xs text-slate-400 mb-1 block">職稱</label>
+                            <div className="text-sm font-bold text-slate-800">{profile.role}</div>
+                        </div>
+                        <div>
+                            <label className="text-xs text-slate-400 mb-1 block">到職日</label>
+                            <div className="text-sm font-bold text-slate-800">
+                                {profile.start_date ? new Date(profile.start_date).toLocaleDateString('zh-TW') : '未設定'}
+                            </div>
+                        </div>
+
+                        {/* 可編輯欄位 */}
+                        <div>
+                            <label className="text-xs text-slate-400 mb-1 block">電話</label>
+                            {isEditingProfile ? (
+                                <input 
+                                    type="text" 
+                                    value={profileForm.phone}
+                                    onChange={e => setProfileForm({...profileForm, phone: e.target.value})}
+                                    className="w-full border p-2 rounded bg-slate-50 text-sm"
+                                    placeholder="請輸入電話"
+                                />
+                            ) : (
+                                <div className="text-sm font-bold text-slate-800">{profile.phone || '未設定'}</div>
+                            )}
+                        </div>
+                        <div>
+                            <label className="text-xs text-slate-400 mb-1 block">地址</label>
+                            {isEditingProfile ? (
+                                <input 
+                                    type="text" 
+                                    value={profileForm.address}
+                                    onChange={e => setProfileForm({...profileForm, address: e.target.value})}
+                                    className="w-full border p-2 rounded bg-slate-50 text-sm"
+                                    placeholder="請輸入地址"
+                                />
+                            ) : (
+                                <div className="text-sm font-bold text-slate-800">{profile.address || '未設定'}</div>
+                            )}
+                        </div>
+                        <div>
+                            <label className="text-xs text-slate-400 mb-1 block">緊急聯絡人</label>
+                            {isEditingProfile ? (
+                                <input 
+                                    type="text" 
+                                    value={profileForm.emergency_contact}
+                                    onChange={e => setProfileForm({...profileForm, emergency_contact: e.target.value})}
+                                    className="w-full border p-2 rounded bg-slate-50 text-sm"
+                                    placeholder="請輸入緊急聯絡人"
+                                />
+                            ) : (
+                                <div className="text-sm font-bold text-slate-800">{profile.emergency_contact || '未設定'}</div>
+                            )}
+                        </div>
+
+                        {/* 敏感資料（唯讀 + 遮罩） */}
+                        <div className="border-t border-slate-200 pt-4">
+                            <div>
+                                <label className="text-xs text-slate-400 mb-1 block">銀行帳號</label>
+                                <div className="text-sm font-bold text-slate-800">
+                                    {maskSensitiveData(profile.bank_account)}
+                                </div>
+                                <p className="text-[10px] text-slate-400 mt-1">如需修改請洽管理員</p>
+                            </div>
+                            <div className="mt-3">
+                                <label className="text-xs text-slate-400 mb-1 block">身分證字號</label>
+                                <div className="text-sm font-bold text-slate-800">
+                                    {maskSensitiveData(profile.id_number)}
+                                </div>
+                                <p className="text-[10px] text-slate-400 mt-1">如需修改請洽管理員</p>
+                            </div>
+                        </div>
+
+                        {/* 歷年特休紀錄 */}
+                        {profile.annual_leave_history && (
+                            <div className="border-t border-slate-200 pt-4">
+                                <label className="text-xs text-slate-400 mb-2 block">歷年特休紀錄</label>
+                                <div className="space-y-2">
+                                    {typeof profile.annual_leave_history === 'string' ? (
+                                        <div className="text-xs text-slate-600 bg-slate-50 p-2 rounded">
+                                            {profile.annual_leave_history}
+                                        </div>
+                                    ) : (
+                                        Object.entries(profile.annual_leave_history).map(([year, days]: [string, any]) => (
+                                            <div key={year} className="flex justify-between items-center bg-slate-50 p-2 rounded text-xs">
+                                                <span className="font-bold text-slate-700">{year} 年</span>
+                                                <span className="text-teal-600 font-bold">{days} 天</span>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* 編輯按鈕 */}
+                        {isEditingProfile && (
+                            <div className="flex gap-2 pt-4 border-t border-slate-200">
+                                <button 
+                                    onClick={() => {
+                                        setIsEditingProfile(false);
+                                        setProfileForm({
+                                            phone: profile.phone || '',
+                                            address: profile.address || '',
+                                            emergency_contact: profile.emergency_contact || ''
+                                        });
+                                    }}
+                                    className="flex-1 py-2 border rounded-lg text-sm font-bold text-slate-600"
+                                >
+                                    取消
+                                </button>
+                                <button 
+                                    onClick={updateProfile}
+                                    className="flex-1 py-2 bg-teal-600 text-white rounded-lg text-sm font-bold flex items-center justify-center gap-1"
+                                >
+                                    <Save size={14}/>
+                                    儲存
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
         </div>
 
         <div className="fixed bottom-0 left-0 w-full bg-white border-t p-2 pb-6 flex justify-around items-center text-[10px] font-bold text-slate-400 z-50 max-w-md mx-auto left-0 right-0">
@@ -825,6 +1355,7 @@ export default function EmployeePortal() {
             <button onClick={() => setView('roster')} className={`flex flex-col items-center gap-1 w-14 p-1.5 rounded-xl transition ${view === 'roster' ? 'text-teal-600 bg-teal-50' : ''}`}><Calendar size={20}/>班表</button>
             <button onClick={() => setView('leave')} className={`flex flex-col items-center gap-1 w-14 p-1.5 rounded-xl transition ${view === 'leave' ? 'text-teal-600 bg-teal-50' : ''}`}><Coffee size={20}/>請假</button>
             <button onClick={() => setView('payslip')} className={`flex flex-col items-center gap-1 w-14 p-1.5 rounded-xl transition ${view === 'payslip' ? 'text-teal-600 bg-teal-50' : ''}`}><DollarSign size={20}/>薪資</button>
+            <button onClick={() => setView('profile')} className={`flex flex-col items-center gap-1 w-14 p-1.5 rounded-xl transition ${view === 'profile' ? 'text-teal-600 bg-teal-50' : ''}`}><User size={20}/>個人</button>
         </div>
     </div>
   );

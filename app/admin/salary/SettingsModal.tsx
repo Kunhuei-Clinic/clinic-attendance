@@ -83,6 +83,31 @@ export default function SettingsModal({ staff, updateStaff, entityList, onClose 
                   </div>
                 </div>
              </div>
+
+             {/* 🟢 新增：歷年特休紀錄 */}
+             <div>
+                <label className="text-xs font-bold text-slate-500 mb-1 block">歷年特休紀錄 (JSON 格式)</label>
+                <textarea
+                  value={typeof staff.annual_leave_history === 'string' 
+                    ? staff.annual_leave_history 
+                    : JSON.stringify(staff.annual_leave_history || {}, null, 2)}
+                  onChange={(e) => {
+                    try {
+                      // 嘗試解析 JSON，如果失敗則存為字串
+                      const parsed = JSON.parse(e.target.value);
+                      updateStaff(staff.id, 'annual_leave_history', parsed);
+                    } catch {
+                      // 如果不是有效 JSON，存為字串
+                      updateStaff(staff.id, 'annual_leave_history', e.target.value);
+                    }
+                  }}
+                  className="w-full border p-2 rounded-lg bg-white text-xs font-mono min-h-[100px]"
+                  placeholder='例如: {"2023": 7, "2024": 10} 或直接輸入文字'
+                />
+                <p className="text-[10px] text-slate-400 mt-1">
+                  可輸入 JSON 物件 (例如: {"{"}"2023": 7, "2024": 10{"}"}) 或純文字
+                </p>
+             </div>
           </div>
 
           {/* 醫師專屬設定 (簡化顯示) */}

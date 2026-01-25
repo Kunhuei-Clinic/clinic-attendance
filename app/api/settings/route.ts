@@ -8,6 +8,7 @@ import { getClinicIdFromRequest } from '@/lib/clinicHelper';
  * 
  * Query Parameters:
  *   - key: string (optional, 取得特定設定)
+ *   - type: 'clinic' (optional, 取得診所設定 clinics.settings)
  */
 export async function GET(request: NextRequest) {
   try {
@@ -21,8 +22,38 @@ export async function GET(request: NextRequest) {
     }
 
     const searchParams = request.nextUrl.searchParams;
+    const type = searchParams.get('type');
     const key = searchParams.get('key');
 
+    // 🟢 新增：取得診所設定 (clinics.settings)
+    if (type === 'clinic') {
+      const { data: clinic, error: clinicError } = await supabaseAdmin
+        .from('clinics')
+        .select('settings')
+        .eq('id', clinicId)
+        .single();
+
+      if (clinicError) {
+        console.error('Fetch clinic settings error:', clinicError);
+        return NextResponse.json(
+          { data: {}, error: clinicError.message },
+          { status: 500 }
+        );
+      }
+
+      // 確保有預設值
+      const settings = clinic?.settings || {};
+      const defaultSettings = {
+        overtime_threshold: settings.overtime_threshold ?? 9,
+        overtime_approval_required: settings.overtime_approval_required ?? true
+      };
+
+      return NextResponse.json({ 
+        data: { ...settings, ...defaultSettings }
+      });
+    }
+
+    // 原有的 system_settings 查詢邏輯
     // 🟢 多租戶：強制加上 clinic_id 過濾
     let query = supabaseAdmin
       .from('system_settings')
@@ -60,10 +91,13 @@ export async function GET(request: NextRequest) {
  * Request Body:
  *   [
  *     { key: string, value: string },
- *     ...
+ *     ... 
  *   ]
  *   或單一物件 { key: string, value: string }
  *   (不包含 clinic_id，由後端自動填入)
+ * 
+ * 或更新診所設定 (clinics.settings):
+ *   { type: 'clinic', settings: { overtime_threshold: 9, overtime_approval_required: true } }
  */
 export async function POST(request: NextRequest) {
   try {
@@ -77,6 +111,52 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
+
+    // 🟢 新增：處理診所設定 (clinics.settings)
+    if (body.type === 'clinic' && body.settings) {
+      // 取得現有設定
+      const { data: clinic, error: fetchError } = await supabaseAdmin
+        .from('clinics')
+        .select('settings')
+        .eq('id', clinicId)
+        .single();
+
+      if (fetchError) {
+        console.error('Fetch clinic settings error:', fetchError);
+        return NextResponse.json(
+          { success: false, message: `讀取設定失敗: ${fetchError.message}` },
+          { status: 500 }
+        );
+      }
+
+      // 合併設定
+      const currentSettings = clinic?.settings || {};
+      const updatedSettings = {
+        ...currentSettings,
+        ...body.settings
+      };
+
+      // 更新診所設定
+      const { error: updateError } = await supabaseAdmin
+        .from('clinics')
+        .update({ settings: updatedSettings })
+        .eq('id', clinicId);
+
+      if (updateError) {
+        console.error('Update clinic settings error:', updateError);
+        return NextResponse.json(
+          { success: false, message: `儲存失敗: ${updateError.message}` },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: '診所設定已更新'
+      });
+    }
+
+    // 原有的 system_settings 更新邏輯
     const rawUpdates = Array.isArray(body) ? body : [body];
 
     // 🟢 多租戶：移除前端可能傳入的 clinic_id，由後端自動填入

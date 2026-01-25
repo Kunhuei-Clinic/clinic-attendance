@@ -16,7 +16,7 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin';
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
-    const type = searchParams.get('type') as 'history' | 'roster' | 'leave' | 'salary' | null;
+    const type = searchParams.get('type') as 'history' | 'roster' | 'leave' | 'salary' | 'home' | null;
     const staffId = searchParams.get('staffId');
     const month = searchParams.get('month');
 
@@ -28,9 +28,9 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    if (!['history', 'roster', 'leave', 'salary'].includes(type)) {
+    if (!['history', 'roster', 'leave', 'salary', 'home'].includes(type)) {
       return NextResponse.json(
-        { data: [], error: '無效的 type 參數，必須是 history, roster, leave 或 salary' },
+        { data: [], error: '無效的 type 參數，必須是 history, roster, leave, salary 或 home' },
         { status: 400 }
       );
     }
@@ -44,11 +44,27 @@ export async function GET(request: NextRequest) {
     }
 
     // 步驟 1: 查詢員工資料以取得 clinic_id 和 role
-    const { data: staff, error: staffError } = await supabaseAdmin
-      .from('staff')
-      .select('id, name, role, clinic_id')
-      .eq('id', staffIdNum)
-      .single();
+    // 如果是 home 類型，需要更多欄位
+    let staff: any;
+    let staffError: any;
+    
+    if (type === 'home') {
+      const result = await supabaseAdmin
+        .from('staff')
+        .select('id, name, role, clinic_id, start_date, annual_leave_history, phone, address, emergency_contact, bank_account, id_number')
+        .eq('id', staffIdNum)
+        .single();
+      staff = result.data;
+      staffError = result.error;
+    } else {
+      const result = await supabaseAdmin
+        .from('staff')
+        .select('id, name, role, clinic_id')
+        .eq('id', staffIdNum)
+        .single();
+      staff = result.data;
+      staffError = result.error;
+    }
 
     if (staffError || !staff) {
       return NextResponse.json(
@@ -69,6 +85,40 @@ export async function GET(request: NextRequest) {
     let queryResult: any;
 
     switch (type) {
+      case 'home': {
+        // 🟢 新增：首頁資料（公告 + 個人資料）
+        // 查詢啟用的公告
+        const { data: announcements, error: annError } = await supabaseAdmin
+          .from('announcements')
+          .select('*')
+          .eq('clinic_id', staffClinicId)
+          .eq('is_active', true)
+          .order('created_at', { ascending: false })
+          .limit(5); // 只回傳最新 5 筆
+
+        if (annError) {
+          console.error('Error fetching announcements:', annError);
+        }
+
+        // 回傳公告和個人資料
+        queryResult = {
+          announcements: announcements || [],
+          profile: {
+            id: staff.id,
+            name: staff.name,
+            role: staff.role,
+            start_date: staff.start_date || null,
+            annual_leave_history: staff.annual_leave_history || null,
+            phone: staff.phone || '',
+            address: staff.address || '',
+            emergency_contact: staff.emergency_contact || '',
+            bank_account: staff.bank_account || '',
+            id_number: staff.id_number || ''
+          }
+        };
+        break;
+      }
+
       case 'history': {
         // 查詢 attendance_logs
         let query = supabaseAdmin
@@ -286,10 +336,22 @@ export async function GET(request: NextRequest) {
           stats.annual = { used: stats.annual.used };
         }
 
-        // 回傳格式：包含列表和統計
+        // 🟢 優化：取得員工的完整資料（用於年休儀表板）
+        const { data: staffProfile } = await supabaseAdmin
+          .from('staff')
+          .select('start_date, annual_leave_history, annual_leave_quota')
+          .eq('id', staffIdNum)
+          .single();
+
+        // 回傳格式：包含列表、統計和員工資料
         queryResult = {
           leaves: leaves || [],
-          stats: stats
+          stats: stats,
+          staffInfo: {
+            start_date: staffProfile?.start_date || null,
+            annual_leave_history: staffProfile?.annual_leave_history || null,
+            annual_leave_quota: staffProfile?.annual_leave_quota || null
+          }
         };
         break;
       }

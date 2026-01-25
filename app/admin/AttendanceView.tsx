@@ -14,7 +14,8 @@ import {
   Pencil,
   AlertCircle,
   Briefcase,
-  Trash2
+  Trash2,
+  CheckCircle
 } from 'lucide-react';
 import { saveAs } from 'file-saver';
 
@@ -120,6 +121,36 @@ export default function AttendanceView() {
   };
 
   // 刪除紀錄功能
+  // 🟢 新增：處理加班審核
+  const handleOvertimeApproval = async (logId: number, status: 'approved' | 'rejected') => {
+    if (!confirm(`確定要${status === 'approved' ? '核准' : '駁回'}這筆加班申請嗎？`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/attendance', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: logId,
+          overtime_status: status
+        })
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        alert(`加班申請已${status === 'approved' ? '核准' : '駁回'}`);
+        fetchLogs();
+      } else {
+        alert('操作失敗: ' + (result.message || result.error));
+      }
+    } catch (error: any) {
+      console.error('Overtime approval error:', error);
+      alert('操作失敗: ' + error.message);
+    }
+  };
+
   const handleDelete = async (id: number) => {
     if (!confirm('確定要永久刪除這筆打卡紀錄嗎？此操作無法復原。')) return;
 
@@ -495,9 +526,25 @@ export default function AttendanceView() {
                         </td>
                         <td className="p-4 text-slate-500 font-mono">{log.clock_in_time?.slice(0, 10)}</td>
                         <td className="p-4">
-                            <span className={`px-2 py-1 rounded text-xs font-bold ${log.work_type === 'overtime' ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'}`}>
-                                {log.work_type === 'overtime' ? '加班' : '正常班'}
-                            </span>
+                            <div className="flex flex-col gap-1">
+                                <span className={`px-2 py-1 rounded text-xs font-bold ${log.work_type === 'overtime' ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'}`}>
+                                    {log.work_type === 'overtime' ? '加班' : '正常班'}
+                                </span>
+                                {/* 🟢 新增：加班狀態標籤 */}
+                                {log.is_overtime && (
+                                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                        log.overtime_status === 'approved' 
+                                            ? 'bg-green-100 text-green-700' 
+                                            : log.overtime_status === 'rejected'
+                                            ? 'bg-red-100 text-red-700'
+                                            : 'bg-yellow-100 text-yellow-700'
+                                    }`}>
+                                        {log.overtime_status === 'approved' ? '已核准' 
+                                         : log.overtime_status === 'rejected' ? '已駁回'
+                                         : '待審核'}
+                                    </span>
+                                )}
+                            </div>
                         </td>
                         <td className="p-4 font-mono text-slate-700 font-bold">
                             {log.clock_in_time ? new Date(log.clock_in_time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '-'}
@@ -519,6 +566,25 @@ export default function AttendanceView() {
                             {log.note || log.anomaly_reason || '-'}
                         </td>
                         <td className="p-4 text-center flex items-center justify-center gap-2">
+                            {/* 🟢 新增：加班審核按鈕 */}
+                            {log.is_overtime && log.overtime_status === 'pending' && (
+                                <>
+                                    <button 
+                                        onClick={() => handleOvertimeApproval(log.id, 'approved')}
+                                        className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition"
+                                        title="核准加班"
+                                    >
+                                        <CheckCircle size={16}/>
+                                    </button>
+                                    <button 
+                                        onClick={() => handleOvertimeApproval(log.id, 'rejected')}
+                                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
+                                        title="駁回加班"
+                                    >
+                                        <X size={16}/>
+                                    </button>
+                                </>
+                            )}
                             <button 
                                 onClick={() => openEditModal(log)}
                                 className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition"

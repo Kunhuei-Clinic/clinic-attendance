@@ -147,8 +147,13 @@ export default function SettingsView() {
     // ==========================================
     // 🟢 功能 B: 系統設定 (Logic)
     // ==========================================
+    // 🟢 新增：加班設定
+    const [overtimeThreshold, setOvertimeThreshold] = useState(9);
+    const [overtimeApprovalRequired, setOvertimeApprovalRequired] = useState(true);
+
     const fetchSystemSettings = async () => {
         try {
+            // 取得系統設定
             const response = await fetch('/api/settings');
             const result = await response.json();
             if (result.data) {
@@ -167,6 +172,14 @@ export default function SettingsView() {
                     }
                 });
             }
+
+            // 🟢 新增：取得診所設定（加班設定）
+            const clinicResponse = await fetch('/api/settings?type=clinic');
+            const clinicResult = await clinicResponse.json();
+            if (clinicResult.data) {
+                setOvertimeThreshold(clinicResult.data.overtime_threshold ?? 9);
+                setOvertimeApprovalRequired(clinicResult.data.overtime_approval_required !== false);
+            }
         } catch (error) {
             console.error('Fetch system settings error:', error);
         }
@@ -175,6 +188,7 @@ export default function SettingsView() {
     const handleSaveSystem = async () => {
         setLoadingSystem(true);
         try {
+            // 系統設定
             const updates = [
                 { key: 'org_entities', value: JSON.stringify(entities) },
                 { key: 'special_clinic_types', value: JSON.stringify(specialClinics) },
@@ -188,11 +202,25 @@ export default function SettingsView() {
             });
             const result = await response.json();
             
-            if (result.success) {
+            // 🟢 新增：儲存診所設定（加班設定）
+            const clinicResponse = await fetch('/api/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    type: 'clinic',
+                    settings: {
+                        overtime_threshold: overtimeThreshold,
+                        overtime_approval_required: overtimeApprovalRequired
+                    }
+                })
+            });
+            const clinicResult = await clinicResponse.json();
+            
+            if (result.success && clinicResult.success) {
                 setSystemMessage('✅ 設定已更新，排班表將套用新時間');
                 setTimeout(() => setSystemMessage(''), 3000);
             } else {
-                setSystemMessage('❌ 儲存失敗: ' + result.message);
+                setSystemMessage('❌ 儲存失敗: ' + (result.message || clinicResult.message));
             }
         } catch (error) {
             console.error('Save system settings error:', error);
@@ -404,6 +432,52 @@ export default function SettingsView() {
                                     <div className="text-lg font-bold mb-1">曆年制</div>
                                     <div className="text-xs opacity-80">Calendar System</div>
                                 </button>
+                            </div>
+                        </div>
+
+                        {/* 🟢 新增：加班設定 */}
+                        <div>
+                            <h3 className="text-lg font-bold text-slate-700 border-b pb-2 mb-4 flex items-center gap-2"><Clock size={20}/> 加班設定 (Overtime Settings)</h3>
+                            <div className="bg-orange-50 p-4 rounded-lg border border-orange-100 mb-4">
+                                <p className="text-sm text-orange-800">
+                                    當員工每日工時超過設定門檻時，系統會自動提示員工確認是否申請加班。
+                                </p>
+                            </div>
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-bold text-slate-700 mb-2">
+                                        加班門檻 (小時)
+                                    </label>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        max="24"
+                                        step="0.5"
+                                        value={overtimeThreshold}
+                                        onChange={(e) => setOvertimeThreshold(Number(e.target.value))}
+                                        className="w-full border p-3 rounded-lg bg-white text-lg font-bold"
+                                    />
+                                    <p className="text-xs text-slate-400 mt-1">
+                                        當日工時超過此門檻時，系統會提示員工確認是否申請加班
+                                    </p>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <input
+                                        type="checkbox"
+                                        id="overtime_approval"
+                                        checked={overtimeApprovalRequired}
+                                        onChange={(e) => setOvertimeApprovalRequired(e.target.checked)}
+                                        className="w-5 h-5"
+                                    />
+                                    <label htmlFor="overtime_approval" className="text-sm font-bold text-slate-700">
+                                        需要主管審核
+                                    </label>
+                                </div>
+                                <p className="text-xs text-slate-400">
+                                    {overtimeApprovalRequired 
+                                        ? '✓ 加班申請需要主管審核後才會生效' 
+                                        : '✓ 加班申請將自動核准，無需審核'}
+                                </p>
                             </div>
                         </div>
                     </div>
