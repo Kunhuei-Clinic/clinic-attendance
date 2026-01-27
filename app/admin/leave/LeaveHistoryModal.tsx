@@ -1,14 +1,19 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { Calendar, DollarSign, FileText, Save, X } from 'lucide-react';
+import { Calendar, DollarSign, FileText, Save, Wand2, X } from 'lucide-react';
 
+// 年度特休帳本資料結構
+// days: 應休 (Quota)
+// manual_*: 手動補登（系統上線前或特殊調整）
+// system_*: 系統自動統計（請假紀錄與結算紀錄）
 type AnnualLeaveItem = {
   year: string;
-  days: number;
-  used?: number;
-  settled?: number;
-  balance?: number;
+  days: number;              // 應休 (Quota)
+  manual_used: number;       // 手動已休 (Manual Used)
+  manual_settled: number;    // 手動結算 (Manual Settled)
+  system_used?: number;      // 系統已休 (唯讀)
+  system_settled?: number;   // 系統結算 (唯讀)
   note?: string;
 };
 
@@ -17,6 +22,20 @@ type LeaveHistoryModalProps = {
   onClose: () => void;
   staff: any | null;
   onSaved?: () => void;
+};
+
+// 依台灣勞基法（簡化版）計算特休天數（週年制）
+// years: 已滿年資（整數年）
+const calculateTaiwanLeaveByYears = (years: number): number => {
+  if (years < 0.5) return 0;
+  if (years < 1) return 3;        // 滿 0.5 年
+  if (years < 2) return 7;        // 滿 1 年
+  if (years < 3) return 10;       // 滿 2 年
+  if (years < 5) return 14;       // 滿 3–4 年
+  if (years < 10) return 15;      // 滿 5–9 年
+  // 10 年以上：每一年加 1 天，上限 30 天
+  const extra = Math.min(15, Math.floor(years) - 9); // 年資 10 年 => +1，最終上限 15+15=30
+  return 15 + extra;
 };
 
 export default function LeaveHistoryModal({
@@ -32,10 +51,17 @@ export default function LeaveHistoryModal({
   const [newLeaveDays, setNewLeaveDays] = useState('');
   const [newLeaveNote, setNewLeaveNote] = useState('');
 
-  const totalBalance = useMemo(
-    () => annualLeaveHistory.reduce((sum, item) => sum + (item.balance ?? 0), 0),
-    [annualLeaveHistory],
-  );
+  const totalBalance = useMemo(() => {
+    return annualLeaveHistory.reduce((sum, item) => {
+      const days = Number(item.days ?? 0);
+      const used =
+        Number(item.manual_used ?? 0) + Number(item.system_used ?? 0);
+      const settled =
+        Number(item.manual_settled ?? 0) + Number(item.system_settled ?? 0);
+      const balance = days - used - settled;
+      return sum + balance;
+    }, 0);
+  }, [annualLeaveHistory]);
 
   // 當 Modal 開啟且有員工資料時載入歷史資料
   useEffect(() => {
@@ -89,16 +115,16 @@ export default function LeaveHistoryModal({
               (h: any) => String(h.year) === String(year),
             );
             const quota = Number(base?.days ?? 0);
-            const used = Number(usageByYear[year] ?? 0);
-            const settled = Number(settledByYear[year] ?? 0);
-            const balance = Math.round((quota - used - settled) * 100) / 100;
+            const systemUsed = Number(usageByYear[year] ?? 0);
+            const systemSettled = Number(settledByYear[year] ?? 0);
 
             return {
               year: String(year),
               days: quota,
-              used,
-              settled,
-              balance,
+              manual_used: 0,
+              manual_settled: 0,
+              system_used: systemUsed,
+              system_settled: systemSettled,
               note: base?.note ?? '',
             };
           })
@@ -175,18 +201,27 @@ export default function LeaveHistoryModal({
       (item) => item.year === year,
     );
 
-    const used = 0;
-    const settled = 0;
-    const balance = days - used - settled;
-
     if (existingIndex >= 0) {
       const newList = [...annualLeaveHistory];
-      newList[existingIndex] = { ...newList[existingIndex], year, days, note: newLeaveNote, balance };
+      newList[existingIndex] = {
+        ...newList[existingIndex],
+        year,
+        days,
+        note: newLeaveNote,
+      };
       setAnnualLeaveHistory(newList);
     } else {
-      const newList = [
+      const newList: AnnualLeaveItem[] = [
         ...annualLeaveHistory,
-        { year, days, used, settled, balance, note: newLeaveNote },
+        {
+          year,
+          days,
+          manual_used: 0,
+          manual_settled: 0,
+          system_used: 0,
+          system_settled: 0,
+          note: newLeaveNote,
+        },
       ];
       newList.sort((a, b) => b.year.localeCompare(a.year)); // 由新到舊排序
       setAnnualLeaveHistory(newList);
@@ -201,6 +236,66 @@ export default function LeaveHistoryModal({
     const newList = [...annualLeaveHistory];
     newList.splice(index, 1);
     setAnnualLeaveHistory(newList);
+  };
+
+  // 依到職日自動試算年度特休額度（週年制）
+  const handleAutoCalculateFromStartDate = () => {
+    if (!staff?.start_date) {
+      alert('此員工尚未設定到職日，無法自動試算特休。');
+      return;
+    }
+
+    try {
+      const startDate = new Date(staff.start_date);
+      if (Number.isNaN(startDate.getTime())) {
+        alert('到職日格式有誤，無法自動試算。');
+        return;
+      }
+
+      const now = new Date();
+      const msPerYear = 1000 * 60 * 60 * 24 * 365.25;
+      const totalYears = (now.getTime() - startDate.getTime()) / msPerYear;
+      const maxFullYears = Math.floor(totalYears);
+
+      if (maxFullYears <= 0) {
+        alert('到職未滿半年，目前尚無可計算的特休年度。');
+        return;
+      }
+
+      const existingYearMap: Record<string, AnnualLeaveItem> = {};
+      annualLeaveHistory.forEach((item) => {
+        existingYearMap[item.year] = item;
+      });
+
+      const newList: AnnualLeaveItem[] = [...annualLeaveHistory];
+
+      for (let i = 0; i <= maxFullYears; i++) {
+        const serviceYears = i + 1; // 以每滿一年為一階
+        const quota = calculateTaiwanLeaveByYears(serviceYears);
+        if (quota <= 0) continue;
+
+        const yearLabel = (startDate.getFullYear() + i).toString();
+
+        // 已存在的年度不覆蓋，只保留原本設定
+        if (existingYearMap[yearLabel]) continue;
+
+        newList.push({
+          year: yearLabel,
+          days: quota,
+          manual_used: 0,
+          manual_settled: 0,
+          system_used: 0,
+          system_settled: 0,
+          note: '依到職日自動試算',
+        });
+      }
+
+      newList.sort((a, b) => b.year.localeCompare(a.year));
+      setAnnualLeaveHistory(newList);
+    } catch (e) {
+      console.error('Auto calculate error:', e);
+      alert('自動試算時發生錯誤');
+    }
   };
 
   if (!isOpen || !staff) return null;
@@ -232,15 +327,33 @@ export default function LeaveHistoryModal({
             <>
               {/* 上方：年度帳本 */}
               <div className="bg-teal-50 rounded-xl p-6 border border-teal-200">
-                <div className="flex items-center justify-between mb-4">
-                  <h4 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                    <Calendar className="text-teal-600" /> 年度特休帳本
-                  </h4>
-                  <div className="text-sm text-teal-800 font-bold">
-                    帳本總剩餘：
-                    <span className="text-xl ml-1">
-                      {totalBalance.toFixed(1)} 天
-                    </span>
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-4">
+                  <div className="flex flex-col gap-1">
+                    <h4 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                      <Calendar className="text-teal-600" /> 年度特休帳本
+                    </h4>
+                    <div className="text-xs text-teal-700">
+                      計算依據：
+                      <span className="font-bold">
+                        {staff?.calculation_system === 'calendar' ? '曆年制 (目前僅展示，試算仍採週年制)' : '週年制'}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-end gap-2">
+                    <div className="text-sm text-teal-800 font-bold">
+                      帳本總剩餘：
+                      <span className="text-xl ml-1">
+                        {totalBalance.toFixed(1)} 天
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleAutoCalculateFromStartDate}
+                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold bg-white text-teal-700 border border-teal-300 hover:bg-teal-50 transition"
+                    >
+                      <Wand2 size={14} />
+                      🪄 依照到職日自動試算
+                    </button>
                   </div>
                 </div>
 
@@ -261,11 +374,13 @@ export default function LeaveHistoryModal({
                     <tbody className="divide-y divide-teal-100">
                       {annualLeaveHistory.length > 0 ? (
                         annualLeaveHistory.map((item, index) => {
-                          const balance = item.balance ??
-                            Math.round(
-                              (Number(item.days ?? 0) - Number(item.used ?? 0) - Number(item.settled ?? 0)) *
-                                100,
-                            ) / 100;
+                          const days = Number(item.days ?? 0);
+                          const totalUsed =
+                            Number(item.manual_used ?? 0) + Number(item.system_used ?? 0);
+                          const totalSettled =
+                            Number(item.manual_settled ?? 0) + Number(item.system_settled ?? 0);
+                          const balance =
+                            Math.round((days - totalUsed - totalSettled) * 100) / 100;
                           const isCleared = balance <= 0;
 
                           return (
@@ -295,10 +410,10 @@ export default function LeaveHistoryModal({
                                 />
                               </td>
                               <td className="p-2 text-right font-mono">
-                                {Number(item.used ?? 0).toFixed(1)}
+                                {totalUsed.toFixed(1)}
                               </td>
                               <td className="p-2 text-right font-mono text-orange-700">
-                                {Number(item.settled ?? 0).toFixed(1)}
+                                {totalSettled.toFixed(1)}
                               </td>
                               <td className="p-2 text-right font-mono font-bold text-green-700">
                                 {balance.toFixed(1)}

@@ -313,15 +313,17 @@ export default function LeaveView() {
       />
 
       {/* 歷年特休詳情與設定 Modal */}
-      <LeaveHistoryModal
-        isOpen={showHistoryModal}
-        onClose={() => {
-          setShowHistoryModal(false);
-          setSelectedStaffForHistory(null);
-        }}
-        staff={selectedStaffForHistory}
-        onSaved={fetchLeaveStats}
-      />
+      {showHistoryModal && selectedStaffForHistory && (
+        <LeaveHistoryModal
+          isOpen={showHistoryModal}
+          onClose={() => {
+            setShowHistoryModal(false);
+            setSelectedStaffForHistory(null);
+          }}
+          staff={selectedStaffForHistory}
+          onSaved={fetchLeaveStats}
+        />
+      )}
     </div>
   );
 }
