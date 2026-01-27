@@ -10,78 +10,163 @@ interface StaffEditModalProps {
   onSave: () => void; // 儲存成功後的回呼
 }
 
-const DEFAULT_JOB_TITLES = ['醫師', '護理師', '行政', '藥師', '清潔'];
+type Entity = { id: string; name: string };
+
+type JobTitleConfig = {
+  name: string;
+  in_roster: boolean;
+};
+
+const DEFAULT_JOB_TITLES: JobTitleConfig[] = [
+  { name: '醫師', in_roster: false }, // 醫師有獨立班表
+  { name: '護理師', in_roster: true },
+  { name: '行政', in_roster: true },
+  { name: '藥師', in_roster: true },
+  { name: '清潔', in_roster: false }
+];
+
+const FALLBACK_ENTITIES: Entity[] = [
+  { id: 'clinic', name: '診所' },
+  { id: 'pharmacy', name: '藥局' }
+];
 
 export default function StaffEditModal({ isOpen, onClose, initialData, onSave }: StaffEditModalProps) {
   const [editData, setEditData] = useState<any>(null);
-  const [jobTitles, setJobTitles] = useState<string[]>(DEFAULT_JOB_TITLES);
+  const [jobTitles, setJobTitles] = useState<JobTitleConfig[]>(DEFAULT_JOB_TITLES);
+  const [entities, setEntities] = useState<Entity[]>([]);
 
-  // 🟢 新增：讀取職稱列表
+  // 讀取系統設定：職稱與組織單位
   useEffect(() => {
-    const fetchJobTitles = async () => {
-      try {
-        const response = await fetch('/api/settings');
-        const result = await response.json();
-        if (result.data) {
-          const jobTitlesItem = result.data.find((item: any) => item.key === 'job_titles');
-          if (jobTitlesItem) {
-            try {
-              const titles = JSON.parse(jobTitlesItem.value);
-              if (Array.isArray(titles) && titles.length > 0) {
-                setJobTitles(titles);
-              } else {
-                setJobTitles(DEFAULT_JOB_TITLES);
+    if (isOpen) {
+      const fetchSettingsAndInit = async () => {
+        try {
+          const response = await fetch('/api/settings');
+          const result = await response.json();
+
+          let loadedJobTitles: JobTitleConfig[] = DEFAULT_JOB_TITLES;
+          let loadedEntities: Entity[] = [];
+
+          if (result.data) {
+            const jobTitlesItem = result.data.find((item: any) => item.key === 'job_titles');
+            if (jobTitlesItem) {
+              try {
+                const raw = JSON.parse(jobTitlesItem.value);
+                if (Array.isArray(raw) && raw.length > 0) {
+                  if (typeof raw[0] === 'string') {
+                    loadedJobTitles = (raw as string[]).map((name) => ({
+                      name,
+                      in_roster: name === '醫師' ? false : true
+                    }));
+                  } else {
+                    loadedJobTitles = raw
+                      .map((jt: any) => ({
+                        name: jt.name ?? '',
+                        in_roster: typeof jt.in_roster === 'boolean'
+                          ? jt.in_roster
+                          : (jt.name === '醫師' ? false : true)
+                      }))
+                      .filter((jt: JobTitleConfig) => jt.name);
+                    if (loadedJobTitles.length === 0) {
+                      loadedJobTitles = DEFAULT_JOB_TITLES;
+                    }
+                  }
+                } else {
+                  loadedJobTitles = DEFAULT_JOB_TITLES;
+                }
+              } catch (e) {
+                console.error('Parse job_titles error:', e);
+                loadedJobTitles = DEFAULT_JOB_TITLES;
               }
-            } catch (e) {
-              console.error('Parse job_titles error:', e);
-              setJobTitles(DEFAULT_JOB_TITLES);
+            } else {
+              loadedJobTitles = DEFAULT_JOB_TITLES;
             }
-          } else {
-            setJobTitles(DEFAULT_JOB_TITLES);
+
+            const entitiesItem = result.data.find((item: any) => item.key === 'org_entities');
+            if (entitiesItem) {
+              try {
+                const rawEnt = JSON.parse(entitiesItem.value);
+                if (Array.isArray(rawEnt) && rawEnt.length > 0) {
+                  loadedEntities = rawEnt
+                    .map((e: any) => ({
+                      id: e.id ?? '',
+                      name: e.name ?? ''
+                    }))
+                    .filter((e: Entity) => e.id && e.name);
+                }
+              } catch (e) {
+                console.error('Parse org_entities error:', e);
+              }
+            }
           }
-        } else {
+
+          if (!loadedEntities || loadedEntities.length === 0) {
+            loadedEntities = FALLBACK_ENTITIES;
+          }
+
+          setJobTitles(loadedJobTitles);
+          setEntities(loadedEntities);
+
+          // 初始化 editData
+          if (initialData) {
+            const defaultRole = loadedJobTitles[0]?.name || '護理師';
+            const defaultEntity = loadedEntities[0]?.id || 'clinic';
+            setEditData({
+              ...initialData,
+              role: initialData.role || defaultRole,
+              entity: initialData.entity || defaultEntity
+            });
+          } else {
+            const defaultRole = loadedJobTitles[0]?.name || '護理師';
+            const defaultEntity = loadedEntities[0]?.id || 'clinic';
+            setEditData({
+              name: '',
+              role: defaultRole,
+              entity: defaultEntity,
+              is_active: true,
+              start_date: new Date().toISOString().slice(0, 10),
+              salary_mode: 'hourly',
+              base_salary: 0,
+              insurance_labor: 0,
+              insurance_health: 0,
+              phone: '',
+              address: '',
+              emergency_contact: '',
+              bank_account: '',
+              id_number: ''
+            });
+          }
+        } catch (error) {
+          console.error('Fetch staff edit settings error:', error);
           setJobTitles(DEFAULT_JOB_TITLES);
+          setEntities(FALLBACK_ENTITIES);
+          if (initialData) {
+            setEditData({ ...initialData });
+          } else {
+            setEditData({
+              name: '',
+              role: DEFAULT_JOB_TITLES[0].name,
+              entity: FALLBACK_ENTITIES[0].id,
+              is_active: true,
+              start_date: new Date().toISOString().slice(0, 10),
+              salary_mode: 'hourly',
+              base_salary: 0,
+              insurance_labor: 0,
+              insurance_health: 0,
+              phone: '',
+              address: '',
+              emergency_contact: '',
+              bank_account: '',
+              id_number: ''
+            });
+          }
         }
-      } catch (error) {
-        console.error('Fetch job titles error:', error);
-        setJobTitles(DEFAULT_JOB_TITLES);
-      }
-    };
+      };
 
-    if (isOpen) {
-      fetchJobTitles();
+      fetchSettingsAndInit();
+    } else {
+      setEditData(null);
     }
-  }, [isOpen]);
-
-  // 當 initialData 改變時，更新 editData
-  useEffect(() => {
-    if (isOpen) {
-      if (initialData) {
-        // 編輯模式
-        setEditData({
-          ...initialData
-        });
-      } else {
-        // 新增模式
-        setEditData({
-          name: '',
-          role: jobTitles.length > 0 ? jobTitles[0] : '護理師',
-          entity: 'clinic',
-          is_active: true,
-          start_date: new Date().toISOString().slice(0, 10),
-          salary_mode: 'hourly',
-          base_salary: 0,
-          insurance_labor: 0,
-          insurance_health: 0,
-          phone: '',
-          address: '',
-          emergency_contact: '',
-          bank_account: '',
-          id_number: ''
-        });
-      }
-    }
-  }, [isOpen, initialData, jobTitles]);
+  }, [isOpen, initialData]);
 
   const handleSave = async () => {
     if (!editData?.name) {
@@ -170,7 +255,7 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
                 className="w-full border p-2 rounded bg-white"
               >
                 {jobTitles.map((title) => (
-                  <option key={title} value={title}>{title}</option>
+                  <option key={title.name} value={title.name}>{title.name}</option>
                 ))}
               </select>
             </div>
@@ -178,28 +263,27 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-bold text-slate-500 mb-1">所屬單位</label>
-              <div className="flex gap-2">
-                <button 
-                  onClick={() => setEditData({...editData, entity: 'clinic'})} 
-                  className={`flex-1 py-2 rounded border text-sm font-bold ${
-                    editData.entity === 'clinic' 
-                      ? 'bg-blue-50 border-blue-500 text-blue-700' 
-                      : 'hover:bg-gray-50'
-                  }`}
-                >
-                  診所
-                </button>
-                <button 
-                  onClick={() => setEditData({...editData, entity: 'pharmacy'})} 
-                  className={`flex-1 py-2 rounded border text-sm font-bold ${
-                    editData.entity === 'pharmacy' 
-                      ? 'bg-green-50 border-green-500 text-green-700' 
-                      : 'hover:bg-gray-50'
-                  }`}
-                >
-                  藥局
-                </button>
-              </div>
+              {entities.length === 0 ? (
+                <div className="text-xs text-slate-400 bg-slate-50 border border-dashed border-slate-200 rounded p-2">
+                  尚未設定組織單位，請先至「系統設定 &gt; 組織單位管理」新增單位。
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {entities.map((ent) => (
+                    <button
+                      key={ent.id}
+                      onClick={() => setEditData({ ...editData, entity: ent.id })}
+                      className={`px-3 py-2 rounded border text-xs md:text-sm font-bold transition ${
+                        editData.entity === ent.id
+                          ? 'bg-blue-50 border-blue-500 text-blue-700'
+                          : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-50'
+                      }`}
+                    >
+                      {ent.name}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
             <div>
               <label className="block text-xs font-bold text-slate-500 mb-1">到職日期</label>

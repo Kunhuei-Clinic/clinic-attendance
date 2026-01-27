@@ -394,16 +394,11 @@ export default function LeaveHistoryModal({
                                   step={0.5}
                                   className="w-20 p-1.5 border rounded text-right font-mono"
                                   onChange={(e) => {
-                                    const days = Number(e.target.value);
+                                    const daysVal = Number(e.target.value) || 0;
                                     const newList = [...annualLeaveHistory];
-                                    const used = Number(item.used ?? 0);
-                                    const settled = Number(item.settled ?? 0);
-                                    const newBalance =
-                                      Math.round((days - used - settled) * 100) / 100;
                                     newList[index] = {
                                       ...item,
-                                      days,
-                                      balance: newBalance,
+                                      days: daysVal,
                                     };
                                     setAnnualLeaveHistory(newList);
                                   }}

@@ -102,7 +102,7 @@ export default function AdminPage() {
           <div className="mb-6 flex flex-col md:flex-row justify-between items-center gap-4">
             <div className="flex items-center gap-4">
               <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-                診所管理中樞 V29.5
+                診所管理中樞 V30.0
                 {authLevel === 'manager' && <span className="text-xs bg-gray-200 text-gray-600 px-2 py-1 rounded-full">排班模式</span>}
               </h1>
               {authLevel === 'boss' && (

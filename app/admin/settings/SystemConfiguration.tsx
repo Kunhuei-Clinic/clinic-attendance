@@ -4,12 +4,24 @@ import React, { useState, useEffect } from 'react';
 import { Save, Clock, CalendarDays, LayoutGrid, Stethoscope, Trash2, Plus, User } from 'lucide-react';
 
 type Entity = { id: string; name: string };
+
+type JobTitleConfig = {
+  name: string;
+  in_roster: boolean;
+};
+
 const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六'];
-const DEFAULT_JOB_TITLES = ['醫師', '護理師', '行政', '藥師', '清潔'];
+const DEFAULT_JOB_TITLES: JobTitleConfig[] = [
+  { name: '醫師', in_roster: false }, // 醫師有獨立班表
+  { name: '護理師', in_roster: true },
+  { name: '行政', in_roster: true },
+  { name: '藥師', in_roster: true },
+  { name: '清潔', in_roster: false }
+];
 
 export default function SystemConfiguration() {
   const [entities, setEntities] = useState<Entity[]>([]);
-  const [jobTitles, setJobTitles] = useState<string[]>([]);
+  const [jobTitles, setJobTitles] = useState<JobTitleConfig[]>([]);
   const [specialClinics, setSpecialClinics] = useState<string[]>([]);
   const [businessHours, setBusinessHours] = useState({
     openDays: [1,2,3,4,5,6], 
@@ -41,9 +53,30 @@ export default function SystemConfiguration() {
           }
           if (item.key === 'job_titles') {
             try { 
-              const titles = JSON.parse(item.value);
-              // 如果資料庫是空的，使用預設值
-              setJobTitles(Array.isArray(titles) && titles.length > 0 ? titles : DEFAULT_JOB_TITLES);
+              const raw = JSON.parse(item.value);
+              
+              if (Array.isArray(raw) && raw.length > 0) {
+                // 舊版：string[]
+                if (typeof raw[0] === 'string') {
+                  const converted: JobTitleConfig[] = (raw as string[]).map((name) => ({
+                    name,
+                    in_roster: name === '醫師' ? false : true
+                  }));
+                  setJobTitles(converted);
+                } else {
+                  // 新版：JobTitleConfig[] 或類似結構
+                  const converted: JobTitleConfig[] = raw.map((jt: any) => ({
+                    name: jt.name ?? '',
+                    in_roster: typeof jt.in_roster === 'boolean'
+                      ? jt.in_roster
+                      : (jt.name === '醫師' ? false : true)
+                  })).filter((jt: JobTitleConfig) => jt.name);
+                  setJobTitles(converted.length > 0 ? converted : DEFAULT_JOB_TITLES);
+                }
+              } else {
+                // 空陣列或非陣列時使用預設值
+                setJobTitles(DEFAULT_JOB_TITLES);
+              }
             } catch (e) { 
               // 解析失敗時使用預設值
               setJobTitles(DEFAULT_JOB_TITLES);
@@ -137,13 +170,20 @@ export default function SystemConfiguration() {
     const newArr = [...entities]; newArr[idx].name = val; setEntities(newArr);
   };
 
-  const addJobTitle = () => setJobTitles([...jobTitles, '新職稱']);
+  const addJobTitle = () => setJobTitles([...jobTitles, { name: '新職稱', in_roster: true }]);
   const removeJobTitle = (idx: number) => {
     if (jobTitles.length <= 1) return alert("至少保留一個職稱");
     const newArr = [...jobTitles]; newArr.splice(idx, 1); setJobTitles(newArr);
   };
-  const updateJobTitle = (idx: number, val: string) => {
-    const newArr = [...jobTitles]; newArr[idx] = val; setJobTitles(newArr);
+  const updateJobTitleName = (idx: number, val: string) => {
+    const newArr = [...jobTitles];
+    newArr[idx] = { ...newArr[idx], name: val };
+    setJobTitles(newArr);
+  };
+  const updateJobTitleInRoster = (idx: number, inRoster: boolean) => {
+    const newArr = [...jobTitles];
+    newArr[idx] = { ...newArr[idx], in_roster: inRoster };
+    setJobTitles(newArr);
   };
 
   const addSpecial = () => setSpecialClinics([...specialClinics, '新門診']);
@@ -214,32 +254,55 @@ export default function SystemConfiguration() {
           <h3 className="text-lg font-bold text-slate-700 border-b pb-2 mb-4 flex items-center gap-2">
             <User size={20}/> 人員職類設定 (Job Titles)
           </h3>
-          <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 mb-4">
+          <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 mb-4 space-y-1">
             <p className="text-sm text-blue-800">
               設定系統中可用的職稱選項。這些職稱將出現在員工資料編輯表單的下拉選單中。
             </p>
+            <p className="text-xs text-blue-700">
+              勾選「加入排班表」的職稱，會出現在員工排班畫面中；例如「醫師」通常使用獨立醫師班表，因此預設不加入一般員工排班。
+            </p>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-3">
             {jobTitles.map((title, idx) => (
-              <div key={idx} className="flex gap-2 items-center">
-                <input 
-                  type="text" 
-                  value={title} 
-                  onChange={(e) => updateJobTitle(idx, e.target.value)} 
-                  className="flex-1 p-2 border rounded-lg font-bold outline-none focus:ring-2 focus:ring-blue-200" 
-                  placeholder="職稱名稱"
-                />
-                <button 
-                  onClick={() => removeJobTitle(idx)} 
-                  className="p-2 text-red-400 hover:bg-red-50 rounded-lg"
-                >
-                  <Trash2 size={18}/>
-                </button>
+              <div key={idx} className="flex flex-col md:flex-row md:items-center gap-3 bg-slate-50 p-3 rounded-lg border border-slate-200">
+                <div className="flex-1 flex items-center gap-2">
+                  <span className="text-xs text-slate-400 px-2 py-1 bg-white rounded border">
+                    #{idx + 1}
+                  </span>
+                  <input 
+                    type="text" 
+                    value={title.name} 
+                    onChange={(e) => updateJobTitleName(idx, e.target.value)} 
+                    className="flex-1 p-2 border rounded-lg font-bold outline-none focus:ring-2 focus:ring-blue-200" 
+                    placeholder="職稱名稱，例如：護理師"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    id={`job-title-roster-${idx}`}
+                    type="checkbox"
+                    checked={title.in_roster}
+                    onChange={(e) => updateJobTitleInRoster(idx, e.target.checked)}
+                    className="w-4 h-4"
+                  />
+                  <label
+                    htmlFor={`job-title-roster-${idx}`}
+                    className="text-xs md:text-sm text-slate-700 select-none"
+                  >
+                    加入排班表
+                  </label>
+                  <button 
+                    onClick={() => removeJobTitle(idx)} 
+                    className="ml-2 p-2 text-red-400 hover:bg-red-50 rounded-lg"
+                  >
+                    <Trash2 size={18}/>
+                  </button>
+                </div>
               </div>
             ))}
             <button 
               onClick={addJobTitle} 
-              className="py-2 border-2 border-dashed border-slate-300 text-slate-500 rounded-xl hover:bg-blue-50 font-bold flex items-center justify-center gap-2"
+              className="w-full py-2 border-2 border-dashed border-slate-300 text-slate-500 rounded-xl hover:bg-blue-50 font-bold flex items-center justify-center gap-2"
             >
               <Plus size={18}/> 新增職稱
             </button>
