@@ -91,7 +91,7 @@ export async function GET(request: NextRequest) {
     const action = searchParams.get('action');
     const staffId = searchParams.get('staff_id');
 
-    // 🟢 新模式：查詢特定員工的詳細結算紀錄
+    // 🟢 新模式：查詢特定員工的詳細結算紀錄 / 帳本
     if (action === 'details' && staffId) {
       const staffIdNum = Number(staffId);
       if (isNaN(staffIdNum)) {
@@ -101,7 +101,7 @@ export async function GET(request: NextRequest) {
         );
       }
 
-      // 1. 驗證員工屬於當前診所
+      // 1. 驗證員工屬於當前診所，並取得特休歷史 JSON
       const { data: staff, error: staffError } = await supabaseAdmin
         .from('staff')
         .select('id, name, annual_leave_history')
@@ -116,7 +116,24 @@ export async function GET(request: NextRequest) {
         );
       }
 
-      // 2. 取得該員工的所有結算紀錄（依日期排序）
+      // 2. 取得該員工所有「特休」請假紀錄（已核准）
+      const { data: leaveRequests, error: leaveError } = await supabaseAdmin
+        .from('leave_requests')
+        .select('hours, start_time')
+        .eq('staff_id', staffIdNum)
+        .eq('type', '特休')
+        .eq('status', 'approved')
+        .eq('clinic_id', clinicId);
+
+      if (leaveError) {
+        console.error('Fetch leave requests (details) error:', leaveError);
+        return NextResponse.json(
+          { error: `查詢特休使用紀錄失敗: ${leaveError.message}` },
+          { status: 500 }
+        );
+      }
+
+      // 3. 取得該員工的所有結算紀錄（依日期排序）
       const { data: settlements, error: settleError } = await supabaseAdmin
         .from('leave_settlements')
         .select('*')
@@ -132,7 +149,63 @@ export async function GET(request: NextRequest) {
         );
       }
 
-      // 3. 回傳詳細資料
+      // 4. 解析 annual_leave_history，支援舊版物件格式與新版陣列格式
+      const rawHistory = staff.annual_leave_history;
+
+      type HistoryItem = { year: number; days: number; note?: string | null };
+      let historyArray: HistoryItem[] = [];
+
+      if (Array.isArray(rawHistory)) {
+        // 新版：[{ year, days, note? }]
+        historyArray = (rawHistory as any[])
+          .map((item) => ({
+            year: Number(item.year),
+            days: Number(item.days || 0),
+            note: item.note ?? null,
+          }))
+          .filter((item) => !Number.isNaN(item.year));
+      } else if (rawHistory && typeof rawHistory === 'object') {
+        // 舊版：{ "2024": 7, "2023": 3 }
+        historyArray = Object.entries(rawHistory as Record<string, any>).map(
+          ([year, days]) => ({
+            year: Number(year),
+            days: Number((days as any)?.days ?? days ?? 0),
+            note:
+              typeof days === 'object' && days !== null
+                ? ((days as any).note ?? null)
+                : null,
+          }),
+        );
+      }
+
+      // 5. 統計每年度「實際已休」(使用天數) - 以 leave_requests 的 start_time 年度為準
+      const usageByYear: Record<string, number> = {};
+      (leaveRequests || []).forEach((req: any) => {
+        if (!req.start_time) return;
+        const year = new Date(req.start_time).getFullYear().toString();
+        const hours = Number(req.hours || 0);
+        const days = hours / 8;
+        usageByYear[year] = Math.round((usageByYear[year] || 0 + days) * 100) / 100;
+      });
+
+      // 6. 統計每年度「已結算天數」- 以 pay_month 年度（若無則 created_at 年度）為準
+      const settledByYear: Record<string, number> = {};
+      (settlements || []).forEach((s: any) => {
+        let baseDate: Date | null = null;
+        if (s.pay_month) {
+          // pay_month 為 'YYYY-MM' 字串，取該月第一天
+          baseDate = new Date(`${s.pay_month}-01T00:00:00`);
+        } else if (s.created_at) {
+          baseDate = new Date(s.created_at);
+        }
+        if (!baseDate || Number.isNaN(baseDate.getTime())) return;
+        const year = baseDate.getFullYear().toString();
+        const days = Number(s.days || 0);
+        settledByYear[year] =
+          Math.round(((settledByYear[year] || 0) + days) * 100) / 100;
+      });
+
+      // 7. 回傳詳細資料
       return NextResponse.json({
         data: {
           staff: {
@@ -141,7 +214,10 @@ export async function GET(request: NextRequest) {
             annual_leave_history: staff.annual_leave_history || null
           },
           settlements: settlements || [],
-          history: staff.annual_leave_history || null // 為了向後兼容，也單獨提供 history
+          history: staff.annual_leave_history || null, // 向後相容：原始 JSON
+          history_array: historyArray, // 新版：標準化陣列格式
+          usage_by_year: usageByYear,
+          settled_by_year: settledByYear
         }
       });
     }
