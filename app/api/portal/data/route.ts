@@ -86,14 +86,13 @@ export async function GET(request: NextRequest) {
 
     switch (type) {
       case 'home': {
-        // 🟢 優化：首頁資料（公告 + 個人資料）
-        
+        // 🟢 首頁資料（公告 + 個人資料）
+
         // 1. 查詢啟用的公告
-        // 條件：is_active = true 且 clinic_id 符合該員工診所
-        // 排序：created_at 倒序（最新的在上面）
+        // 僅回傳前台需要的欄位：title, content, created_at
         const { data: announcements, error: annError } = await supabaseAdmin
           .from('announcements')
-          .select('*')
+          .select('title, content, created_at')
           .eq('clinic_id', staffClinicId)
           .eq('is_active', true)
           .order('created_at', { ascending: false });
@@ -103,23 +102,30 @@ export async function GET(request: NextRequest) {
           // 即使公告查詢失敗，仍然回傳個人資料
         }
 
-        // 2. 回傳完整的個人資料
+        // 安全地將公告資料限制在指定結構
+        const safeAnnouncements =
+          (announcements || []).map((ann: any) => ({
+            title: ann.title,
+            content: ann.content,
+            created_at: ann.created_at,
+          }));
+
+        // 2. 回傳完整的個人資料（僅包含指定欄位）
         // 注意：這裡讀取的是員工自己的資料，不需要遮罩，遮罩邏輯在前端做即可
         queryResult = {
-          announcements: announcements || [],
+          announcements: safeAnnouncements,
           profile: {
-            id: staff.id,
             name: staff.name || '',
             role: staff.role || '',
             start_date: staff.start_date || null,
-            annual_leave_history: staff.annual_leave_history || null,
-            annual_leave_quota: staff.annual_leave_quota || null,
             phone: staff.phone || null,
             address: staff.address || null,
             emergency_contact: staff.emergency_contact || null,
             bank_account: staff.bank_account || null,
-            id_number: staff.id_number || null
-          }
+            id_number: staff.id_number || null,
+            annual_leave_quota: staff.annual_leave_quota || null,
+            annual_leave_history: staff.annual_leave_history || null,
+          },
         };
         break;
       }

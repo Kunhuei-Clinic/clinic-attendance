@@ -178,43 +178,113 @@ function SalaryDetailModal({ data, role, onClose }: any) {
     const staff = !isDoctor ? data.snapshot : null;
 
     return (
-        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
-            <div className="bg-white w-full max-w-md rounded-2xl overflow-hidden flex flex-col max-h-[90vh] shadow-2xl">
-                <div className="bg-slate-900 text-white p-5 flex justify-between items-center shrink-0">
-                    <div><p className="text-xs text-slate-400 mb-1">薪資單明細</p><h3 className="text-2xl font-bold">{isDoctor ? doc.month : data.year_month}</h3></div>
-                    <button onClick={onClose} className="bg-white/10 p-2 rounded-full hover:bg-white/20 transition"><X size={20}/></button>
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-0 md:p-4 backdrop-blur-sm animate-fade-in">
+            <div className="bg-white w-full h-full md:h-auto md:max-h-[90vh] md:max-w-md rounded-none md:rounded-2xl overflow-hidden flex flex-col shadow-2xl pb-[env(safe-area-inset-bottom)]">
+                <div className="bg-slate-900 text-white p-4 md:p-5 flex justify-between items-center shrink-0">
+                    <div>
+                        <p className="text-[11px] md:text-xs text-slate-400 mb-1">薪資單明細</p>
+                        <h3 className="text-xl md:text-2xl font-bold">{isDoctor ? doc.month : data.year_month}</h3>
+                    </div>
+                    <button onClick={onClose} className="bg-white/10 p-2 rounded-full hover:bg-white/20 transition">
+                        <X size={18} className="md:size-5" />
+                    </button>
                 </div>
-                <div className="p-6 overflow-y-auto space-y-6">
-                    <div className="text-center border-b border-slate-100 pb-6"><p className="text-sm text-slate-500 font-bold mb-1">本月實領金額 (Net Pay)</p><p className="text-5xl font-black text-slate-800 tracking-tight">${fmt(isDoctor ? doc.netPay : staff.netPay)}</p></div>
+                <div className="p-4 md:p-6 overflow-y-auto space-y-6">
+                    <div className="text-center border-b border-slate-100 pb-6">
+                        <p className="text-xs md:text-sm text-slate-500 font-bold mb-1">本月實領金額 (Net Pay)</p>
+                        <p className="text-3xl md:text-5xl font-black text-slate-800 tracking-tight">
+                            ${fmt(isDoctor ? doc.netPay : staff.netPay)}
+                        </p>
+                    </div>
                     {isDoctor ? (
                         <div className="space-y-4">
-                            <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-3">
-                                <div className="flex justify-between items-center"><span className="text-slate-600 font-bold">保障薪 / 掛牌費</span><span className="font-mono font-bold text-lg">${fmt(doc.basePay)}</span></div>
-                                <div className="flex justify-between items-center text-blue-700"><span className="font-bold flex items-center gap-1"><TrendingUp size={16}/> PPF 績效獎金</span><span className="font-mono font-bold text-lg">+${fmt(doc.bonus)}</span></div>
+                            <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-3 text-sm md:text-base">
+                                <div className="flex justify-between items-center">
+                                    <span className="text-slate-600 font-bold">保障薪 / 掛牌費</span>
+                                    <span className="font-mono font-bold text-base md:text-lg">${fmt(doc.basePay)}</span>
+                                </div>
+                                <div className="flex justify-between items-center text-blue-700">
+                                    <span className="font-bold flex items-center gap-1">
+                                        <TrendingUp size={14} className="md:size-4" /> PPF 績效獎金
+                                    </span>
+                                    <span className="font-mono font-bold text-base md:text-lg">+${fmt(doc.bonus)}</span>
+                                </div>
                                 <div className="text-xs text-blue-400 text-right">(結算月份: {doc.ppfMonth})</div>
                             </div>
-                            {doc.deductions > 0 && <div className="bg-red-50 p-3 rounded-lg border border-red-100 flex justify-between items-center text-red-700"><span className="font-bold text-sm flex items-center gap-1"><ShieldAlert size={14}/> 應扣項目 (勞健保等)</span><span className="font-mono font-bold">-${fmt(doc.deductions)}</span></div>}
+                            {doc.deductions > 0 && (
+                                <div className="bg-red-50 p-3 rounded-lg border border-red-100 flex justify-between items-center text-red-700 text-xs md:text-sm">
+                                    <span className="font-bold flex items-center gap-1">
+                                        <ShieldAlert size={12} className="md:size-4" /> 應扣項目 (勞健保等)
+                                    </span>
+                                    <span className="font-mono font-bold text-sm md:text-base">-${fmt(doc.deductions)}</span>
+                                </div>
+                            )}
                             <div className="border-t border-dashed pt-4">
-                                <h4 className="text-xs font-bold text-slate-400 mb-3 flex items-center gap-1"><FileText size={12}/> PPF 計算細節</h4>
-                                <div className="grid grid-cols-2 gap-3 text-xs text-slate-600">
-                                    <div className="bg-slate-50 p-2 rounded">看診人數: <span className="font-bold text-slate-800">{data.patient_count}</span></div>
-                                    <div className="bg-slate-50 p-2 rounded">健保點數: <span className="font-bold text-slate-800">{fmt(data.nhi_points)}</span></div>
-                                    <div className="bg-slate-50 p-2 rounded">自費總額: <span className="font-bold text-yellow-600">${fmt(data.total_performance - data.nhi_points * 0.8)}</span></div>
+                                <h4 className="text-[11px] md:text-xs font-bold text-slate-400 mb-3 flex items-center gap-1">
+                                    <FileText size={11} className="md:size-3" /> PPF 計算細節
+                                </h4>
+                                <div className="grid grid-cols-2 gap-3 text-[11px] md:text-xs text-slate-600">
+                                    <div className="bg-slate-50 p-2 rounded">
+                                        看診人數:{' '}
+                                        <span className="font-bold text-slate-800">{data.patient_count}</span>
+                                    </div>
+                                    <div className="bg-slate-50 p-2 rounded">
+                                        健保點數:{' '}
+                                        <span className="font-bold text-slate-800">{fmt(data.nhi_points)}</span>
+                                    </div>
+                                    <div className="bg-slate-50 p-2 rounded">
+                                        自費總額:{' '}
+                                        <span className="font-bold text-yellow-600">
+                                            ${fmt(data.total_performance - data.nhi_points * 0.8)}
+                                        </span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     ) : (
-                        <div className="space-y-3 text-sm">
-                            <div className="flex justify-between border-b border-dashed pb-2"><span className="text-slate-600">底薪 / 保障薪</span><span className="font-mono font-bold">${fmt(staff.baseAmount)}</span></div>
-                            <div className="flex justify-between border-b border-dashed pb-2"><span className="text-slate-600">加班 / 工時費</span><span className="font-mono font-bold">${fmt(staff.workAmount)}</span></div>
-                            {staff.bonusesTotal > 0 && <div className="flex justify-between border-b border-dashed pb-2 text-blue-600"><span className="font-bold">獎金津貼</span><span className="font-mono font-bold">+${fmt(staff.bonusesTotal)}</span></div>}
-                            <div className="flex justify-between items-center bg-red-50 p-2 rounded text-red-700"><span className="font-bold">勞健保自付</span><span className="font-mono font-bold">-${fmt((staff.insLabor || 0) + (staff.insHealth || 0))}</span></div>
+                        <div className="space-y-3 text-xs md:text-sm">
+                            <div className="flex justify-between border-b border-dashed pb-2">
+                                <span className="text-slate-600">底薪 / 保障薪</span>
+                                <span className="font-mono font-bold text-sm md:text-base">
+                                    ${fmt(staff.baseAmount)}
+                                </span>
+                            </div>
+                            <div className="flex justify-between border-b border-dashed pb-2">
+                                <span className="text-slate-600">加班 / 工時費</span>
+                                <span className="font-mono font-bold text-sm md:text-base">
+                                    ${fmt(staff.workAmount)}
+                                </span>
+                            </div>
+                            {staff.bonusesTotal > 0 && (
+                                <div className="flex justify-between border-b border-dashed pb-2 text-blue-600">
+                                    <span className="font-bold">獎金津貼</span>
+                                    <span className="font-mono font-bold text-sm md:text-base">
+                                        +${fmt(staff.bonusesTotal)}
+                                    </span>
+                                </div>
+                            )}
+                            <div className="flex justify-between items-center bg-red-50 p-2 rounded text-red-700">
+                                <span className="font-bold text-xs md:text-sm">勞健保自付</span>
+                                <span className="font-mono font-bold text-sm md:text-base">
+                                    -${fmt((staff.insLabor || 0) + (staff.insHealth || 0))}
+                                </span>
+                            </div>
                         </div>
                     )}
-                    <div className="bg-slate-100 p-4 rounded-xl flex justify-between items-center text-sm">
-                        <div className="flex flex-col"><span className="text-xs text-slate-500 font-bold mb-1">銀行匯款</span><span className="font-mono font-bold text-lg">${fmt(isDoctor ? doc.transfer : 0)}</span></div>
+                    <div className="bg-slate-100 p-4 rounded-xl flex justify-between items-center text-xs md:text-sm">
+                        <div className="flex flex-col">
+                            <span className="text-[11px] text-slate-500 font-bold mb-1">銀行匯款</span>
+                            <span className="font-mono font-bold text-base md:text-lg">
+                                ${fmt(isDoctor ? doc.transfer : 0)}
+                            </span>
+                        </div>
                         <div className="w-px h-8 bg-slate-300"></div>
-                        <div className="flex flex-col text-right"><span className="text-xs text-slate-500 font-bold mb-1">現金發放</span><span className="font-mono font-bold text-lg text-green-600">${fmt(isDoctor ? doc.cash : 0)}</span></div>
+                        <div className="flex flex-col text-right">
+                            <span className="text-[11px] text-slate-500 font-bold mb-1">現金發放</span>
+                            <span className="font-mono font-bold text-base md:text-lg text-green-600">
+                                ${fmt(isDoctor ? doc.cash : 0)}
+                            </span>
+                        </div>
                     </div>
                 </div>
             </div>
