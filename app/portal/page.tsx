@@ -787,6 +787,7 @@ export default function EmployeePortal() {
       {/* History */}
       {view === 'history' && (
         <HistoryView
+          staffUser={staffUser}
           logs={historyLogs}
           selectedMonth={selectedMonth}
           setSelectedMonth={setSelectedMonth}
@@ -797,12 +798,13 @@ export default function EmployeePortal() {
 
       {/* Roster */}
       {view === 'roster' && (
-        <RosterView rosterData={rosterData} staffRole={staffUser.role} />
+        <RosterView rosterData={rosterData} staffUser={staffUser} />
       )}
 
       {/* Leave */}
       {view === 'leave' && (
         <LeaveView
+          staffUser={staffUser}
           leaveForm={leaveForm}
           setLeaveForm={setLeaveForm}
           onSubmitLeave={submitLeave}
@@ -825,7 +827,11 @@ export default function EmployeePortal() {
 
       {/* Profile */}
       {view === 'profile' && profile && (
-        <ProfileView user={profile} onUpdateProfile={updateProfile} />
+        <ProfileView
+          user={profile}
+          staffUser={staffUser}
+          onUpdateProfile={updateProfile}
+        />
       )}
 
       {/* 底部 Tab Bar */}

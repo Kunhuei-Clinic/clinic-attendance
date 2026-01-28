@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { User, Calendar, Save, Edit2, ChevronRight } from 'lucide-react';
+import PortalTopHeader from './PortalTopHeader';
 
 interface ProfileUser {
   name?: string | null;
@@ -16,6 +17,7 @@ interface ProfileUser {
 
 interface ProfileViewProps {
   user: ProfileUser | null;
+  staffUser?: { name?: string | null; role?: string | null } | null;
   onUpdateProfile: (payload: {
     phone: string;
     address: string;
@@ -32,7 +34,11 @@ const maskSensitiveData = (value: string | null | undefined, showLength = 3) => 
   return `${start}${'*'.repeat(Math.max(4, value.length - showLength * 2))}${end}`;
 };
 
-export default function ProfileView({ user, onUpdateProfile }: ProfileViewProps) {
+export default function ProfileView({
+  user,
+  staffUser,
+  onUpdateProfile,
+}: ProfileViewProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [showAnnualHistory, setShowAnnualHistory] = useState(false);
 
@@ -61,34 +67,29 @@ export default function ProfileView({ user, onUpdateProfile }: ProfileViewProps)
 
   return (
     <div className="min-h-screen bg-slate-50 pb-24 max-w-md mx-auto shadow-2xl relative">
-      <div className="bg-teal-600 p-6 pt-12 text-white rounded-b-[2rem] shadow-lg">
-        <div className="flex justify-between items-center">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
-              <User size={22} />
+      {/* 共用頂部個人資訊區塊（以 staffUser 為主，若無則退回 user） */}
+      <PortalTopHeader
+        name={staffUser?.name ?? user.name}
+        role={staffUser?.role ?? user.role}
+      >
+        <div className="flex items-center justify-between text-xs text-teal-100">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
+              <User size={18} />
             </div>
-            <div>
-              <div className="text-sm text-teal-100">員工資料</div>
-              <div className="text-xl font-black leading-tight">
-                {user.name || '未命名'}
-              </div>
-              <div className="text-xs text-teal-100 mt-0.5">
-                {user.role || '職稱未設定'}
-              </div>
-            </div>
+            <span className="font-bold">員工資料</span>
           </div>
-
           {!isEditing && (
             <button
               onClick={() => setIsEditing(true)}
-              className="text-xs font-bold flex items-center gap-1 bg-white/10 border border-white/30 px-3 py-1.5 rounded-full"
+              className="text-[11px] font-bold flex items-center gap-1 bg-white/10 border border-white/30 px-3 py-1.5 rounded-full"
             >
-              <Edit2 size={12} />
+              <Edit2 size={11} />
               編輯
             </button>
           )}
         </div>
-      </div>
+      </PortalTopHeader>
 
       <div className="p-4 space-y-4 text-sm">
         {/* 基本資料卡片 */}

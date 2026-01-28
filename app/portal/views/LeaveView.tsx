@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { Coffee, Calendar, ChevronRight } from 'lucide-react';
+import PortalTopHeader from './PortalTopHeader';
 
 interface LeaveFormState {
   type: string;
@@ -27,6 +28,7 @@ interface LeaveStats {
 }
 
 interface LeaveViewProps {
+  staffUser: { name?: string | null; role?: string | null } | any;
   leaveForm: LeaveFormState;
   setLeaveForm: (form: LeaveFormState) => void;
   onSubmitLeave: () => Promise<void> | void;
@@ -48,6 +50,7 @@ const formatDateTime = (iso: string | null | undefined) =>
     : '';
 
 export default function LeaveView({
+  staffUser,
   leaveForm,
   setLeaveForm,
   onSubmitLeave,
@@ -189,8 +192,11 @@ export default function LeaveView({
 
   return (
     <div className="min-h-screen bg-slate-50 pb-24 max-w-md mx-auto shadow-2xl relative">
+      {/* 共用頂部個人資訊區塊 */}
+      <PortalTopHeader name={staffUser?.name} role={staffUser?.role} />
+
       <div className="p-4 space-y-4">
-        <h3 className="font-bold text-slate-700 flex items-center gap-2 text-sm">
+        <h3 className="font-bold text-slate-700 flex items-center gap-2 text-sm mt-2">
           <Coffee size={18} />
           請假申請
         </h3>

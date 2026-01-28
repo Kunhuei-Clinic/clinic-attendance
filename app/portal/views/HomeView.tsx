@@ -1,5 +1,6 @@
 import React from 'react';
 import { Clock, MapPin, Bell } from 'lucide-react';
+import PortalTopHeader from './PortalTopHeader';
 
 type GpsStatus = 'idle' | 'locating' | 'ok' | 'out_of_range' | 'error';
 
@@ -18,8 +19,6 @@ interface HomeViewProps {
   bypassMode: boolean;
   setBypassMode: (value: boolean) => void;
 }
-
-const getTodayStr = () => new Date().toLocaleDateString('zh-TW');
 
 const formatTime = (iso: string | null | undefined) =>
   iso
@@ -54,28 +53,13 @@ export default function HomeView({
 
   return (
     <div className="min-h-screen bg-slate-50 pb-24 max-w-md mx-auto shadow-2xl relative">
-      {/* 頂部個人資訊與今日資訊 */}
-      <div className="bg-teal-600 p-6 pt-12 text-white rounded-b-[2rem] shadow-lg relative">
-        <div className="flex justify-between items-start">
-          <div>
-            <p className="text-teal-200 text-sm font-bold mb-1">
-              {getTodayStr()}
-            </p>
-            <h2 className="text-3xl font-black">
-              {staffUser?.name}{' '}
-              <span className="text-base font-normal opacity-80">
-                {staffUser?.role}
-              </span>
-            </h2>
-          </div>
-          {isVip && (
-            <span className="bg-yellow-400 text-yellow-900 text-xs font-black px-2 py-1 rounded-full shadow">
-              VIP
-            </span>
-          )}
-        </div>
-
-        <div className="mt-6 bg-white/10 backdrop-blur-md rounded-xl p-4 border border-white/20">
+      {/* 共用頂部個人資訊區塊 */}
+      <PortalTopHeader
+        name={staffUser?.name}
+        role={staffUser?.role}
+        isVip={isVip}
+      >
+        <div className="bg-white/10 backdrop-blur-md rounded-xl p-4 border border-white/20">
           <div className="flex justify-between items-center text-sm mb-3">
             <span className="text-teal-100 flex items-center gap-1">
               <MapPin size={12} />
@@ -106,7 +90,7 @@ export default function HomeView({
             </div>
           </div>
         </div>
-      </div>
+      </PortalTopHeader>
 
       <div className="p-6 space-y-6">
         {/* 公告區塊：放在打卡按鈕上方、醒目卡片 */}
@@ -124,7 +108,7 @@ export default function HomeView({
             {announcements.map((ann, i) => (
               <div
                 key={i}
-                className="bg-gradient-to-r from-orange-50 via-yellow-50 to-orange-50 border-l-4 border-orange-500 p-4 rounded-xl shadow-md hover:shadow-lg transition"
+                className="bg-gradient-to-r from-orange-50 to-yellow-50 border-l-4 border-orange-500 p-4 rounded-xl shadow-md hover:shadow-lg transition"
               >
                 <div className="flex items-start justify-between gap-2 mb-2">
                   <div className="font-bold text-slate-800 text-base flex-1">

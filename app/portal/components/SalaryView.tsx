@@ -1,9 +1,20 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { DollarSign, ChevronRight, X, Calendar, FileText, TrendingUp, ShieldAlert, Lock, Unlock, Eye, EyeOff } from 'lucide-react';
+import {
+  DollarSign,
+  ChevronRight,
+  X,
+  Calendar,
+  FileText,
+  TrendingUp,
+  Lock,
+  Unlock,
+  Eye,
+  EyeOff,
+} from 'lucide-react';
 
-// 輔助函式
+// 輔助函式（單純格式化數字字串，不做商業邏輯計算）
 const fmt = (val: any) => Number(val || 0).toLocaleString();
 
 export default function PortalSalaryView({ user }: { user: any }) {
@@ -133,7 +144,7 @@ export default function PortalSalaryView({ user }: { user: any }) {
                 <div className="space-y-3">
                     {list.map((item) => {
                         const titleMonth = user.role === '醫師' ? item.paid_in_month : item.year_month;
-                        // 修正：一般員工讀取 snapshot.netPay，醫師讀取 net_pay
+                        // 一般員工讀取 snapshot.netPay，醫師直接使用後端欄位 net_pay
                         const netPay = user.role === '醫師' ? item.net_pay : (item.snapshot?.netPay || 0);
 
                         return (
@@ -160,30 +171,35 @@ export default function PortalSalaryView({ user }: { user: any }) {
 // ... 下面 SalaryDetailModal 保持不變 (直接沿用上一版的即可) ...
 // 為了完整性，這裡再貼一次 SalaryDetailModal，確保您複製時不會漏掉
 function SalaryDetailModal({ data, role, onClose }: any) {
-    const isDoctor = role === '醫師';
-    
-    // 醫師資料對應
-    const doc = isDoctor ? {
+  const isDoctor = role === '醫師';
+
+  // 醫師資料對應：完全依照後端欄位顯示，不在前端做薪資計算
+  const doc = isDoctor
+    ? {
         month: data.paid_in_month,
-        basePay: data.actual_base_pay, 
-        bonus: data.final_ppf_bonus,   
-        netPay: data.net_pay,          
-        ppfMonth: data.target_month,   
+        basePay: data.actual_base_pay,
+        bonus: data.final_ppf_bonus,
+        netPay: data.net_pay,
+        ppfMonth: data.target_month,
         transfer: data.transfer_amount,
         cash: data.cash_amount,
-        deductions: (data.actual_base_pay + data.final_ppf_bonus) - data.net_pay 
-    } : null;
+        // 統計資訊
+        patientCount: data.patient_count,
+        nhiPoints: data.nhi_points,
+        totalPerformance: data.total_performance,
+      }
+    : undefined;
 
-    // 員工資料對應
-    const staff = !isDoctor ? data.snapshot : null;
+  // 一般員工：沿用 snapshot 內容
+  const staff = !isDoctor ? data.snapshot : null;
 
-    return (
+  return (
         <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-0 md:p-4 backdrop-blur-sm animate-fade-in">
             <div className="bg-white w-full h-full md:h-auto md:max-h-[90vh] md:max-w-md rounded-none md:rounded-2xl overflow-hidden flex flex-col shadow-2xl pb-[env(safe-area-inset-bottom)]">
                 <div className="bg-slate-900 text-white p-4 md:p-5 flex justify-between items-center shrink-0">
                     <div>
                         <p className="text-[11px] md:text-xs text-slate-400 mb-1">薪資單明細</p>
-                        <h3 className="text-xl md:text-2xl font-bold">{isDoctor ? doc.month : data.year_month}</h3>
+                        <h3 className="text-xl md:text-2xl font-bold">{isDoctor ? doc?.month : data.year_month}</h3>
                     </div>
                     <button onClick={onClose} className="bg-white/10 p-2 rounded-full hover:bg-white/20 transition">
                         <X size={18} className="md:size-5" />
@@ -193,54 +209,58 @@ function SalaryDetailModal({ data, role, onClose }: any) {
                     <div className="text-center border-b border-slate-100 pb-6">
                         <p className="text-xs md:text-sm text-slate-500 font-bold mb-1">本月實領金額 (Net Pay)</p>
                         <p className="text-3xl md:text-5xl font-black text-slate-800 tracking-tight">
-                            ${fmt(isDoctor ? doc.netPay : staff.netPay)}
+                            ${fmt(isDoctor ? doc?.netPay : staff.netPay)}
                         </p>
                     </div>
-                    {isDoctor ? (
-                        <div className="space-y-4">
-                            <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-3 text-sm md:text-base">
-                                <div className="flex justify-between items-center">
-                                    <span className="text-slate-600 font-bold">保障薪 / 掛牌費</span>
-                                    <span className="font-mono font-bold text-base md:text-lg">${fmt(doc.basePay)}</span>
-                                </div>
-                                <div className="flex justify-between items-center text-blue-700">
-                                    <span className="font-bold flex items-center gap-1">
-                                        <TrendingUp size={14} className="md:size-4" /> PPF 績效獎金
-                                    </span>
-                                    <span className="font-mono font-bold text-base md:text-lg">+${fmt(doc.bonus)}</span>
-                                </div>
-                                <div className="text-xs text-blue-400 text-right">(結算月份: {doc.ppfMonth})</div>
-                            </div>
-                            {doc.deductions > 0 && (
-                                <div className="bg-red-50 p-3 rounded-lg border border-red-100 flex justify-between items-center text-red-700 text-xs md:text-sm">
-                                    <span className="font-bold flex items-center gap-1">
-                                        <ShieldAlert size={12} className="md:size-4" /> 應扣項目 (勞健保等)
-                                    </span>
-                                    <span className="font-mono font-bold text-sm md:text-base">-${fmt(doc.deductions)}</span>
-                                </div>
-                            )}
-                            <div className="border-t border-dashed pt-4">
-                                <h4 className="text-[11px] md:text-xs font-bold text-slate-400 mb-3 flex items-center gap-1">
-                                    <FileText size={11} className="md:size-3" /> PPF 計算細節
-                                </h4>
-                                <div className="grid grid-cols-2 gap-3 text-[11px] md:text-xs text-slate-600">
-                                    <div className="bg-slate-50 p-2 rounded">
-                                        看診人數:{' '}
-                                        <span className="font-bold text-slate-800">{data.patient_count}</span>
-                                    </div>
-                                    <div className="bg-slate-50 p-2 rounded">
-                                        健保點數:{' '}
-                                        <span className="font-bold text-slate-800">{fmt(data.nhi_points)}</span>
-                                    </div>
-                                    <div className="bg-slate-50 p-2 rounded">
-                                        自費總額:{' '}
-                                        <span className="font-bold text-yellow-600">
-                                            ${fmt(data.total_performance - data.nhi_points * 0.8)}
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
+                    {isDoctor && doc ? (
+                      <div className="space-y-4">
+                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-3 text-sm md:text-base">
+                          <div className="flex justify-between items-center">
+                            <span className="text-slate-600 font-bold">保障薪 / 掛牌費</span>
+                            <span className="font-mono font-bold text-base md:text-lg">
+                              ${fmt(doc!.basePay)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center text-blue-700">
+                            <span className="font-bold flex items-center gap-1">
+                              <TrendingUp size={14} className="md:size-4" /> PPF 績效獎金
+                            </span>
+                            <span className="font-mono font-bold text-base md:text-lg">
+                              +${fmt(doc!.bonus)}
+                            </span>
+                          </div>
+                          <div className="text-xs text-blue-400 text-right">
+                            (結算月份: {doc!.ppfMonth})
+                          </div>
                         </div>
+                          <div className="grid grid-cols-2 gap-3 text-[11px] md:text-xs text-slate-600">
+                            <div className="bg-slate-50 p-2 rounded">
+                              看診人數:{' '}
+                              <span className="font-bold text-slate-800">
+                                {doc!.patientCount}
+                              </span>
+                            </div>
+                            <div className="bg-slate-50 p-2 rounded">
+                              健保點數:{' '}
+                              <span className="font-bold text-slate-800">
+                                {fmt(doc!.nhiPoints)}
+                              </span>
+                            </div>
+                            <div className="bg-slate-50 p-2 rounded col-span-2">
+                              總業績:{' '}
+                              <span className="font-bold text-yellow-700">
+                                ${fmt(doc!.totalPerformance)}
+                              </span>
+                            </div>
+                          </div>
+
+                        {/* 醫師 PPF 統計資訊：僅顯示後端提供的原始欄位 */}
+                        <div className="border-t border-dashed pt-4">
+                          <h4 className="text-[11px] md:text-xs font-bold text-slate-400 mb-3 flex items-center gap-1">
+                            <FileText size={11} className="md:size-3" /> PPF 統計資訊
+                          </h4>
+                        </div>
+                      </div>
                     ) : (
                         <div className="space-y-3 text-xs md:text-sm">
                             <div className="flex justify-between border-b border-dashed pb-2">
@@ -275,14 +295,14 @@ function SalaryDetailModal({ data, role, onClose }: any) {
                         <div className="flex flex-col">
                             <span className="text-[11px] text-slate-500 font-bold mb-1">銀行匯款</span>
                             <span className="font-mono font-bold text-base md:text-lg">
-                                ${fmt(isDoctor ? doc.transfer : 0)}
+                                ${fmt(isDoctor ? doc!.transfer : 0)}
                             </span>
                         </div>
                         <div className="w-px h-8 bg-slate-300"></div>
                         <div className="flex flex-col text-right">
                             <span className="text-[11px] text-slate-500 font-bold mb-1">現金發放</span>
                             <span className="font-mono font-bold text-base md:text-lg text-green-600">
-                                ${fmt(isDoctor ? doc.cash : 0)}
+                                ${fmt(isDoctor ? doc!.cash : 0)}
                             </span>
                         </div>
                     </div>

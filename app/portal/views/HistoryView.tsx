@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { History, PlusCircle, X } from 'lucide-react';
+import PortalTopHeader from './PortalTopHeader';
 
 type MissedCorrectionType = 'check_in' | 'check_out' | 'full';
 
@@ -14,6 +15,7 @@ export interface MissedPunchForm {
 }
 
 interface HistoryViewProps {
+  staffUser: any;
   logs: any[];
   selectedMonth: string;
   setSelectedMonth: (value: string) => void;
@@ -30,6 +32,7 @@ const formatTime = (iso: string | null | undefined) =>
     : '--:--';
 
 export default function HistoryView({
+  staffUser,
   logs,
   selectedMonth,
   setSelectedMonth,
@@ -259,8 +262,11 @@ export default function HistoryView({
     <div className="min-h-screen bg-slate-50 pb-24 max-w-md mx-auto shadow-2xl relative">
       {renderMissedPunchModal()}
 
+      {/* 共用頂部個人資訊區塊 */}
+      <PortalTopHeader name={staffUser?.name} role={staffUser?.role} />
+
       <div className="p-4 space-y-4">
-        <div className="flex justify-between items-center">
+        <div className="flex justify-between items-center mt-2">
           <h3 className="font-bold text-slate-700 flex items-center gap-2 text-sm">
             <History size={18} />
             歷史紀錄

@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { FileText } from 'lucide-react';
+import PortalTopHeader from './PortalTopHeader';
 
 interface RosterItem {
   date: string;
@@ -12,7 +13,7 @@ interface RosterItem {
 
 interface RosterViewProps {
   rosterData: RosterItem[];
-  staffRole: string;
+  staffUser: { role?: string | null; name?: string | null } | any;
 }
 
 const getShiftLabel = (code: string) => {
@@ -40,11 +41,16 @@ const getShiftLabel = (code: string) => {
   };
 };
 
-export default function RosterView({ rosterData, staffRole }: RosterViewProps) {
+export default function RosterView({ rosterData, staffUser }: RosterViewProps) {
+  const staffRole = staffUser?.role || '員工';
+
   return (
     <div className="min-h-screen bg-slate-50 pb-24 max-w-md mx-auto shadow-2xl relative">
+      {/* 共用頂部個人資訊區塊 */}
+      <PortalTopHeader name={staffUser?.name} role={staffRole} />
+
       <div className="p-4 space-y-4">
-        <h3 className="font-bold text-slate-700 flex items-center gap-2 text-sm">
+        <h3 className="font-bold text-slate-700 flex items-center gap-2 text-sm mt-2">
           <FileText size={18} />
           近期班表 ({staffRole})
         </h3>
