@@ -253,40 +253,97 @@ export default function LeaveHistoryModal({
       }
 
       const now = new Date();
-      const msPerYear = 1000 * 60 * 60 * 24 * 365.25;
-      const totalYears = (now.getTime() - startDate.getTime()) / msPerYear;
-      const maxFullYears = Math.floor(totalYears);
+      const currentYear = now.getFullYear();
+      const lastYearToGenerate = currentYear + 1; // 終止條件：不產生超過「明年」的年度
 
-      if (maxFullYears <= 0) {
-        alert('到職未滿半年，目前尚無可計算的特休年度。');
-        return;
-      }
+      // 工具函式：安全加月份 / 年數（不改動原始 Date）
+      const addMonths = (date: Date, months: number) => {
+        const d = new Date(date.getTime());
+        const targetMonth = d.getMonth() + months;
+        d.setMonth(targetMonth);
+        return d;
+      };
 
-      const existingYearMap: Record<string, AnnualLeaveItem> = {};
-      annualLeaveHistory.forEach((item) => {
-        existingYearMap[item.year] = item;
-      });
+      const addYears = (date: Date, years: number) => {
+        const d = new Date(date.getTime());
+        d.setFullYear(d.getFullYear() + years);
+        return d;
+      };
 
+      // 計算週年制特休天數（僅依「滿 n 年」）
+      const getQuotaByFullYears = (n: number): number => {
+        if (n === 1) return 7;
+        if (n === 2) return 10;
+        if (n === 3 || n === 4) return 14;
+        if (n >= 5 && n <= 9) return 15;
+        if (n >= 10) {
+          return Math.min(30, 15 + (n - 9));
+        }
+        return 0;
+      };
+
+      // 先複製一份，以便保留手動資料
       const newList: AnnualLeaveItem[] = [...annualLeaveHistory];
 
-      for (let i = 0; i <= maxFullYears; i++) {
-        const serviceYears = i + 1; // 以每滿一年為一階
-        const quota = calculateTaiwanLeaveByYears(serviceYears);
-        if (quota <= 0) continue;
+      // 工具函式：判斷同年度且同天數是否已存在（避免重複產生）
+      const existsSameYearAndDays = (yearLabel: string, days: number) =>
+        newList.some(
+          (item) =>
+            item.year === yearLabel && Number(item.days ?? 0) === Number(days),
+        );
 
-        const yearLabel = (startDate.getFullYear() + i).toString();
+      // 1) 滿半年特休：3 天
+      const halfYearDate = addMonths(startDate, 6);
+      if (!Number.isNaN(halfYearDate.getTime())) {
+        const halfYearYear = halfYearDate.getFullYear();
+        // 若已發生且不超過「明年」，就產生一筆
+        if (halfYearYear <= lastYearToGenerate) {
+          const yearLabel = String(halfYearYear);
+          const days = 3;
 
-        // 已存在的年度不覆蓋，只保留原本設定
-        if (existingYearMap[yearLabel]) continue;
+          if (!existsSameYearAndDays(yearLabel, days)) {
+            newList.push({
+              year: yearLabel,
+              days,
+              manual_used: 0,
+              manual_settled: 0,
+              system_used: 0,
+              system_settled: 0,
+              note: '滿半年特休 (週年制)',
+            });
+          }
+        }
+      }
+
+      // 2) 滿 n 週年特休（n = 1 起算）
+      for (let n = 1; n <= 50; n++) {
+        const anniversaryDate = addYears(startDate, n);
+        if (Number.isNaN(anniversaryDate.getTime())) break;
+
+        const annivYear = anniversaryDate.getFullYear();
+        if (annivYear > lastYearToGenerate) {
+          // 超過明年就停止產生
+          break;
+        }
+
+        const days = getQuotaByFullYears(n);
+        if (days <= 0) continue;
+
+        const yearLabel = String(annivYear);
+
+        if (existsSameYearAndDays(yearLabel, days)) {
+          // 已有同年度同天數資料（可能是手動或先前自動產生），不重複新增
+          continue;
+        }
 
         newList.push({
           year: yearLabel,
-          days: quota,
+          days,
           manual_used: 0,
           manual_settled: 0,
           system_used: 0,
           system_settled: 0,
-          note: '依到職日自動試算',
+          note: `滿 ${n} 年特休 (週年制)`,
         });
       }
 
