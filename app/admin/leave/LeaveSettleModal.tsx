@@ -7,6 +7,7 @@ type LeaveSettleForm = {
   days: number;
   pay_month: string;
   notes: string;
+  target_year?: string;
 };
 
 type LeaveSettleModalProps = {
@@ -14,6 +15,11 @@ type LeaveSettleModalProps = {
   onClose: () => void;
   staff: any | null;
   onSubmit: (form: LeaveSettleForm) => Promise<void> | void;
+  defaultDays?: number;
+  defaultPayMonth?: string;
+  // 新增：針對特定年度結算
+  targetYear?: string; // 例如 "2024"
+  maxDays?: number; // 該年度剩餘天數
 };
 
 export default function LeaveSettleModal({
@@ -21,6 +27,10 @@ export default function LeaveSettleModal({
   onClose,
   staff,
   onSubmit,
+  defaultDays,
+  defaultPayMonth,
+  targetYear,
+  maxDays,
 }: LeaveSettleModalProps) {
   const [form, setForm] = useState<LeaveSettleForm>({
     days: 0,
@@ -28,16 +38,24 @@ export default function LeaveSettleModal({
     notes: '',
   });
 
-  // 根據選定員工初始化表單
+  // 根據選定員工、年度與預設值初始化表單
   useEffect(() => {
     if (isOpen && staff) {
+      const effectiveMax = maxDays ?? staff.remaining ?? 0;
+      const initialDays =
+        targetYear != null
+          ? (maxDays ?? effectiveMax)
+          : defaultDays ?? Math.min(effectiveMax, 1) || 0;
+      const initialNotes =
+        targetYear != null ? `${targetYear}年度特休結算` : '';
+
       setForm({
-        days: Math.min(staff.remaining ?? 0, 1) || 0,
-        pay_month: new Date().toISOString().slice(0, 7),
-        notes: '',
+        days: initialDays,
+        pay_month: defaultPayMonth ?? new Date().toISOString().slice(0, 7),
+        notes: initialNotes,
       });
     }
-  }, [isOpen, staff]);
+  }, [isOpen, staff, defaultDays, defaultPayMonth, targetYear, maxDays]);
 
   if (!isOpen || !staff) return null;
 
@@ -59,12 +77,17 @@ export default function LeaveSettleModal({
       return;
     }
 
-    if (form.days > (staff.remaining ?? 0)) {
-      alert(`剩餘特休不足 (剩餘: ${staff.remaining?.toFixed(1) ?? 0} 天)`);
+    const allowedMax = maxDays ?? staff.remaining ?? 0;
+
+    if (form.days > allowedMax) {
+      alert(`剩餘特休不足 (剩餘: ${Number(allowedMax).toFixed(1)} 天)`);
       return;
     }
 
-    await onSubmit(form);
+    await onSubmit({
+      ...form,
+      target_year: targetYear,
+    });
   };
 
   return (
@@ -98,7 +121,7 @@ export default function LeaveSettleModal({
               type="number"
               step="0.5"
               min="0.5"
-              max={staff.remaining}
+              max={maxDays ?? staff.remaining}
               className="w-full p-3 border rounded-lg font-bold text-lg text-center"
               value={form.days}
               onChange={(e) =>
@@ -109,7 +132,7 @@ export default function LeaveSettleModal({
               }
             />
             <p className="text-xs text-slate-400 mt-1">
-              最多可結算 {staff.remaining?.toFixed(1)} 天
+              最多可結算 {Number(maxDays ?? staff.remaining ?? 0).toFixed(1)} 天
             </p>
           </div>
 
