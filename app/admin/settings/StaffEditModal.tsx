@@ -177,7 +177,7 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
     const payload = {
       name: editData.name,
       role: editData.role,
-      entity: editData.entity,
+      entity: editData.entity || 'clinic', // 確保 entity 有預設值
       is_active: editData.is_active,
       start_date: editData.start_date || null,
       salary_mode: editData.salary_mode || 'hourly',

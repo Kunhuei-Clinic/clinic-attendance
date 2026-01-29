@@ -90,9 +90,11 @@ export async function POST(request: NextRequest) {
     const { clinic_id, ...staffData } = body;
 
     // 🟢 多租戶：將 clinic_id 合併到 payload 中（不讓前端傳入）
+    // 同時確保 entity 欄位有預設值
     const payload = {
       ...staffData,
-      clinic_id: clinicId // 自動填入，不讓前端傳入
+      clinic_id: clinicId, // 自動填入，不讓前端傳入
+      entity: staffData.entity || 'clinic' // 如果沒有提供 entity，預設為 'clinic'
     };
 
     const { error } = await supabaseAdmin
@@ -101,6 +103,7 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       console.error('Add staff error:', error);
+      console.error('Payload:', JSON.stringify(payload, null, 2));
       return NextResponse.json(
         { success: false, message: `儲存失敗: ${error.message}` },
         { status: 500 }
@@ -164,10 +167,16 @@ export async function PATCH(request: NextRequest) {
     }
 
     // 🟢 多租戶：確保更新時不會改變 clinic_id
-    const payload = {
+    // 同時確保 entity 欄位有預設值（如果提供）
+    const payload: any = {
       ...updateData,
       clinic_id: clinicId // 確保 clinic_id 不會被修改
     };
+    
+    // 如果提供了 entity 欄位，確保它有值
+    if (updateData.entity !== undefined) {
+      payload.entity = updateData.entity || 'clinic';
+    }
 
     const { error } = await supabaseAdmin
       .from('staff')
@@ -177,6 +186,7 @@ export async function PATCH(request: NextRequest) {
 
     if (error) {
       console.error('Update staff error:', error);
+      console.error('Payload:', JSON.stringify(payload, null, 2));
       return NextResponse.json(
         { success: false, message: `更新失敗: ${error.message}` },
         { status: 500 }
