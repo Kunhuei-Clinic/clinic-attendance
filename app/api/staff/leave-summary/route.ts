@@ -77,9 +77,14 @@ export async function GET(request: NextRequest) {
     }
 
     if (!staff.start_date) {
-      // 沒有到職日則無法計算特休
+      // 沒有到職日則無法計算特休：保持與下方一致的 staff 結構
       return NextResponse.json({
-        staff,
+        staff: {
+          staff_id: staff.id,
+          staff_name: staff.name,
+          role: staff.role ?? null,
+          start_date: staff.start_date,
+        },
         years: [],
       });
     }
