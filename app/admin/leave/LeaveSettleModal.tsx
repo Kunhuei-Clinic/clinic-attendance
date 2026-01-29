@@ -45,7 +45,7 @@ export default function LeaveSettleModal({
       const initialDays =
         targetYear != null
           ? (maxDays ?? effectiveMax)
-          : defaultDays ?? Math.min(effectiveMax, 1) || 0;
+          : (defaultDays ?? Math.min(effectiveMax, 1) || 0);
       const initialNotes =
         targetYear != null ? `${targetYear}年度特休結算` : '';
 
