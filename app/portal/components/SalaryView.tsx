@@ -187,8 +187,33 @@ function SalaryDetailModal({ data, role, onClose }: any) {
         patientCount: data.patient_count,
         nhiPoints: data.nhi_points,
         totalPerformance: data.total_performance,
+        // 自費與特殊費用項目
+        selfPayItems: (data.self_pay_items as any[]) || [],
+        extraItems: (data.extra_items as any[]) || [],
+        // 勞健保自付
+        insLabor: Number(data.insurance_labor || 0),
+        insHealth: Number(data.insurance_health || 0),
       }
     : undefined;
+
+  // 自費抽成總額：amount * (rate / 100) 加總
+  const selfPayTotal = isDoctor && doc
+    ? doc.selfPayItems.reduce(
+        (sum: number, item: any) =>
+          sum +
+          Number(item.amount || 0) *
+            (Number(item.rate || 0) / 100),
+        0,
+      )
+    : 0;
+
+  // 特殊費用 / 津貼總額：amount 加總
+  const extraTotal = isDoctor && doc
+    ? doc.extraItems.reduce(
+        (sum: number, item: any) => sum + Number(item.amount || 0),
+        0,
+      )
+    : 0;
 
   // 一般員工：沿用 snapshot 內容
   const staff = !isDoctor ? data.snapshot : null;
@@ -214,9 +239,12 @@ function SalaryDetailModal({ data, role, onClose }: any) {
                     </div>
                     {isDoctor && doc ? (
                       <div className="space-y-4">
-                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-3 text-sm md:text-base">
+                        {/* 應發項目 (Earnings) */}
+                        <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-200 space-y-3 text-sm md:text-base">
                           <div className="flex justify-between items-center">
-                            <span className="text-slate-600 font-bold">保障薪 / 掛牌費</span>
+                            <span className="text-slate-700 font-bold">
+                              保障薪 / 掛牌費
+                            </span>
                             <span className="font-mono font-bold text-base md:text-lg">
                               ${fmt(doc!.basePay)}
                             </span>
@@ -229,10 +257,109 @@ function SalaryDetailModal({ data, role, onClose }: any) {
                               +${fmt(doc!.bonus)}
                             </span>
                           </div>
-                          <div className="text-xs text-blue-400 text-right">
+                          <div className="text-xs text-blue-500 text-right">
                             (結算月份: {doc!.ppfMonth})
                           </div>
+
+                          {/* 自費項目抽成 */}
+                          {selfPayTotal > 0 && (
+                            <div className="mt-3 pt-3 border-t border-dashed border-emerald-200 space-y-2">
+                              <div className="flex justify-between items-center">
+                                <span className="text-xs font-bold text-emerald-700">
+                                  自費項目抽成
+                                </span>
+                                <span className="font-mono font-bold text-sm md:text-base text-emerald-800">
+                                  +${fmt(selfPayTotal)}
+                                </span>
+                              </div>
+                              <div className="space-y-1 text-[11px] md:text-xs text-slate-600">
+                                {doc!.selfPayItems.map((item: any, idx: number) => {
+                                  const amount = Number(item.amount || 0);
+                                  const rate = Number(item.rate || 0);
+                                  const share = amount * (rate / 100);
+                                  return (
+                                    <div
+                                      key={idx}
+                                      className="flex justify-between items-center bg-white/70 px-2 py-1 rounded"
+                                    >
+                                      <span className="truncate max-w-[60%]">
+                                        {item.name || '自費項目'}{' '}
+                                        <span className="text-slate-400">
+                                          ({fmt(amount)} × {rate}%)
+                                        </span>
+                                      </span>
+                                      <span className="font-mono font-bold text-emerald-800">
+                                        +${fmt(share)}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* 特殊費用 / 津貼 */}
+                          {extraTotal !== 0 && (
+                            <div className="mt-3 pt-3 border-t border-dashed border-emerald-200 space-y-2">
+                              <div className="flex justify-between items-center">
+                                <span className="text-xs font-bold text-emerald-700">
+                                  特殊費用 / 津貼
+                                </span>
+                                <span className="font-mono font-bold text-sm md:text-base text-emerald-800">
+                                  {extraTotal > 0 ? '+' : ''}
+                                  ${fmt(extraTotal)}
+                                </span>
+                              </div>
+                              <div className="space-y-1 text-[11px] md:text-xs text-slate-600">
+                                {doc!.extraItems.map((item: any, idx: number) => (
+                                  <div
+                                    key={idx}
+                                    className="flex justify-between items-center bg-white/70 px-2 py-1 rounded"
+                                  >
+                                    <span className="truncate max-w-[60%]">
+                                      {item.name || '特殊項目'}
+                                    </span>
+                                    <span className="font-mono font-bold text-emerald-800">
+                                      {Number(item.amount || 0) > 0 ? '+' : ''}
+                                      ${fmt(item.amount || 0)}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
+
+                        {/* 應扣項目 (Deductions) */}
+                        {(doc!.insLabor > 0 || doc!.insHealth > 0) && (
+                          <div className="bg-red-50 p-4 rounded-xl border border-red-200 space-y-2 text-xs md:text-sm">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-red-700 font-bold">應扣項目</span>
+                            </div>
+                            {doc!.insLabor > 0 && (
+                              <div className="flex justify-between items-center">
+                                <span className="text-red-700">勞保自付額</span>
+                                <span className="font-mono font-bold text-red-700">
+                                  -${fmt(doc!.insLabor)}
+                                </span>
+                              </div>
+                            )}
+                            {doc!.insHealth > 0 && (
+                              <div className="flex justify-between items-center">
+                                <span className="text-red-700">健保自付額</span>
+                                <span className="font-mono font-bold text-red-700">
+                                  -${fmt(doc!.insHealth)}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* 醫師 PPF / 統計資訊：僅顯示後端提供的原始欄位 */}
+                        <div className="border-t border-dashed pt-4 space-y-2">
+                          <h4 className="text-[11px] md:text-xs font-bold text-slate-400 mb-2 flex items-center gap-1">
+                            <FileText size={11} className="md:size-3" /> PPF 統計資訊
+                          </h4>
                           <div className="grid grid-cols-2 gap-3 text-[11px] md:text-xs text-slate-600">
                             <div className="bg-slate-50 p-2 rounded">
                               看診人數:{' '}
@@ -253,12 +380,6 @@ function SalaryDetailModal({ data, role, onClose }: any) {
                               </span>
                             </div>
                           </div>
-
-                        {/* 醫師 PPF 統計資訊：僅顯示後端提供的原始欄位 */}
-                        <div className="border-t border-dashed pt-4">
-                          <h4 className="text-[11px] md:text-xs font-bold text-slate-400 mb-3 flex items-center gap-1">
-                            <FileText size={11} className="md:size-3" /> PPF 統計資訊
-                          </h4>
                         </div>
                       </div>
                     ) : (

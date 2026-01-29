@@ -3,6 +3,13 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { getClinicIdFromRequest } from '@/lib/clinicHelper';
 
 // 勞基法特休額度（週年制）計算：依總年資決定該年度額度
+// 規則：
+// - 滿 0.5 年: 3天
+// - 滿 1 年: 7天
+// - 滿 2 年: 10天
+// - 滿 3-4 年: 14天
+// - 滿 5-9 年: 15天
+// - 10 年以上: 16 + (N - 10) 天，N 為已滿年數，上限 30 天
 function calculateAnnualQuotaBySeniority(startDate: Date, referenceDate: Date): number {
   const msPerYear = 1000 * 60 * 60 * 24 * 365.25;
   const years = (referenceDate.getTime() - startDate.getTime()) / msPerYear;
@@ -13,9 +20,11 @@ function calculateAnnualQuotaBySeniority(startDate: Date, referenceDate: Date): 
   if (years < 3) return 10; // 滿二年未滿三年
   if (years < 5) return 14; // 滿三年未滿五年
   if (years < 10) return 15; // 滿五年未滿十年
-  // 十年以上：每滿兩年加一天，最多30天
-  const extra = Math.floor((years - 10) / 2);
-  return Math.min(15 + extra, 30);
+
+  // 10 年以上：依已滿年數計算 16 + (N - 10)，上限 30 天
+  const fullYears = Math.floor(years);
+  const quota = 16 + (fullYears - 10);
+  return Math.min(quota, 30);
 }
 
 // 將 Date 轉成 YYYY-MM-DD（台灣時區不嚴格要求，使用 ISO 切割即可）
@@ -98,7 +107,7 @@ export async function GET(request: NextRequest) {
     // 3. 讀取該員工所有特休結算紀錄
     const { data: settlements, error: settleError } = await supabaseAdmin
       .from('leave_settlements')
-      .select('days, pay_month, status, notes, created_at')
+      .select('days, pay_month, status, notes, created_at, target_year')
       .eq('clinic_id', clinicId)
       .eq('staff_id', staffId);
 
@@ -143,24 +152,48 @@ export async function GET(request: NextRequest) {
       });
       const usedDays = Math.round((usedHours / 8) * 100) / 100;
 
-      // 已結算：暫以「pay_month 年份」對應該週期起始年分來推估
+      // 已結算：優先使用 target_year 或備註，其次才依結算日期落在週期內來判斷
       const cycleYear = cycleStart.getFullYear();
       let settledDays = 0;
       (settlements || []).forEach((s: any) => {
-        let yearFromSettlement: number | null = null;
+        let matchedCycle = false;
 
-        if (s.pay_month) {
-          // pay_month 例如 "2024-01"
-          const y = Number(String(s.pay_month).slice(0, 4));
-          if (!Number.isNaN(y)) yearFromSettlement = y;
-        } else if (s.created_at) {
-          const d = new Date(s.created_at);
-          if (!Number.isNaN(d.getTime())) {
-            yearFromSettlement = d.getFullYear();
+        // 1) 明確標記的 target_year 欄位
+        if (s.target_year != null) {
+          const ty = Number(s.target_year);
+          if (!Number.isNaN(ty) && ty === cycleYear) {
+            matchedCycle = true;
           }
         }
 
-        if (yearFromSettlement === cycleYear) {
+        // 2) 從備註中解析年度（例如「2024年度特休結算」）
+        if (!matchedCycle && typeof s.notes === 'string' && s.notes) {
+          const match = s.notes.match(/(\d{4})\s*年度/);
+          if (match) {
+            const ny = Number(match[1]);
+            if (!Number.isNaN(ny) && ny === cycleYear) {
+              matchedCycle = true;
+            }
+          }
+        }
+
+        // 3) 若無明確標記，則看結算日期是否落在該週期內
+        if (!matchedCycle) {
+          let settleDate: Date | null = null;
+          if (s.created_at) {
+            const d = new Date(s.created_at);
+            if (!Number.isNaN(d.getTime())) settleDate = d;
+          } else if (s.pay_month) {
+            const d = new Date(`${s.pay_month}-01T00:00:00`);
+            if (!Number.isNaN(d.getTime())) settleDate = d;
+          }
+
+          if (settleDate && settleDate >= cycleStart && settleDate <= cycleEnd) {
+            matchedCycle = true;
+          }
+        }
+
+        if (matchedCycle) {
           settledDays += Number(s.days || 0);
         }
       });
@@ -186,7 +219,12 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json({
-      staff,
+      staff: {
+        staff_id: staff.id,
+        staff_name: staff.name,
+        role: staff.role ?? null,
+        start_date: staff.start_date,
+      },
       years: cycles,
     });
   } catch (error: any) {

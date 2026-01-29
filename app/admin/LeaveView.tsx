@@ -93,8 +93,12 @@ export default function LeaveView() {
       if (result.error) {
         console.error('Error:', result.error);
         setRequests([]);
+      } else if (result.data) {
+        // 過濾掉「補打卡」申請，只保留真正的請假紀錄
+        const onlyLeaves = result.data.filter((r: any) => r.type !== '補打卡');
+        setRequests(onlyLeaves);
       } else {
-        setRequests(result.data || []);
+        setRequests([]);
       }
     } catch (error) {
       console.error('Fetch requests error:', error);
