@@ -1,5 +1,5 @@
 import React from 'react';
-import { Clock, MapPin, Bell } from 'lucide-react';
+import { Clock, MapPin, Bell, AlertTriangle } from 'lucide-react';
 import PortalTopHeader from './PortalTopHeader';
 
 type GpsStatus = 'idle' | 'locating' | 'ok' | 'out_of_range' | 'error';
@@ -93,14 +93,17 @@ export default function HomeView({
       </PortalTopHeader>
 
       <div className="p-6 space-y-6">
-        {/* 公告區塊：放在打卡按鈕上方、醒目卡片 */}
-        {announcements && announcements.length > 0 && (
+        {/* 🟢 公告區塊：放在打卡按鈕上方、醒目顯示 */}
+        {announcements && Array.isArray(announcements) && announcements.length > 0 && (
           <div className="space-y-3">
             <div className="flex items-center gap-2 mb-1">
-              <Bell size={18} className="text-orange-500" />
-              <h3 className="text-sm font-bold text-slate-700">最新公告</h3>
+              <Bell
+                size={18}
+                className="text-orange-600 fill-orange-600 animate-pulse"
+              />
+              <h3 className="text-sm font-bold text-orange-800">最新公告</h3>
               {announcements.length > 1 && (
-                <span className="text-xs text-slate-400">
+                <span className="text-xs text-orange-600 font-bold">
                   ({announcements.length} 則)
                 </span>
               )}
@@ -112,7 +115,7 @@ export default function HomeView({
               >
                 <div className="flex items-start justify-between gap-2 mb-2">
                   <div className="font-bold text-slate-800 text-base flex-1">
-                    {ann.title}
+                    {ann.title || '公告'}
                   </div>
                   {ann.created_at && (
                     <div className="text-[10px] text-slate-400 whitespace-nowrap">
@@ -124,14 +127,14 @@ export default function HomeView({
                   )}
                 </div>
                 <div className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
-                  {ann.content}
+                  {ann.content || ''}
                 </div>
               </div>
             ))}
           </div>
         )}
 
-        {/* 打卡大圓形按鈕（RWD：用 aspect-square + max-w-xs 控制） */}
+        {/* 打卡大圓形按鈕 */}
         <div className="w-full flex flex-col items-center gap-3">
           <button
             onClick={isWorking ? onClockOut : onClockIn}
@@ -159,21 +162,25 @@ export default function HomeView({
             </span>
           </button>
 
-          {!isVip && !bypassMode && (
-            <button
-              onClick={() => {
-                if (window.confirm('啟用救援模式？')) {
-                  setBypassMode(true);
-                }
-              }}
-              className="text-xs text-slate-400 underline"
-            >
-              GPS 定位不到？使用救援模式
-            </button>
-          )}
-          {bypassMode && (
-            <div className="bg-red-50 text-red-600 px-3 py-2 text-center rounded text-xs font-bold animate-pulse">
-              救援模式已開啟
+          {/* 救援模式開關 */}
+          {!isVip && (
+            <div className="text-center">
+              {!bypassMode ? (
+                <button
+                  onClick={() => {
+                    if (window.confirm('啟用救援模式？將標記為異常打卡')) {
+                      setBypassMode(true);
+                    }
+                  }}
+                  className="text-xs text-slate-400 underline hover:text-slate-600 transition"
+                >
+                  GPS 定位不到？開啟救援模式
+                </button>
+              ) : (
+                <div className="text-xs text-red-600 font-bold flex items-center justify-center gap-1 bg-red-50 px-3 py-2 rounded-lg">
+                  <AlertTriangle size={12} /> 救援模式已啟用 (將標記為異常)
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -181,5 +188,3 @@ export default function HomeView({
     </div>
   );
 }
-
-

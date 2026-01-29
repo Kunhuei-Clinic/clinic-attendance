@@ -281,6 +281,7 @@ export default function EmployeePortal() {
   };
 
   const fetchHomeData = async () => {
+    if (!staffUser?.id) return;
     try {
       const response = await fetch(
         `/api/portal/data?type=home&staffId=${staffUser.id}`,
@@ -288,10 +289,14 @@ export default function EmployeePortal() {
       const result = await response.json();
 
       if (result.data) {
+        // 🟢 確保公告被存入 state
         setAnnouncements(result.data.announcements || []);
         if (result.data.profile) {
           setProfile(result.data.profile);
         }
+      } else {
+        // 如果沒有資料，也要確保 announcements 是空陣列
+        setAnnouncements([]);
       }
     } catch (error) {
       console.error('讀取首頁資料失敗:', error);

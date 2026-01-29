@@ -2,66 +2,48 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { getClinicIdFromRequest } from '@/lib/clinicHelper';
 
-// 勞基法特休額度（週年制）計算：依總年資決定該年度額度
-// 規則：
-// - 滿 0.5 年: 3天
-// - 滿 1 年: 7天
-// - 滿 2 年: 10天
-// - 滿 3-4 年: 14天
-// - 滿 5-9 年: 15天
-// - 10 年以上: 16 + (N - 10) 天，N 為已滿年數，上限 30 天
-function calculateAnnualQuotaBySeniority(startDate: Date, referenceDate: Date): number {
-  const msPerYear = 1000 * 60 * 60 * 24 * 365.25;
-  const years = (referenceDate.getTime() - startDate.getTime()) / msPerYear;
+export const dynamic = 'force-dynamic';
 
-  if (years < 0.5) return 0; // 未滿半年
-  if (years < 1) return 3; // 滿半年未滿一年
-  if (years < 2) return 7; // 滿一年未滿二年
-  if (years < 3) return 10; // 滿二年未滿三年
-  if (years < 5) return 14; // 滿三年未滿五年
-  if (years < 10) return 15; // 滿五年未滿十年
-
-  // 10 年以上：依已滿年數計算 16 + (N - 10)，上限 30 天
-  const fullYears = Math.floor(years);
-  const quota = 16 + (fullYears - 10);
-  return Math.min(quota, 30);
+// 勞基法特休額度計算 (週年制)
+function getLeaveQuota(yearsOfService: number, isHalfYear: boolean): number {
+  if (isHalfYear) return 3; // 滿半年
+  if (yearsOfService < 1) return 0;
+  if (yearsOfService < 2) return 7;  // 滿1年
+  if (yearsOfService < 3) return 10; // 滿2年
+  if (yearsOfService < 5) return 14; // 滿3-4年
+  if (yearsOfService < 10) return 15; // 滿5-9年
+  
+  // 10年以上: 16 + (N-10)，上限30
+  const extra = Math.floor(yearsOfService - 10) + 1;
+  return Math.min(30, 15 + extra);
 }
 
-// 將 Date 轉成 YYYY-MM-DD（台灣時區不嚴格要求，使用 ISO 切割即可）
+// 🛡️ 安全的日期轉字串函式 (防呆)
 function toDateString(d: Date): string {
-  return d.toISOString().split('T')[0];
+  try {
+    if (isNaN(d.getTime())) return ''; // 如果是無效日期，回傳空字串
+    return d.toISOString().split('T')[0];
+  } catch (e) {
+    return '';
+  }
 }
 
 export async function GET(request: NextRequest) {
   try {
-    // 多租戶：取得診所 ID
+    // 1. 權限與參數檢查
     const clinicId = await getClinicIdFromRequest(request);
-    if (!clinicId) {
-      return NextResponse.json(
-        { error: '無法識別診所，請重新登入' },
-        { status: 401 },
-      );
-    }
+    if (!clinicId) return NextResponse.json({ error: '無法識別診所' }, { status: 401 });
 
     const searchParams = request.nextUrl.searchParams;
     const staffIdParam = searchParams.get('staff_id');
 
-    if (!staffIdParam) {
-      return NextResponse.json(
-        { error: '缺少 staff_id 參數' },
-        { status: 400 },
-      );
+    if (!staffIdParam || isNaN(Number(staffIdParam))) {
+      return NextResponse.json({ error: '無效的 staff_id 參數' }, { status: 400 });
     }
 
     const staffId = Number(staffIdParam);
-    if (!Number.isFinite(staffId)) {
-      return NextResponse.json(
-        { error: '無效的 staff_id' },
-        { status: 400 },
-      );
-    }
 
-    // 1. 讀取員工基本資料（含 start_date）
+    // 2. 讀取員工基本資料
     const { data: staff, error: staffError } = await supabaseAdmin
       .from('staff')
       .select('id, name, role, start_date')
@@ -70,30 +52,24 @@ export async function GET(request: NextRequest) {
       .single();
 
     if (staffError || !staff) {
-      return NextResponse.json(
-        { error: '找不到員工或無權限查詢' },
-        { status: 404 },
-      );
+      console.error('Leave Summary: Staff not found', staffError);
+      return NextResponse.json({ error: '找不到員工' }, { status: 404 });
     }
 
+    // 若無到職日，直接回傳空列表，避免崩潰
     if (!staff.start_date) {
-      // 沒有到職日則無法計算特休：保持與下方一致的 staff 結構
-      return NextResponse.json({
-        staff: {
-          staff_id: staff.id,
-          staff_name: staff.name,
-          role: staff.role ?? null,
-          start_date: staff.start_date,
-        },
-        years: [],
-      });
+      return NextResponse.json({ staff, years: [] });
     }
 
     const startDate = new Date(staff.start_date);
+    if (isNaN(startDate.getTime())) {
+       return NextResponse.json({ error: '員工到職日格式錯誤' }, { status: 400 });
+    }
+    
     const today = new Date();
 
-    // 2. 讀取該員工所有核准的「特休」請假紀錄
-    const { data: leaveRequests, error: leaveError } = await supabaseAdmin
+    // 3. 讀取「特休」請假紀錄
+    const { data: leaveRequests } = await supabaseAdmin
       .from('leave_requests')
       .select('hours, start_time')
       .eq('clinic_id', clinicId)
@@ -101,127 +77,87 @@ export async function GET(request: NextRequest) {
       .eq('type', '特休')
       .eq('status', 'approved');
 
-    if (leaveError) {
-      console.error('leave-summary: fetch leave_requests error', leaveError);
-      return NextResponse.json(
-        { error: `讀取特休請假紀錄失敗: ${leaveError.message}` },
-        { status: 500 },
-      );
-    }
-
-    // 3. 讀取該員工所有特休結算紀錄
-    const { data: settlements, error: settleError } = await supabaseAdmin
+    // 4. 讀取結算紀錄
+    const { data: settlements } = await supabaseAdmin
       .from('leave_settlements')
-      .select('days, pay_month, status, notes, created_at, target_year')
+      .select('days, pay_month, notes, created_at, target_year')
       .eq('clinic_id', clinicId)
       .eq('staff_id', staffId);
 
-    if (settleError) {
-      console.error('leave-summary: fetch leave_settlements error', settleError);
-      return NextResponse.json(
-        { error: `讀取特休結算紀錄失敗: ${settleError.message}` },
-        { status: 500 },
-      );
-    }
-
-    // 4. 以週年制計算每一個特休週期
     const cycles: any[] = [];
-    let cycleIndex = 0;
-    const msPerYear = 1000 * 60 * 60 * 24 * 365.25;
+    const allRequests = leaveRequests || [];
+    const allSettlements = settlements || [];
 
-    while (true) {
-      const cycleStart = new Date(startDate);
-      cycleStart.setFullYear(startDate.getFullYear() + cycleIndex);
+    // ==========================================
+    // 核心演算法：先處理滿半年 (0.5年)
+    // ==========================================
+    const halfYearDate = new Date(startDate);
+    halfYearDate.setMonth(halfYearDate.getMonth() + 6);
 
-      // 若該週期起始時間已超過今天，停止迴圈
-      if (cycleStart > today) break;
+    // 只有當「滿半年的日期」已經過去，或今天剛好滿半年，才產生這筆額度
+    if (halfYearDate <= today) {
+        const cycleStart = new Date(halfYearDate);
+        const cycleEnd = new Date(startDate);
+        cycleEnd.setFullYear(cycleEnd.getFullYear() + 1); 
+        cycleEnd.setDate(cycleEnd.getDate() - 1);
 
-      const nextCycleStart = new Date(cycleStart);
-      nextCycleStart.setFullYear(cycleStart.getFullYear() + 1);
+        const used = calculateUsed(allRequests, cycleStart, cycleEnd);
+        const settled = calculateSettled(allSettlements, cycleStart, cycleEnd, 0.5);
+        const quota = 3; 
 
-      // 週期結束日 = 下個週期前一天
-      const cycleEnd = new Date(nextCycleStart);
-      cycleEnd.setDate(cycleEnd.getDate() - 1);
-
-      // 週期對應的「服務年資」：取 cycleStart 時點
-      const quota = calculateAnnualQuotaBySeniority(startDate, cycleStart);
-
-      // 已使用：統計該週期內的特休請假總時數 / 8
-      let usedHours = 0;
-      (leaveRequests || []).forEach((req: any) => {
-        if (!req.start_time) return;
-        const leaveDate = new Date(req.start_time);
-        if (leaveDate >= cycleStart && leaveDate <= cycleEnd) {
-          usedHours += Number(req.hours || 0);
-        }
-      });
-      const usedDays = Math.round((usedHours / 8) * 100) / 100;
-
-      // 已結算：優先使用 target_year 或備註，其次才依結算日期落在週期內來判斷
-      const cycleYear = cycleStart.getFullYear();
-      let settledDays = 0;
-      (settlements || []).forEach((s: any) => {
-        let matchedCycle = false;
-
-        // 1) 明確標記的 target_year 欄位
-        if (s.target_year != null) {
-          const ty = Number(s.target_year);
-          if (!Number.isNaN(ty) && ty === cycleYear) {
-            matchedCycle = true;
-          }
-        }
-
-        // 2) 從備註中解析年度（例如「2024年度特休結算」）
-        if (!matchedCycle && typeof s.notes === 'string' && s.notes) {
-          const match = s.notes.match(/(\d{4})\s*年度/);
-          if (match) {
-            const ny = Number(match[1]);
-            if (!Number.isNaN(ny) && ny === cycleYear) {
-              matchedCycle = true;
-            }
-          }
-        }
-
-        // 3) 若無明確標記，則看結算日期是否落在該週期內
-        if (!matchedCycle) {
-          let settleDate: Date | null = null;
-          if (s.created_at) {
-            const d = new Date(s.created_at);
-            if (!Number.isNaN(d.getTime())) settleDate = d;
-          } else if (s.pay_month) {
-            const d = new Date(`${s.pay_month}-01T00:00:00`);
-            if (!Number.isNaN(d.getTime())) settleDate = d;
-          }
-
-          if (settleDate && settleDate >= cycleStart && settleDate <= cycleEnd) {
-            matchedCycle = true;
-          }
-        }
-
-        if (matchedCycle) {
-          settledDays += Number(s.days || 0);
-        }
-      });
-      settledDays = Math.round(settledDays * 100) / 100;
-
-      const balance = Math.max(0, Math.round((quota - usedDays - settledDays) * 100) / 100);
-
-      cycles.push({
-        year: cycleYear,
-        cycle_start: toDateString(cycleStart),
-        cycle_end: toDateString(cycleEnd),
-        quota,
-        used: usedDays,
-        settled: settledDays,
-        balance,
-        status: cycleEnd < today ? 'expired' : 'active',
-      });
-
-      cycleIndex += 1;
-
-      // 安全保險：避免理論上無窮迴圈，若超過 60 年資就中斷
-      if (cycleIndex > 60) break;
+        cycles.push({
+            year: 0.5,
+            label: "滿半年特休",
+            cycle_start: toDateString(cycleStart),
+            cycle_end: toDateString(cycleEnd),
+            quota,
+            used,
+            settled,
+            balance: parseFloat((quota - used - settled).toFixed(2)),
+            status: cycleEnd < today ? 'expired' : 'active'
+        });
     }
+
+    // ==========================================
+    // 核心演算法：處理滿 N 年 (從 1 年開始)
+    // ==========================================
+    let currentYear = 1;
+    while (true) {
+        // 週期開始：到職日 + N 年
+        const cycleStart = new Date(startDate);
+        cycleStart.setFullYear(startDate.getFullYear() + currentYear);
+
+        // 如果週期的開始日已經超過今天，就不算了 (不預算未來)
+        if (cycleStart > today) break;
+
+        // 週期結束：到職日 + N+1 年 的前一天
+        const cycleEnd = new Date(startDate);
+        cycleEnd.setFullYear(startDate.getFullYear() + currentYear + 1);
+        cycleEnd.setDate(cycleEnd.getDate() - 1);
+
+        const quota = getLeaveQuota(currentYear, false);
+        const used = calculateUsed(allRequests, cycleStart, cycleEnd);
+        const settled = calculateSettled(allSettlements, cycleStart, cycleEnd, currentYear);
+        const balance = quota - used - settled;
+
+        cycles.push({
+            year: currentYear,
+            label: `滿 ${currentYear} 年特休`,
+            cycle_start: toDateString(cycleStart),
+            cycle_end: toDateString(cycleEnd),
+            quota,
+            used,
+            settled,
+            balance: parseFloat(balance.toFixed(2)),
+            status: cycleEnd < today ? 'expired' : 'active'
+        });
+
+        currentYear++;
+        if (currentYear > 60) break; // 安全煞車，避免無窮迴圈
+    }
+
+    // 排序：最新的年份在上面
+    cycles.sort((a, b) => new Date(b.cycle_start).getTime() - new Date(a.cycle_start).getTime());
 
     return NextResponse.json({
       staff: {
@@ -232,12 +168,58 @@ export async function GET(request: NextRequest) {
       },
       years: cycles,
     });
+
   } catch (error: any) {
-    console.error('leave-summary API Error:', error);
-    return NextResponse.json(
-      { error: error.message || '伺服器錯誤' },
-      { status: 500 },
-    );
+    // 這裡會把錯誤印在 Vercel Logs，方便除錯
+    console.error('API Error [leave-summary]:', error);
+    return NextResponse.json({ error: `伺服器內部錯誤: ${error.message}` }, { status: 500 });
   }
 }
 
+// ---------------- Helper Functions ----------------
+
+function calculateUsed(requests: any[], start: Date, end: Date): number {
+  let hours = 0;
+  requests.forEach((req: any) => {
+    // 確保 start_time 有效
+    if (!req.start_time) return;
+    const d = new Date(req.start_time);
+    if (isNaN(d.getTime())) return;
+
+    if (d >= start && d <= end) {
+      hours += Number(req.hours || 0);
+    }
+  });
+  return hours / 8; 
+}
+
+function calculateSettled(settlements: any[], start: Date, end: Date, targetYear: number): number {
+  let days = 0;
+  settlements.forEach((s: any) => {
+    // 1. 優先比對 target_year
+    if (s.target_year != null) {
+       if (Number(s.target_year) === targetYear) {
+         days += Number(s.days || 0);
+         return;
+       }
+    }
+    
+    // 2. 比對備註
+    if (!s.target_year && s.notes && typeof s.notes === 'string') {
+        if (s.notes.includes(`${targetYear}年`) || s.notes.includes(`滿${targetYear}年`)) {
+            days += Number(s.days || 0);
+            return;
+        }
+    }
+
+    // 3. 最後手段：看結算單日期
+    const dateStr = s.created_at || s.pay_month;
+    if (!s.target_year && (!s.notes || !s.notes.match(/\d+年/)) && dateStr) {
+        const d = new Date(dateStr);
+        if (!isNaN(d.getTime()) && d >= start && d <= end) {
+            days += Number(s.days || 0);
+        }
+    }
+  });
+  return days;
+}
