@@ -66,11 +66,28 @@ export default function LeaveHistoryModal({
 
   // 載入特休摘要資料
   const fetchSummary = async () => {
-    if (!staff?.staff_id) return;
+    // 支援 staff_id 或 id 欄位
+    const staffId = staff?.staff_id || staff?.id;
+    if (!staffId) {
+      console.error('LeaveHistoryModal: staff 物件缺少 staff_id 或 id', staff);
+      alert('無法取得員工 ID，請重新選擇員工');
+      return;
+    }
+    
     setLoading(true);
     try {
-      const response = await fetch(`/api/staff/leave-summary?staff_id=${staff.staff_id}`);
+      console.log('LeaveHistoryModal: 開始載入特休摘要，staff_id:', staffId);
+      const response = await fetch(`/api/staff/leave-summary?staff_id=${staffId}`);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('LeaveHistoryModal: API 回應錯誤', response.status, errorText);
+        alert(`載入失敗 (HTTP ${response.status})`);
+        return;
+      }
+      
       const result = await response.json();
+      console.log('LeaveHistoryModal: API 回傳資料', result);
 
       if (result.error) {
         console.error('Leave summary error:', result.error);
@@ -78,10 +95,22 @@ export default function LeaveHistoryModal({
         return;
       }
 
-      setSummaryData(result);
-    } catch (error) {
+      // 標準化 API 回傳的資料結構（支援 staff_id/staff_name 或 id/name）
+      const normalizedResult: LeaveSummaryResponse = {
+        staff: {
+          id: result.staff?.id || result.staff?.staff_id || staffId,
+          name: result.staff?.name || result.staff?.staff_name || staff?.staff_name || staff?.name || '未知',
+          role: result.staff?.role || null,
+          start_date: result.staff?.start_date || null,
+        },
+        years: result.years || [],
+      };
+      
+      console.log('LeaveHistoryModal: 標準化後的資料', normalizedResult);
+      setSummaryData(normalizedResult);
+    } catch (error: any) {
       console.error('Fetch summary error:', error);
-      alert('載入資料失敗');
+      alert('載入資料失敗: ' + (error.message || '未知錯誤'));
     } finally {
       setLoading(false);
     }
@@ -89,10 +118,11 @@ export default function LeaveHistoryModal({
 
   // 載入特定年度的請假明細
   const fetchLeaveDetails = async (year: number, cycleStart: string, cycleEnd: string) => {
-    if (!staff?.staff_id) return;
+    const staffId = staff?.staff_id || staff?.id;
+    if (!staffId) return;
     try {
       const response = await fetch(
-        `/api/leave?selectedStaffId=${staff.staff_id}&statusFilter=approved&useDateFilter=true&startDate=${cycleStart}&endDate=${cycleEnd}`
+        `/api/leave?selectedStaffId=${staffId}&statusFilter=approved&useDateFilter=true&startDate=${cycleStart}&endDate=${cycleEnd}`
       );
       const result = await response.json();
 
@@ -150,14 +180,15 @@ export default function LeaveHistoryModal({
     notes: string;
     target_year?: string;
   }) => {
-    if (!staff || !selectedYearForSettle) return;
+    const staffId = staff?.staff_id || staff?.id;
+    if (!staffId || !selectedYearForSettle) return;
 
     try {
       const response = await fetch('/api/leave/settle', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          staff_id: staff.staff_id,
+          staff_id: staffId,
           days: Number(settleForm.days),
           pay_month: settleForm.pay_month,
           notes:
@@ -197,7 +228,7 @@ export default function LeaveHistoryModal({
             <h3 className="text-2xl font-bold flex items-center gap-2">
               <FileText size={24} /> 特休自動結算儀表板
             </h3>
-            <p className="text-blue-100 mt-1">{staff.staff_name}</p>
+            <p className="text-blue-100 mt-1">{staff.staff_name || staff.name || '未知員工'}</p>
           </div>
           <div className="flex items-center gap-3">
             <button

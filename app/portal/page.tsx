@@ -94,6 +94,26 @@ export default function EmployeePortal() {
     isBypass: boolean;
   } | null>(null);
 
+  // 首頁資料預先載入：用於剛綁定完成時馬上取得公告與個人資料
+  async function prefetchHomeData(staffId: number) {
+    try {
+      const response = await fetch(
+        `/api/portal/data?type=home&staffId=${staffId}`,
+      );
+      const result = await response.json();
+
+      if (result.data) {
+        setAnnouncements(result.data.announcements || []);
+        if (result.data.profile) {
+          setProfile(result.data.profile);
+        }
+      }
+    } catch (error) {
+      console.error('預先讀取首頁資料失敗:', error);
+      setAnnouncements([]);
+    }
+  }
+
   // LIFF 初始化與綁定
   useEffect(() => {
     const initLiff = async () => {
@@ -122,6 +142,8 @@ export default function EmployeePortal() {
         setStaffUser(result.staff);
         setStatus('ready');
         fetchTodayLogs(result.staff.id);
+        // 首次綁定成功後立即載入首頁資料（含公告）
+        prefetchHomeData(result.staff.id);
       } else if (result.status === 'unbound' && result.unboundList) {
         setUnboundList(result.unboundList || []);
         setStatus('bind_needed');

@@ -220,8 +220,8 @@ function SalaryDetailModal({ data, role, onClose }: any) {
 
   return (
         <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-0 md:p-4 backdrop-blur-sm animate-fade-in">
-            <div className="bg-white w-full h-full md:h-auto md:max-h-[90vh] md:max-w-md rounded-none md:rounded-2xl overflow-hidden flex flex-col shadow-2xl pb-[env(safe-area-inset-bottom)]">
-                <div className="bg-slate-900 text-white p-4 md:p-5 flex justify-between items-center shrink-0">
+            <div className="bg白 w-full h-full md:h-auto md:max-h-[90vh] md:max-w-md rounded-none md:rounded-2xl overflow-hidden flex flex-col shadow-2xl pb-[env(safe-area-inset-bottom)]">
+                <div className="bg-slate-900 text白 p-4 md:p-5 flex justify-between items-center shrink-0">
                     <div>
                         <p className="text-[11px] md:text-xs text-slate-400 mb-1">薪資單明細</p>
                         <h3 className="text-xl md:text-2xl font-bold">{isDoctor ? doc?.month : data.year_month}</h3>
@@ -230,7 +230,7 @@ function SalaryDetailModal({ data, role, onClose }: any) {
                         <X size={18} className="md:size-5" />
                     </button>
                 </div>
-                <div className="p-4 md:p-6 overflow-y-auto space-y-6">
+                <div className="p-4 pb-10 md:p-6 overflow-y-auto space-y-6 flex-1 min-h-0">
                     <div className="text-center border-b border-slate-100 pb-6">
                         <p className="text-xs md:text-sm text-slate-500 font-bold mb-1">本月實領金額 (Net Pay)</p>
                         <p className="text-3xl md:text-5xl font-black text-slate-800 tracking-tight">
