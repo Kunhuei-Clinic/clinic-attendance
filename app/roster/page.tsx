@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, Calendar, Lock } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar, Lock, AlertCircle, RefreshCw } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 
 // 定義班別代號映射 (SettingsView 用 AM/PM/NIGHT，這裡用 M/A/N)
 const SHIFT_MAPPING: Record<string, 'AM' | 'PM' | 'NIGHT'> = {
@@ -23,9 +24,16 @@ const FALLBACK_ENTITIES: Entity[] = [
     { id: 'pharmacy', name: '藥局' }
 ];
 
+type ErrorState = {
+    type: 'unauthorized' | 'other' | null;
+    message: string;
+};
+
 export default function PublicRosterPage() {
+    const router = useRouter();
     const [isMounted, setIsMounted] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
+    const [errorState, setErrorState] = useState<ErrorState>({ type: null, message: '' });
     const [currentDate, setCurrentDate] = useState<Date | null>(null);
     const [todayStr, setTodayStr] = useState('');
     const [staffList, setStaffList] = useState<Staff[]>([]);
@@ -51,66 +59,141 @@ export default function PublicRosterPage() {
         const day = String(d.getDate()).padStart(2, '0');
         setTodayStr(`${y}-${m}-${day}`);
         setCurrentDate(new Date());
+        console.log('[PublicRoster] 初始化完成');
     }, []);
 
-    // 載入系統設定（只在初始化時執行一次）
+    // 載入所有資料（設定 + 資料）
     useEffect(() => {
-        if (isMounted) {
-            loadSettings();
+        if (isMounted && currentDate) {
+            loadAllData();
         }
-    }, [isMounted]);
+    }, [isMounted, currentDate]);
 
-    // 當設定載入完成且 currentDate 存在時，載入資料
-    useEffect(() => {
-        if (currentDate && entities.length > 0) {
-            loadData();
-        }
-    }, [currentDate, entities.length]);
-
-    // 載入系統設定
-    const loadSettings = async () => {
+    // 🟢 載入所有資料：使用 Promise.all 同時載入
+    const loadAllData = async () => {
+        if (!currentDate) return;
+        
         try {
             setIsLoading(true);
+            setErrorState({ type: null, message: '' });
+            console.log('[PublicRoster] 開始載入資料...');
+
+            // 🟢 使用 Promise.all 同時載入設定和資料
             await Promise.all([
-                fetchGlobalSettings(),
-                fetchRosterSettings()
+                loadSettings(),
+                loadData()
             ]);
-        } catch (error) {
-            console.error('Load settings error:', error);
+
+            console.log('[PublicRoster] 資料載入完成', {
+                entities: entities.length,
+                staffCount: staffList.length,
+                rosterCount: Object.keys(rosterMap).length
+            });
+        } catch (error: any) {
+            console.error('[PublicRoster] 載入資料失敗:', error);
+            setErrorState({
+                type: 'other',
+                message: error.message || '載入資料時發生錯誤'
+            });
         } finally {
             setIsLoading(false);
         }
     };
 
-    // 載入資料（員工、班表、假日）
+    // 🟢 載入系統設定（失敗時使用 fallback）
+    const loadSettings = async () => {
+        try {
+            console.log('[PublicRoster] 載入系統設定...');
+            
+            await Promise.all([
+                fetchGlobalSettings(),
+                fetchRosterSettings()
+            ]);
+
+            // 🟢 確保即使設定載入失敗，也有 fallback 值
+            if (entities.length === 0) {
+                console.log('[PublicRoster] 使用 fallback entities');
+                setEntities(FALLBACK_ENTITIES);
+            }
+            if (jobTitleConfigs.length === 0) {
+                console.log('[PublicRoster] 使用 fallback job titles');
+                setJobTitleConfigs([
+                    { name: '醫師', in_roster: false },
+                    { name: '護理師', in_roster: true },
+                    { name: '行政', in_roster: true },
+                    { name: '藥師', in_roster: true }
+                ]);
+            }
+        } catch (error) {
+            console.error('[PublicRoster] 載入設定失敗，使用 fallback:', error);
+            // 🟢 設定失敗時使用 fallback
+            setEntities(FALLBACK_ENTITIES);
+            setJobTitleConfigs([
+                { name: '醫師', in_roster: false },
+                { name: '護理師', in_roster: true },
+                { name: '行政', in_roster: true },
+                { name: '藥師', in_roster: true }
+            ]);
+        }
+    };
+
+    // 🟢 載入資料（員工、班表、假日）
     const loadData = async () => {
         if (!currentDate) return;
+        
         try {
+            console.log('[PublicRoster] 載入員工、班表、假日資料...');
+            
             await Promise.all([
                 fetchStaff(),
                 fetchRoster(),
                 fetchHolidays()
             ]);
         } catch (error) {
-            console.error('Load data error:', error);
+            console.error('[PublicRoster] 載入資料失敗:', error);
+            throw error;
         }
+    };
+
+    // 🟢 API 呼叫：檢查 401 錯誤
+    const handleApiError = (response: Response, apiName: string) => {
+        if (response.status === 401) {
+            console.error(`[PublicRoster] ${apiName} 401 Unauthorized`);
+            setErrorState({
+                type: 'unauthorized',
+                message: '請先登入系統'
+            });
+            return true;
+        } else if (!response.ok) {
+            console.error(`[PublicRoster] ${apiName} 錯誤:`, response.status, response.statusText);
+            setErrorState({
+                type: 'other',
+                message: `載入失敗 (${response.status})`
+            });
+            return true;
+        }
+        return false;
     };
 
     // 🟢 功能：讀取系統設定 (營業時間)
     const fetchGlobalSettings = async () => {
         try {
             const response = await fetch('/api/settings?key=clinic_business_hours');
+            if (handleApiError(response, 'fetchGlobalSettings')) return;
+
             const result = await response.json();
             if (result.data && result.data.length > 0 && result.data[0].value) {
                 try {
                     const settings = JSON.parse(result.data[0].value);
                     setBusinessHours(settings);
+                    console.log('[PublicRoster] 營業時間設定載入成功');
                 } catch (e) {
-                    console.error("解析營業時間失敗", e);
+                    console.error('[PublicRoster] 解析營業時間失敗', e);
                 }
             }
         } catch (error) {
-            console.error('Fetch global settings error:', error);
+            console.error('[PublicRoster] Fetch global settings error:', error);
+            // 不拋出錯誤，使用預設值
         }
     };
 
@@ -118,19 +201,13 @@ export default function PublicRosterPage() {
     const fetchRosterSettings = async () => {
         try {
             const response = await fetch('/api/settings');
+            if (handleApiError(response, 'fetchRosterSettings')) return;
+
             const result = await response.json();
-            
-            if (!result.data) {
-                setJobTitleConfigs([
-                    { name: '醫師', in_roster: false },
-                    { name: '護理師', in_roster: true }
-                ]);
-                setEntities(FALLBACK_ENTITIES);
-                return;
-            }
+            console.log('[PublicRoster] Settings API 回應:', result);
 
             // job_titles
-            const jobTitlesItem = result.data.find((item: any) => item.key === 'job_titles');
+            const jobTitlesItem = result.data?.find((item: any) => item.key === 'job_titles');
             let loadedJobTitles: JobTitleConfig[] = [];
             if (jobTitlesItem) {
                 try {
@@ -153,22 +230,28 @@ export default function PublicRosterPage() {
                         }
                     }
                 } catch (e) {
-                    console.error('Parse job_titles error:', e);
+                    console.error('[PublicRoster] Parse job_titles error:', e);
                 }
             }
+            
+            // 🟢 如果職稱設定讀取失敗，預設顯示所有職稱（除了醫師）
             if (!loadedJobTitles || loadedJobTitles.length === 0) {
+                console.log('[PublicRoster] 使用預設職稱設定（顯示所有職稱，醫師除外）');
                 loadedJobTitles = [
                     { name: '醫師', in_roster: false },
                     { name: '護理師', in_roster: true },
                     { name: '行政', in_roster: true },
                     { name: '藥師', in_roster: true },
-                    { name: '清潔', in_roster: false }
+                    { name: '櫃台', in_roster: true },
+                    { name: '診所助理', in_roster: true },
+                    { name: '藥局助理', in_roster: true }
                 ];
             }
             setJobTitleConfigs(loadedJobTitles);
+            console.log('[PublicRoster] 職稱設定:', loadedJobTitles);
 
             // org_entities
-            const entItem = result.data.find((item: any) => item.key === 'org_entities');
+            const entItem = result.data?.find((item: any) => item.key === 'org_entities');
             let loadedEntities: Entity[] = [];
             if (entItem) {
                 try {
@@ -182,18 +265,25 @@ export default function PublicRosterPage() {
                             .filter((e: Entity) => e.id && e.name);
                     }
                 } catch (e) {
-                    console.error('Parse org_entities error:', e);
+                    console.error('[PublicRoster] Parse org_entities error:', e);
                 }
             }
+            
+            // 🟢 如果組織單位讀取失敗，使用 fallback
             if (!loadedEntities || loadedEntities.length === 0) {
+                console.log('[PublicRoster] 使用 fallback entities');
                 loadedEntities = FALLBACK_ENTITIES;
             }
             setEntities(loadedEntities);
+            console.log('[PublicRoster] 組織單位:', loadedEntities);
         } catch (error) {
-            console.error('Fetch roster settings error:', error);
+            console.error('[PublicRoster] Fetch roster settings error:', error);
+            // 🟢 設定失敗時使用 fallback
             setJobTitleConfigs([
                 { name: '醫師', in_roster: false },
-                { name: '護理師', in_roster: true }
+                { name: '護理師', in_roster: true },
+                { name: '行政', in_roster: true },
+                { name: '藥師', in_roster: true }
             ]);
             setEntities(FALLBACK_ENTITIES);
         }
@@ -202,12 +292,18 @@ export default function PublicRosterPage() {
     const fetchStaff = async () => {
         try {
             const response = await fetch('/api/staff');
+            if (handleApiError(response, 'fetchStaff')) return;
+
             const result = await response.json();
             if (result.data) {
                 setStaffList(result.data);
+                console.log('[PublicRoster] 員工列表載入成功:', result.data.length, '人');
+            } else {
+                setStaffList([]);
+                console.log('[PublicRoster] 員工列表為空');
             }
         } catch (error) {
-            console.error('Fetch staff error:', error);
+            console.error('[PublicRoster] Fetch staff error:', error);
             setStaffList([]);
         }
     };
@@ -218,14 +314,17 @@ export default function PublicRosterPage() {
             const year = currentDate.getFullYear();
             const month = currentDate.getMonth() + 1;
             const response = await fetch(`/api/roster/holidays?year=${year}&month=${month}`);
+            if (handleApiError(response, 'fetchHolidays')) return;
+
             const result = await response.json();
             if (result.data) {
                 setHolidays(result.data);
+                console.log('[PublicRoster] 假日列表載入成功:', result.data.length, '天');
             } else {
                 setHolidays([]);
             }
         } catch (error) {
-            console.error('Fetch holidays error:', error);
+            console.error('[PublicRoster] Fetch holidays error:', error);
             setHolidays([]);
         }
     };
@@ -236,8 +335,9 @@ export default function PublicRosterPage() {
             const year = currentDate.getFullYear();
             const month = currentDate.getMonth() + 1;
             const response = await fetch(`/api/roster/staff?year=${year}&month=${month}`);
-            const result = await response.json();
+            if (handleApiError(response, 'fetchRoster')) return;
 
+            const result = await response.json();
             const map: Record<string, RosterData> = {};
             if (result.data) {
                 result.data.forEach((r: any) => {
@@ -252,10 +352,14 @@ export default function PublicRosterPage() {
                     const shift_details = r.shift_details || {};
                     map[`${r.staff_id}_${r.date}`] = { shifts, day_type, shift_details };
                 });
+                setRosterMap(map);
+                console.log('[PublicRoster] 班表資料載入成功:', Object.keys(map).length, '筆');
+            } else {
+                setRosterMap({});
+                console.log('[PublicRoster] 班表資料為空');
             }
-            setRosterMap(map);
         } catch (error) {
-            console.error('Fetch roster error:', error);
+            console.error('[PublicRoster] Fetch roster error:', error);
             setRosterMap({});
         }
     };
@@ -272,8 +376,46 @@ export default function PublicRosterPage() {
         });
     };
 
+    // 🟢 錯誤顯示 UI
+    if (errorState.type === 'unauthorized') {
+        return (
+            <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+                <div className="text-center bg-white p-8 rounded-xl shadow-lg max-w-md">
+                    <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+                    <h2 className="text-xl font-bold text-gray-800 mb-2">需要登入</h2>
+                    <p className="text-gray-600 mb-6">請先登入系統以查看班表</p>
+                    <button
+                        onClick={() => router.push('/login')}
+                        className="bg-blue-500 text-white px-6 py-2 rounded-lg font-bold hover:bg-blue-600 transition"
+                    >
+                        前往登入
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
+    if (errorState.type === 'other') {
+        return (
+            <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+                <div className="text-center bg-white p-8 rounded-xl shadow-lg max-w-md">
+                    <AlertCircle className="w-16 h-16 text-orange-500 mx-auto mb-4" />
+                    <h2 className="text-xl font-bold text-gray-800 mb-2">載入失敗</h2>
+                    <p className="text-gray-600 mb-6">{errorState.message}</p>
+                    <button
+                        onClick={loadAllData}
+                        className="bg-blue-500 text-white px-6 py-2 rounded-lg font-bold hover:bg-blue-600 transition flex items-center gap-2 mx-auto"
+                    >
+                        <RefreshCw className="w-4 h-4" />
+                        重試
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
     // Loading 狀態
-    if (!isMounted || isLoading || !currentDate || entities.length === 0) {
+    if (!isMounted || isLoading || !currentDate) {
         return (
             <div className="min-h-screen bg-slate-50 flex items-center justify-center">
                 <div className="text-center text-gray-500">
@@ -297,11 +439,39 @@ export default function PublicRosterPage() {
         return `${timeSetting.start}-${timeSetting.end}`;
     };
 
-    // 🟢 依 job_titles 設定取得允許排班的職稱（只顯示 in_roster === true）
+    // 🟢 寬容的職稱過濾邏輯
     const configuredRoleSet = new Set(jobTitleConfigs.map(j => j.name));
     const allowedRoleSet = new Set(
         jobTitleConfigs.filter(j => j.in_roster === true).map(j => j.name)
     );
+
+    // 🟢 判斷員工是否應該顯示（寬容邏輯）
+    const shouldShowStaff = (staff: Staff): boolean => {
+        const role = staff.role || '';
+        
+        // 如果沒有設定職稱，預設顯示所有職稱（除了醫師）
+        if (configuredRoleSet.size === 0) {
+            return role !== '醫師';
+        }
+        
+        // 若職稱未在設定中出現，為避免遺漏，預設顯示（除了醫師）
+        if (!configuredRoleSet.has(role)) {
+            return role !== '醫師';
+        }
+        
+        // 其餘依 in_roster 決定是否顯示
+        return allowedRoleSet.has(role);
+    };
+
+    // 🟢 取得所有已使用的 entity ID
+    const usedEntityIds = new Set(entities.map(e => e.id));
+
+    // 🟢 取得「其他人員」（entity 不符合上述 ID 的員工）
+    const otherStaff = staffList.filter((s: Staff) => {
+        if (!shouldShowStaff(s)) return false;
+        // 不屬於任何已設定的組織單位
+        return !s.entity || !usedEntityIds.has(s.entity);
+    });
 
     // UI Render Helper：根據給定的員工清單渲染一張表
     const renderTable = (title: string, staffForEntity: Staff[], colorClass: string) => {
@@ -342,7 +512,7 @@ export default function PublicRosterPage() {
                                     return (
                                         <th
                                             key={d.dateStr}
-                                            className={`p-0.5 md:p-1 border text-center min-w-[28px] md:min-w-[35px] ${headerBg} ${textColor} ${isToday ? 'border-b-2 md:border-b-4 border-yellow-400' : ''}`}
+                                            className={`p-0.5 md:p-1 border text-center min-w-[50px] ${headerBg} ${textColor} ${isToday ? 'border-b-2 md:border-b-4 border-yellow-400' : ''}`}
                                         >
                                             <div className="text-[10px] md:text-xs font-bold">
                                                 {d.dateObj.getDate()}
@@ -393,7 +563,7 @@ export default function PublicRosterPage() {
                                         return (
                                             <td
                                                 key={d.dateStr}
-                                                className={`border p-0.5 text-center align-top h-10 md:h-12 min-w-[28px] md:min-w-[35px] ${cellBg} ${isToday ? 'border-x-2 border-yellow-300' : ''}`}
+                                                className={`border p-0.5 text-center align-top h-10 md:h-12 min-w-[50px] ${cellBg} ${isToday ? 'border-x-2 border-yellow-300' : ''}`}
                                             >
                                                 {badge}
                                                 <div className="flex flex-col gap-[1px] h-full justify-center">
@@ -472,22 +642,11 @@ export default function PublicRosterPage() {
 
                 {/* 🟢 根據系統設定的組織單位與職稱，動態產生排班表 */}
                 <div className="pb-8">
+                    {/* 先顯示設定好的組織 */}
                     {entities.map((ent, idx) => {
-                        // 🟢 過濾邏輯：只顯示該組織單位且職稱在 allowedRoleSet 中的員工
                         const staffForEntity = staffList.filter((s: Staff) => {
-                            // 必須屬於該組織單位
                             if (s.entity !== ent.id) return false;
-                            
-                            const role = s.role || '';
-                            
-                            // 如果沒有設定職稱，預設顯示（避免遺漏）
-                            if (configuredRoleSet.size === 0) return true;
-                            
-                            // 若職稱未在設定中出現，為避免遺漏，預設顯示
-                            if (!configuredRoleSet.has(role)) return true;
-                            
-                            // 🟢 只顯示 in_roster === true 的職稱
-                            return allowedRoleSet.has(role);
+                            return shouldShowStaff(s);
                         });
 
                         const colorClass =
@@ -499,6 +658,11 @@ export default function PublicRosterPage() {
 
                         return renderTable(`👥 ${ent.name}人員`, staffForEntity, colorClass);
                     })}
+
+                    {/* 🟢 最後加一個「其他人員」群組 */}
+                    {otherStaff.length > 0 && (
+                        renderTable('👥 其他人員', otherStaff, 'border-gray-500 text-gray-700')
+                    )}
                 </div>
 
                 {/* 說明文字 */}
