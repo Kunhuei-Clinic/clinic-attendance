@@ -94,22 +94,37 @@ export default function EmployeePortal() {
     isBypass: boolean;
   } | null>(null);
 
-  // 首頁資料預先載入：用於剛綁定完成時馬上取得公告與個人資料
+  // 🟢 首頁資料預先載入：用於剛綁定完成時馬上取得公告與個人資料
   async function prefetchHomeData(staffId: number) {
     try {
       const response = await fetch(
         `/api/portal/data?type=home&staffId=${staffId}`,
       );
-      const result = await response.json();
+      const json = await response.json();
 
-      if (result.data) {
-        setAnnouncements(result.data.announcements || []);
-        if (result.data.profile) {
-          setProfile(result.data.profile);
-        }
+      console.log('[Portal] 預先載入 API 回應:', json);
+
+      // 🟢 強健的資料解析：兼容不同的 API 回傳結構
+      // 1. 處理個人資料 (相容多種結構)
+      const profileData = json.data?.profile || json.profile || null;
+      if (profileData) {
+        console.log('[Portal] ✅ 設定 Profile:', profileData);
+        setProfile(profileData);
+      } else {
+        console.warn('[Portal] ⚠️ API 未回傳 profile 資料');
+      }
+
+      // 2. 處理公告 (相容多種結構)
+      const announcementData = json.data?.announcements || json.announcements || [];
+      if (Array.isArray(announcementData)) {
+        console.log('[Portal] ✅ 設定公告:', announcementData.length, '則');
+        setAnnouncements(announcementData);
+      } else {
+        console.warn('[Portal] ⚠️ 公告資料格式不正確:', announcementData);
+        setAnnouncements([]);
       }
     } catch (error) {
-      console.error('預先讀取首頁資料失敗:', error);
+      console.error('[Portal] 預先讀取首頁資料失敗:', error);
       setAnnouncements([]);
     }
   }
@@ -280,42 +295,75 @@ export default function EmployeePortal() {
     }
   };
 
+  // 🟢 強健的資料讀取：兼容不同的 API 回傳結構
   const fetchHomeData = async () => {
     if (!staffUser?.id) return;
     try {
       const response = await fetch(
         `/api/portal/data?type=home&staffId=${staffUser.id}`,
       );
-      const result = await response.json();
+      const json = await response.json();
 
-      if (result.data) {
-        // 🟢 確保公告被存入 state
-        setAnnouncements(result.data.announcements || []);
-        if (result.data.profile) {
-          setProfile(result.data.profile);
-        }
+      console.log('[Portal] 首頁資料 API 回應:', json);
+
+      // 🟢 強健的資料解析：兼容不同的 API 回傳結構
+      // 1. 處理個人資料 (相容多種結構)
+      const profileData = json.data?.profile || json.profile || null;
+      if (profileData) {
+        console.log('[Portal] ✅ 設定 Profile:', profileData);
+        setProfile(profileData);
       } else {
-        // 如果沒有資料，也要確保 announcements 是空陣列
+        console.warn('[Portal] ⚠️ API 未回傳 profile 資料');
+      }
+
+      // 2. 處理公告 (相容多種結構)
+      const announcementData = json.data?.announcements || json.announcements || [];
+      if (Array.isArray(announcementData)) {
+        console.log('[Portal] ✅ 設定公告:', announcementData.length, '則');
+        setAnnouncements(announcementData);
+      } else {
+        console.warn('[Portal] ⚠️ 公告資料格式不正確:', announcementData);
         setAnnouncements([]);
       }
+
+      // 3. 處理打卡狀態
+      const logsData = json.data?.todayLogs || json.todayLogs || [];
+      if (Array.isArray(logsData)) {
+        setLogs(logsData);
+        const lastLog = logsData[0];
+        if (lastLog && lastLog.clock_in && !lastLog.clock_out) {
+          setIsWorking(true);
+        } else {
+          setIsWorking(false);
+        }
+      }
     } catch (error) {
-      console.error('讀取首頁資料失敗:', error);
+      console.error('[Portal] 讀取首頁資料失敗:', error);
       setAnnouncements([]);
     }
   };
 
+  // 🟢 強健的個人資料讀取
   const fetchProfile = async () => {
+    if (!staffUser?.id) return;
     try {
       const response = await fetch(
         `/api/portal/data?type=home&staffId=${staffUser.id}`,
       );
-      const result = await response.json();
+      const json = await response.json();
 
-      if (result.data && result.data.profile) {
-        setProfile(result.data.profile);
+      console.log('[Portal] 個人資料 API 回應:', json);
+
+      // 🟢 強健的資料解析：兼容不同的 API 回傳結構
+      const profileData = json.data?.profile || json.profile || null;
+      if (profileData) {
+        console.log('[Portal] ✅ 設定 Profile:', profileData);
+        setProfile(profileData);
+      } else {
+        console.warn('[Portal] ⚠️ API 未回傳 profile 資料');
       }
     } catch (error) {
-      console.error('讀取個人資料失敗:', error);
+      console.error('[Portal] 讀取個人資料失敗:', error);
     }
   };
 
@@ -853,9 +901,9 @@ export default function EmployeePortal() {
       )}
 
       {/* Profile */}
-      {view === 'profile' && profile && (
+      {view === 'profile' && (
         <ProfileView
-          user={profile}
+          user={profile || staffUser}
           staffUser={staffUser}
           onUpdateProfile={updateProfile}
         />
