@@ -65,6 +65,8 @@ export async function GET(request: NextRequest) {
  * 新增員工
  * 
  * Request Body: Staff 物件 (不包含 clinic_id，由後端自動填入)
+ *   - phone: string (必填，用於 LINE 綁定)
+ *   - password: string (可選，若未提供則預設為 '0000')
  */
 export async function POST(request: NextRequest) {
   try {
@@ -86,15 +88,28 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // 🟢 驗證手機號碼（必填）
+    if (!body.phone || body.phone.trim() === '') {
+      return NextResponse.json(
+        { success: false, message: '手機號碼為綁定帳號，務必填寫' },
+        { status: 400 }
+      );
+    }
+
     // 🟢 多租戶：移除前端可能傳入的 clinic_id，由後端自動填入
     const { clinic_id, ...staffData } = body;
 
+    // 🟢 處理密碼欄位：若前端沒傳 password，後端自動補上預設值 '0000'
+    const password = staffData.password?.trim() || '0000';
+
     // 🟢 多租戶：將 clinic_id 合併到 payload 中（不讓前端傳入）
-    // 同時確保 entity 欄位有預設值
+    // 同時確保 entity 欄位有預設值，並包含 phone 和 password
     const payload = {
       ...staffData,
       clinic_id: clinicId, // 自動填入，不讓前端傳入
-      entity: staffData.entity || 'clinic' // 如果沒有提供 entity，預設為 'clinic'
+      entity: staffData.entity || 'clinic', // 如果沒有提供 entity，預設為 'clinic'
+      phone: staffData.phone.trim(), // 🟢 必填，去除空白
+      password: password // 🟢 必填，若未提供則使用預設值 '0000'
     };
 
     const { error } = await supabaseAdmin
@@ -129,6 +144,7 @@ export async function POST(request: NextRequest) {
  * 
  * Request Body:
  *   { id: number, ...otherFields } (不包含 clinic_id，由後端自動填入)
+ *   - password: string (可選，若提供且不為空字串則更新，否則保留原密碼)
  */
 export async function PATCH(request: NextRequest) {
   try {
@@ -142,7 +158,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { id, clinic_id, ...updateData } = body; // 🟢 移除前端可能傳入的 clinic_id
+    const { id, clinic_id, password, ...updateData } = body; // 🟢 移除前端可能傳入的 clinic_id，並分離 password
 
     if (!id) {
       return NextResponse.json(
@@ -176,6 +192,18 @@ export async function PATCH(request: NextRequest) {
     // 如果提供了 entity 欄位，確保它有值
     if (updateData.entity !== undefined) {
       payload.entity = updateData.entity || 'clinic';
+    }
+
+    // 🟢 處理密碼欄位：若 request body 有傳 password 且不為空字串，才更新密碼欄位
+    // 若為空，則保留原密碼不變（不將 password 加入 payload）
+    if (password !== undefined && password !== null && password.trim() !== '') {
+      payload.password = password.trim();
+    }
+    // 若 password 為空字串或未提供，則不更新密碼（不加入 payload）
+
+    // 處理 phone 欄位（如果提供）
+    if (updateData.phone !== undefined) {
+      payload.phone = updateData.phone.trim();
     }
 
     const { error } = await supabaseAdmin

@@ -47,6 +47,7 @@ export default function EmployeePortal() {
   // 🟢 狀態管理
   const [step, setStep] = useState<StepType>('loading');
   const [lineUserId, setLineUserId] = useState<string>('');
+  const [clinicId, setClinicId] = useState<string>(''); // 🔑 SaaS：從 URL 讀取的診所 ID
   const [bindForm, setBindForm] = useState({ phone: '', password: '' });
   const [bindError, setBindError] = useState('');
 
@@ -96,6 +97,20 @@ export default function EmployeePortal() {
     isBypass: boolean;
   } | null>(null);
 
+  // 🟢 讀取 Clinic ID：從 URL 參數讀取
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const searchParams = new URLSearchParams(window.location.search);
+      const clinicIdParam = searchParams.get('clinic_id');
+      if (clinicIdParam) {
+        console.log('[Portal] 從 URL 讀取 clinic_id:', clinicIdParam);
+        setClinicId(clinicIdParam);
+      } else {
+        console.warn('[Portal] ⚠️ URL 中沒有 clinic_id 參數');
+      }
+    }
+  }, []);
+
   // 🟢 初始化流程：LIFF init → line-check
   useEffect(() => {
     const initLiffAndCheck = async () => {
@@ -140,8 +155,8 @@ export default function EmployeePortal() {
           await fetchTodayLogs(checkResult.staff.id);
           await fetchHomeDataWithStaffId(checkResult.staff.id);
         } else {
-          // 未綁定：顯示綁定表單
-          console.log('[Portal] ⚠️ 未綁定，顯示綁定表單');
+          // 未綁定：進入綁定模式
+          console.log('[Portal] ⚠️ 未綁定，進入綁定模式');
           setStep('binding');
         }
 
@@ -166,6 +181,11 @@ export default function EmployeePortal() {
       return;
     }
 
+    if (!clinicId) {
+      setBindError('無效的連結，請從診所官方帳號選單進入');
+      return;
+    }
+
     setBindError('');
 
     try {
@@ -176,14 +196,19 @@ export default function EmployeePortal() {
           lineUserId,
           phone: bindForm.phone,
           password: bindForm.password,
+          clinicId, // 🔑 SaaS：帶上診所 ID
         }),
         credentials: 'include', // 🔑 關鍵：帶上 Cookie
       });
 
       if (!response.ok) {
         const result = await response.json();
-        if (response.status === 401) {
-          setBindError('找不到此手機號碼或密碼錯誤');
+        if (response.status === 404) {
+          setBindError('找不到員工資料');
+        } else if (response.status === 401) {
+          setBindError('密碼錯誤');
+        } else if (response.status === 409) {
+          setBindError('此帳號已被其他 LINE 綁定');
         } else {
           setBindError(result.error || '綁定失敗，請稍後再試');
         }
@@ -825,7 +850,7 @@ export default function EmployeePortal() {
     );
   }
 
-  // 🟢 UI 呈現：Binding (首次使用)
+  // 🟢 UI 呈現：Binding (首次使用 - SaaS 模式)
   if (step === 'binding') {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6">
@@ -833,7 +858,23 @@ export default function EmployeePortal() {
           <div className="w-16 h-16 bg-teal-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <Lock className="w-8 h-8 text-teal-600" />
           </div>
-          <h2 className="text-2xl font-bold mb-2 text-slate-800">歡迎使用員工入口</h2>
+          <h2 className="text-2xl font-bold mb-2 text-slate-800">歡迎使用員工系統</h2>
+          
+          {/* 🔑 SaaS：顯示診所資訊 */}
+          {clinicId ? (
+            <div className="mb-4 p-3 bg-teal-50 border border-teal-200 rounded-xl">
+              <p className="text-sm text-teal-700 font-bold">
+                正在綁定至診所代碼：<span className="text-teal-900">{clinicId}</span>
+              </p>
+            </div>
+          ) : (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl">
+              <p className="text-sm text-red-600 font-bold">
+                ⚠️ 無效的連結，請從診所官方帳號選單進入
+              </p>
+            </div>
+          )}
+
           <p className="text-slate-500 mb-6 text-sm">
             初次使用請輸入手機與預設密碼進行身份綁定
           </p>
@@ -853,6 +894,7 @@ export default function EmployeePortal() {
                 onChange={(e) => setBindForm({ ...bindForm, phone: e.target.value })}
                 className="w-full p-3 border rounded-xl bg-slate-50 font-bold"
                 placeholder="例如：0912345678"
+                disabled={!clinicId} // 若無 clinicId，禁用輸入
               />
             </div>
             <div>
@@ -863,11 +905,17 @@ export default function EmployeePortal() {
                 onChange={(e) => setBindForm({ ...bindForm, password: e.target.value })}
                 className="w-full p-3 border rounded-xl bg-slate-50 font-bold"
                 placeholder="預設為 0000"
+                disabled={!clinicId} // 若無 clinicId，禁用輸入
               />
             </div>
             <button
               onClick={handleBind}
-              className="w-full bg-teal-600 text-white py-4 rounded-xl font-bold shadow-lg mt-4 hover:bg-teal-700 transition"
+              disabled={!clinicId} // 若無 clinicId，禁用按鈕
+              className={`w-full py-4 rounded-xl font-bold shadow-lg mt-4 transition ${
+                clinicId
+                  ? 'bg-teal-600 text-white hover:bg-teal-700'
+                  : 'bg-slate-300 text-slate-500 cursor-not-allowed'
+              }`}
             >
               驗證並綁定
             </button>

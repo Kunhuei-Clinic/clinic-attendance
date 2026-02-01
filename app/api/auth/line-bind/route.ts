@@ -3,26 +3,22 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
 /**
  * POST /api/auth/line-bind
- * 執行 LINE 帳號綁定（多診所支援）
+ * 執行 LINE 帳號綁定（多診所 SaaS 支援）
  * 
  * Request Body:
  *   { lineUserId: string, phone: string, password: string, clinicId: string }
  * 
  * Response:
- *   { success: boolean, staff?: { id, name, role, clinic_id, ... }, message?: string, error?: string }
+ *   { success: boolean, staff?: { id, name, role, clinic_id, ... }, error?: string }
  * 
  * 功能：
  * 1. 查詢 staff 表格：
  *    - phone === phone
  *    - clinic_id === clinicId (🔒 關鍵：確保沒跑錯診所)
- *    - is_active === true
- * 2. 比對：
- *    - 若找不到人 -> 回傳 404 "找不到員工資料"
- *    - 若 staff.password !== password -> 回傳 401 "密碼錯誤"
- *    - 若 staff.line_user_id 已經有值且不等於當前 ID -> 回傳 409 "此帳號已被其他 LINE 綁定"
- * 3. 更新：更新該員工的 line_user_id 為 lineUserId
- * 4. 建立 Session：設定 Cookie (包含 staff_id, clinic_id, role)
- * 5. 回傳：{ success: true, staff: {...} }
+ *    - password === password
+ * 2. 更新：將 line_user_id 更新為 lineUserId
+ * 3. Session：綁定成功後直接建立 Cookie (含 staff_id, clinic_id)
+ * 4. 回傳：成功或錯誤訊息 (401/404)
  */
 export async function POST(request: NextRequest) {
   try {
@@ -55,7 +51,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 檢查員工是否已啟用（雖然查詢時已經過濾，但再次確認）
+    // 檢查員工是否已啟用
     if (!staff.is_active) {
       return NextResponse.json(
         { success: false, error: '該員工帳號已停用' },
@@ -63,7 +59,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 比對：若 staff.line_user_id 已經有值且不等於當前 ID -> 回傳 409
+    // 比對：驗證密碼（預設密碼為 '0000'）
+    const dbPassword = staff.password || '0000';
+    if (dbPassword !== password) {
+      console.error('[LINE Bind] 密碼錯誤:', { phone, clinicId });
+      return NextResponse.json(
+        { success: false, error: '密碼錯誤' },
+        { status: 401 }
+      );
+    }
+
+    // 檢查是否已經綁定其他 LINE 帳號
     if (staff.line_user_id && staff.line_user_id !== lineUserId) {
       return NextResponse.json(
         { success: false, error: '此帳號已被其他 LINE 綁定' },
@@ -71,17 +77,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 2. 比對：驗證密碼（預設密碼為 '0000'，目前為明碼比對）
-    const dbPassword = staff.password || '0000';
-    if (dbPassword !== password) {
-      console.error('[LINE Bind] 密碼錯誤:', { phone, clinicId, provided: password });
-      return NextResponse.json(
-        { success: false, error: '密碼錯誤' },
-        { status: 401 }
-      );
-    }
-
-    // 3. 執行綁定：更新 line_user_id
+    // 2. 更新：將 line_user_id 更新為 lineUserId
     const { error: updateError } = await supabaseAdmin
       .from('staff')
       .update({ line_user_id: lineUserId })
@@ -96,7 +92,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 4. 驗證 clinic_id 是否存在
+    // 驗證 clinic_id 是否存在
     if (!staff.clinic_id) {
       return NextResponse.json(
         { success: false, error: '員工未關聯到診所，請聯繫管理員' },
@@ -104,7 +100,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 5. 建立 Response
+    // 3. 建立 Response
     const response = NextResponse.json({
       success: true,
       staff: {
@@ -116,7 +112,7 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    // 6. 設定 Session Cookie（包含 staff_id, clinic_id, role）
+    // 4. Session：綁定成功後直接建立 Cookie (含 staff_id, clinic_id)
     // 設定 staff_id cookie（用於識別當前登入的員工）
     response.cookies.set('staff_id', String(staff.id), {
       httpOnly: true,
@@ -134,17 +130,6 @@ export async function POST(request: NextRequest) {
       maxAge: 60 * 60 * 24 * 30, // 30 天
       sameSite: 'lax'
     });
-
-    // 設定 role cookie（用於權限識別）
-    if (staff.role) {
-      response.cookies.set('staff_role', staff.role, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        path: '/',
-        maxAge: 60 * 60 * 24 * 30, // 30 天
-        sameSite: 'lax'
-      });
-    }
 
     console.log('[LINE Bind] ✅ 綁定成功:', {
       staff_id: staff.id,

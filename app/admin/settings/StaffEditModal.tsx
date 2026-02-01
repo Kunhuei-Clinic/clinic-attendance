@@ -34,6 +34,7 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
   const [editData, setEditData] = useState<any>(null);
   const [jobTitles, setJobTitles] = useState<JobTitleConfig[]>(DEFAULT_JOB_TITLES);
   const [entities, setEntities] = useState<Entity[]>([]);
+  const [phoneError, setPhoneError] = useState('');
 
   // 讀取系統設定：職稱與組織單位
   useEffect(() => {
@@ -129,6 +130,7 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
               insurance_labor: 0,
               insurance_health: 0,
               phone: '',
+              password: '0000', // 🟢 新增模式：預設密碼為 0000
               address: '',
               emergency_contact: '',
               bank_account: '',
@@ -153,6 +155,7 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
               insurance_labor: 0,
               insurance_health: 0,
               phone: '',
+              password: '0000', // 🟢 新增模式：預設密碼為 0000
               address: '',
               emergency_contact: '',
               bank_account: '',
@@ -173,8 +176,16 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
       alert("請輸入姓名");
       return;
     }
+
+    // 🟢 驗證手機號碼（必填）
+    if (!editData.phone || editData.phone.trim() === '') {
+      setPhoneError('手機號碼為綁定帳號，務必填寫');
+      return;
+    } else {
+      setPhoneError('');
+    }
     
-    const payload = {
+    const payload: any = {
       name: editData.name,
       role: editData.role,
       entity: editData.entity || 'clinic', // 確保 entity 有預設值
@@ -184,12 +195,24 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
       base_salary: Number(editData.base_salary) || 0,
       insurance_labor: Number(editData.insurance_labor) || 0,
       insurance_health: Number(editData.insurance_health) || 0,
-      phone: editData.phone || null,
+      phone: editData.phone.trim(), // 🟢 必填，去除空白
       address: editData.address || null,
       emergency_contact: editData.emergency_contact || null,
       bank_account: editData.bank_account || null,
       id_number: editData.id_number || null
     };
+
+    // 🟢 處理密碼欄位
+    if (editData.id) {
+      // 編輯模式：只有當密碼欄位有值時才更新
+      if (editData.password && editData.password.trim() !== '') {
+        payload.password = editData.password.trim();
+      }
+      // 若密碼為空，不傳送 password 欄位（保持原密碼）
+    } else {
+      // 新增模式：必須有密碼（預設為 0000）
+      payload.password = editData.password?.trim() || '0000';
+    }
 
     try {
       let response;
@@ -304,14 +327,48 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
             </h4>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">電話</label>
+                <label className="block text-xs font-bold text-slate-500 mb-1">
+                  電話 <span className="text-red-500">*</span>
+                </label>
                 <input 
-                  type="text" 
+                  type="tel" 
                   value={editData.phone || ''} 
-                  onChange={e => setEditData({...editData, phone: e.target.value})} 
-                  className="w-full border p-2 rounded bg-white"
+                  onChange={e => {
+                    setEditData({...editData, phone: e.target.value});
+                    if (phoneError) setPhoneError(''); // 清除錯誤訊息
+                  }} 
+                  className={`w-full border p-2 rounded bg-white ${
+                    phoneError ? 'border-red-300 focus:ring-red-200' : ''
+                  }`}
                   placeholder="例：0912-345-678"
+                  required
                 />
+                {phoneError && (
+                  <p className="text-xs text-red-500 mt-1 font-bold">{phoneError}</p>
+                )}
+                <p className="text-xs text-slate-400 mt-1">
+                  手機號碼為綁定帳號，務必填寫
+                </p>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1">密碼</label>
+                <input 
+                  type="password" 
+                  value={editData.password || ''} 
+                  onChange={e => setEditData({...editData, password: e.target.value})} 
+                  className="w-full border p-2 rounded bg-white"
+                  placeholder={editData.id ? "若不修改請留空" : "預設為 0000"}
+                />
+                {!editData.id && (
+                  <p className="text-xs text-slate-400 mt-1">
+                    預設密碼為 0000，員工綁定時使用
+                  </p>
+                )}
+                {editData.id && (
+                  <p className="text-xs text-slate-400 mt-1">
+                    留空則保持原密碼不變
+                  </p>
+                )}
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-500 mb-1">身分證字號</label>

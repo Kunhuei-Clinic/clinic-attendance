@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Save, Clock, CalendarDays, LayoutGrid, Stethoscope, Trash2, Plus, User } from 'lucide-react';
+import { Save, Clock, CalendarDays, LayoutGrid, Stethoscope, Trash2, Plus, User, QrCode, Copy, Check } from 'lucide-react';
 
 type Entity = { id: string; name: string };
 
@@ -36,10 +36,51 @@ export default function SystemConfiguration() {
   const [systemMessage, setSystemMessage] = useState('');
   const [overtimeThreshold, setOvertimeThreshold] = useState(9);
   const [overtimeApprovalRequired, setOvertimeApprovalRequired] = useState(true);
+  
+  // 🟢 員工綁定連結相關
+  const [clinicId, setClinicId] = useState<string>('');
+  const [bindLink, setBindLink] = useState<string>('');
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     fetchSystemSettings();
+    fetchClinicId();
   }, []);
+
+  // 🟢 取得診所 ID 並組合綁定連結
+  const fetchClinicId = async () => {
+    try {
+      // 從 staff API 取得第一個員工的 clinic_id（作為當前診所 ID）
+      const response = await fetch('/api/staff?is_active=true', {
+        credentials: 'include',
+      });
+      const result = await response.json();
+      
+      if (result.data && result.data.length > 0 && result.data[0].clinic_id) {
+        const id = result.data[0].clinic_id;
+        setClinicId(id);
+        
+        // 組合綁定連結
+        const liffId = process.env.NEXT_PUBLIC_LIFF_ID || '2008669814-8OqQmkaL';
+        const link = `https://liff.line.me/${liffId}?clinic_id=${id}`;
+        setBindLink(link);
+      }
+    } catch (error) {
+      console.error('Fetch clinic ID error:', error);
+    }
+  };
+
+  // 🟢 複製連結
+  const handleCopyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(bindLink);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (error) {
+      console.error('Copy link error:', error);
+      alert('複製失敗，請手動複製連結');
+    }
+  };
 
   const fetchSystemSettings = async () => {
     try {
@@ -435,6 +476,60 @@ export default function SystemConfiguration() {
               <div className="text-xs opacity-80">Calendar System</div>
             </button>
           </div>
+        </div>
+
+        {/* 🟢 員工綁定連結 */}
+        <div>
+          <h3 className="text-lg font-bold text-slate-700 border-b pb-2 mb-4 flex items-center gap-2">
+            <QrCode size={20}/> 員工綁定連結 (QR Code)
+          </h3>
+          <div className="bg-teal-50 p-4 rounded-lg border border-teal-100 mb-4">
+            <p className="text-sm text-teal-800 mb-2">
+              請將此連結轉為 QR Code 供員工掃描，或直接傳送至員工群組。
+            </p>
+            <p className="text-xs text-teal-700">
+              員工首次進入需輸入手機與密碼進行綁定。
+            </p>
+          </div>
+          {bindLink ? (
+            <div className="space-y-3">
+              <div className="flex gap-2 items-center">
+                <input
+                  type="text"
+                  value={bindLink}
+                  readOnly
+                  className="flex-1 p-3 border rounded-lg bg-slate-50 font-mono text-sm"
+                />
+                <button
+                  onClick={handleCopyLink}
+                  className={`flex items-center gap-2 px-4 py-3 rounded-lg font-bold transition ${
+                    copied
+                      ? 'bg-green-100 text-green-700 border border-green-300'
+                      : 'bg-teal-600 text-white hover:bg-teal-700'
+                  }`}
+                >
+                  {copied ? (
+                    <>
+                      <Check size={18} />
+                      已複製
+                    </>
+                  ) : (
+                    <>
+                      <Copy size={18} />
+                      複製連結
+                    </>
+                  )}
+                </button>
+              </div>
+              <div className="text-xs text-slate-400">
+                診所 ID: <span className="font-mono">{clinicId}</span>
+              </div>
+            </div>
+          ) : (
+            <div className="p-4 bg-slate-50 rounded-lg border border-slate-200 text-sm text-slate-500">
+              載入中...
+            </div>
+          )}
         </div>
 
         {/* 加班設定 */}

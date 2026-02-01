@@ -3,12 +3,10 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
 /**
  * POST /api/auth/line-check
- * 檢查 LINE 帳號是否已綁定員工（多診所支援）
+ * 檢查 LINE 帳號是否已綁定員工（多診所 SaaS 支援）
  * 
  * Request Body:
- *   { lineUserId: string, clinicId?: string }
- *   - lineUserId: 必填，LINE User ID
- *   - clinicId: 可選，診所 ID（目前假設一人一診所，直接查 lineUserId 即可）
+ *   { lineUserId: string }
  * 
  * Response:
  *   - 已綁定: { bound: true, staff: { id, name, role, clinic_id, ... } }
@@ -16,13 +14,13 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin';
  * 
  * 功能：
  * 1. 查詢 staff 表格，條件 line_user_id === lineUserId
- * 2. 若找到：建立 Session Cookie (包含 staff_id, clinic_id, role)，回傳員工資料
+ * 2. 若找到：建立 Session Cookie (含 staff_id, clinic_id)，回傳員工資料
  * 3. 若沒找到：回傳 { bound: false } (前端將顯示綁定表單)
  */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { lineUserId, clinicId } = body;
+    const { lineUserId } = body;
 
     // 驗證必要參數
     if (!lineUserId) {
@@ -33,17 +31,11 @@ export async function POST(request: NextRequest) {
     }
 
     // 1. 查詢員工資料（包含 clinic_id, role）
-    let query = supabaseAdmin
+    const { data: staff, error: staffError } = await supabaseAdmin
       .from('staff')
       .select('id, name, role, clinic_id, is_active, phone')
-      .eq('line_user_id', lineUserId);
-
-    // 如果提供了 clinicId，加上診所過濾（未來擴展用）
-    if (clinicId) {
-      query = query.eq('clinic_id', clinicId);
-    }
-
-    const { data: staff, error: staffError } = await query.single();
+      .eq('line_user_id', lineUserId)
+      .single();
 
     // 如果找不到（錯誤碼 PGRST116 表示 not found）
     if (staffError && staffError.code === 'PGRST116') {
