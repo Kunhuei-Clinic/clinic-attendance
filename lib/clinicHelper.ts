@@ -189,6 +189,13 @@ export async function getClinicIdFromRequest(request: NextRequest): Promise<stri
       return await getClinicIdByUserId(userIdCookie.value);
     }
 
+    // 方法 4: LINE 登入支援 - 直接從 cookie 取得 clinic_id
+    const clinicIdCookie = cookieStore.get('clinic_id');
+    
+    if (clinicIdCookie?.value) {
+      return clinicIdCookie.value;
+    }
+
     // 無法取得 clinic_id，回傳 null
     return null;
   } catch (error) {

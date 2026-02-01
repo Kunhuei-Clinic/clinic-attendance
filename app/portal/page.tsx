@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import liff from '@line/liff';
-import { Clock, Calendar, DollarSign, History, Coffee, User } from 'lucide-react';
+import { Clock, Calendar, DollarSign, History, Coffee, User, Lock } from 'lucide-react';
 import PortalSalaryView from './components/SalaryView';
 import HomeView from './views/HomeView';
 import HistoryView, { MissedPunchForm } from './views/HistoryView';
@@ -32,6 +32,7 @@ const getDist = (lat1: number, lon1: number, lat2: number, lon2: number) => {
 
 type ViewType = 'home' | 'history' | 'roster' | 'leave' | 'payslip' | 'profile';
 type GpsStatus = 'idle' | 'locating' | 'ok' | 'out_of_range' | 'error';
+type StepType = 'loading' | 'binding' | 'portal';
 
 interface LeaveFormState {
   type: string;
@@ -43,13 +44,14 @@ interface LeaveFormState {
 }
 
 export default function EmployeePortal() {
+  // 🟢 狀態管理
+  const [step, setStep] = useState<StepType>('loading');
+  const [lineUserId, setLineUserId] = useState<string>('');
+  const [bindForm, setBindForm] = useState({ phone: '', password: '' });
+  const [bindError, setBindError] = useState('');
+
   const [view, setView] = useState<ViewType>('home');
-  const [status, setStatus] = useState<'loading' | 'bind_needed' | 'ready' | 'error'>(
-    'loading',
-  );
   const [staffUser, setStaffUser] = useState<any>(null);
-  const [unboundList, setUnboundList] = useState<any[]>([]);
-  const [bindForm, setBindForm] = useState({ id: '', password: '' });
 
   const [logs, setLogs] = useState<any[]>([]);
   const [historyLogs, setHistoryLogs] = useState<any[]>([]);
@@ -94,144 +96,129 @@ export default function EmployeePortal() {
     isBypass: boolean;
   } | null>(null);
 
-  // 🟢 首頁資料預先載入：用於剛綁定完成時馬上取得公告與個人資料
-  async function prefetchHomeData(staffId: number) {
-    try {
-      const response = await fetch(
-        `/api/portal/data?type=home&staffId=${staffId}`,
-        {
-          credentials: 'include', // 🔑 關鍵：帶上 Cookie
-        }
-      );
-      
-      if (response.status === 401) {
-        console.error('[Portal] 401 Unauthorized - 請重新登入');
-        window.location.href = '/login';
-        return;
-      }
-      
-      const json = await response.json();
-
-      console.log('[Portal] 預先載入 API 回應:', json);
-
-      // 🟢 強健的資料解析：兼容不同的 API 回傳結構
-      // 1. 處理個人資料 (相容多種結構)
-      const profileData = json.data?.profile || json.profile || null;
-      if (profileData) {
-        console.log('[Portal] ✅ 設定 Profile:', profileData);
-        setProfile(profileData);
-      } else {
-        console.warn('[Portal] ⚠️ API 未回傳 profile 資料');
-      }
-
-      // 2. 處理公告 (相容多種結構)
-      const announcementData = json.data?.announcements || json.announcements || [];
-      if (Array.isArray(announcementData)) {
-        console.log('[Portal] ✅ 設定公告:', announcementData.length, '則');
-        setAnnouncements(announcementData);
-      } else {
-        console.warn('[Portal] ⚠️ 公告資料格式不正確:', announcementData);
-        setAnnouncements([]);
-      }
-    } catch (error) {
-      console.error('[Portal] 預先讀取首頁資料失敗:', error);
-      setAnnouncements([]);
-    }
-  }
-
-  // LIFF 初始化與綁定
+  // 🟢 初始化流程：LIFF init → line-check
   useEffect(() => {
-    const initLiff = async () => {
+    const initLiffAndCheck = async () => {
       try {
+        // 1. 初始化 LIFF
         await liff.init({ liffId: LIFF_ID });
+        
         if (!liff.isLoggedIn()) {
-          liff.login();
+          liff.login(); // 沒登入就叫他登入 LINE
           return;
         }
-        const liffProfile = await liff.getProfile();
-        checkBinding(liffProfile.userId);
+
+        const profile = await liff.getProfile();
+        const userId = profile.userId;
+        setLineUserId(userId);
+
+        console.log('[Portal] 取得 LINE ID:', userId);
+
+        // 2. 檢查綁定狀態
+        const checkRes = await fetch('/api/auth/line-check', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ lineUserId: userId }),
+          credentials: 'include', // 🔑 關鍵：帶上 Cookie
+        });
+
+        if (!checkRes.ok) {
+          console.error('[Portal] line-check 失敗:', checkRes.status);
+          setStep('binding');
+          return;
+        }
+
+        const checkResult = await checkRes.json();
+
+        if (checkResult.bound && checkResult.staff) {
+          // 已綁定：進入系統
+          console.log('[Portal] ✅ 已綁定:', checkResult.staff);
+          setStaffUser(checkResult.staff);
+          setStep('portal');
+          
+          // 載入資料
+          await fetchTodayLogs(checkResult.staff.id);
+          await fetchHomeDataWithStaffId(checkResult.staff.id);
+        } else {
+          // 未綁定：顯示綁定表單
+          console.log('[Portal] ⚠️ 未綁定，顯示綁定表單');
+          setStep('binding');
+        }
+
       } catch (e) {
-        console.error(e);
-        setStatus('error');
+        console.error('[Portal] LIFF Init Error:', e);
+        setStep('binding'); // 發生錯誤時也顯示綁定表單
       }
     };
-    setTimeout(initLiff, 100);
+
+    initLiffAndCheck();
   }, []);
 
-  const checkBinding = async (lineId: string) => {
-    try {
-      const response = await fetch(`/api/portal/auth?lineUserId=${lineId}`, {
-        credentials: 'include', // 🔑 關鍵：帶上 Cookie
-      });
-      
-      if (response.status === 401) {
-        console.error('[Portal] 401 Unauthorized - 請重新登入');
-        window.location.href = '/login';
-        return;
-      }
-      
-      const result = await response.json();
-
-      if (result.status === 'bound' && result.staff) {
-        setStaffUser(result.staff);
-        setStatus('ready');
-        fetchTodayLogs(result.staff.id);
-        // 首次綁定成功後立即載入首頁資料（含公告）
-        prefetchHomeData(result.staff.id);
-      } else if (result.status === 'unbound' && result.unboundList) {
-        setUnboundList(result.unboundList || []);
-        setStatus('bind_needed');
-      } else {
-        console.error('Unknown binding status:', result);
-        setStatus('error');
-      }
-    } catch (error) {
-      console.error('Check binding error:', error);
-      setStatus('error');
-    }
-  };
-
+  // 🟢 綁定動作
   const handleBind = async () => {
-    if (!bindForm.id || !bindForm.password) {
-      alert('請選擇姓名並輸入密碼');
+    if (!bindForm.phone || !bindForm.password) {
+      setBindError('請輸入手機號碼和密碼');
       return;
     }
 
+    if (!lineUserId) {
+      setBindError('無法取得 LINE 帳號資訊，請重新整理頁面');
+      return;
+    }
+
+    setBindError('');
+
     try {
-      const liffProfile = await liff.getProfile();
-      const response = await fetch('/api/portal/auth', {
+      const response = await fetch('/api/auth/line-bind', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          staffId: Number(bindForm.id),
+          lineUserId,
+          phone: bindForm.phone,
           password: bindForm.password,
-          lineUserId: liffProfile.userId,
         }),
         credentials: 'include', // 🔑 關鍵：帶上 Cookie
       });
 
+      if (!response.ok) {
+        const result = await response.json();
+        if (response.status === 401) {
+          setBindError('找不到此手機號碼或密碼錯誤');
+        } else {
+          setBindError(result.error || '綁定失敗，請稍後再試');
+        }
+        return;
+      }
+
       const result = await response.json();
 
-      if (result.success) {
-        window.location.reload();
+      if (result.success && result.staff) {
+        // 綁定成功：進入系統
+        console.log('[Portal] ✅ 綁定成功:', result.staff);
+        setStaffUser(result.staff);
+        setStep('portal');
+
+        // 載入資料
+        await fetchTodayLogs(result.staff.id);
+        await fetchHomeDataWithStaffId(result.staff.id);
       } else {
-        alert(result.message || '綁定失敗');
+        setBindError('綁定失敗，請稍後再試');
       }
-    } catch (error) {
-      console.error('Bind error:', error);
-      alert('綁定失敗，請稍後再試');
+    } catch (error: any) {
+      console.error('[Portal] 綁定錯誤:', error);
+      setBindError('綁定失敗，請稍後再試');
     }
   };
 
   // 根據 view 抓資料
   useEffect(() => {
-    if (!staffUser) return;
+    if (!staffUser || step !== 'portal') return;
     if (view === 'history') fetchHistory();
     if (view === 'roster') fetchRoster();
     if (view === 'leave') fetchLeaveHistory();
     if (view === 'home') fetchHomeData();
     if (view === 'profile') fetchProfile();
-  }, [view, selectedMonth, staffUser]);
+  }, [view, selectedMonth, staffUser, step]);
 
   const fetchTodayLogs = async (staffId: number) => {
     try {
@@ -239,13 +226,12 @@ export default function EmployeePortal() {
       const response = await fetch(
         `/api/portal/data?type=history&staffId=${staffId}&month=${ym}`,
         {
-          credentials: 'include', // 🔑 關鍵：帶上 Cookie
+          credentials: 'include',
         }
       );
       
       if (response.status === 401) {
         console.error('[Portal] 401 Unauthorized - 請重新登入');
-        window.location.href = '/login';
         return;
       }
       
@@ -272,13 +258,12 @@ export default function EmployeePortal() {
       const response = await fetch(
         `/api/portal/data?type=history&staffId=${staffUser.id}&month=${selectedMonth}`,
         {
-          credentials: 'include', // 🔑 關鍵：帶上 Cookie
+          credentials: 'include',
         }
       );
       
       if (response.status === 401) {
         console.error('[Portal] 401 Unauthorized - 請重新登入');
-        window.location.href = '/login';
         return;
       }
       
@@ -295,13 +280,12 @@ export default function EmployeePortal() {
       const response = await fetch(
         `/api/portal/data?type=roster&staffId=${staffUser.id}`,
         {
-          credentials: 'include', // 🔑 關鍵：帶上 Cookie
+          credentials: 'include',
         }
       );
       
       if (response.status === 401) {
         console.error('[Portal] 401 Unauthorized - 請重新登入');
-        window.location.href = '/login';
         return;
       }
       
@@ -327,13 +311,12 @@ export default function EmployeePortal() {
       const response = await fetch(
         `/api/portal/data?type=leave&staffId=${staffUser.id}`,
         {
-          credentials: 'include', // 🔑 關鍵：帶上 Cookie
+          credentials: 'include',
         }
       );
       
       if (response.status === 401) {
         console.error('[Portal] 401 Unauthorized - 請重新登入');
-        window.location.href = '/login';
         return;
       }
       
@@ -355,20 +338,17 @@ export default function EmployeePortal() {
     }
   };
 
-  // 🟢 強健的資料讀取：兼容不同的 API 回傳結構
-  const fetchHomeData = async () => {
-    if (!staffUser?.id) return;
+  const fetchHomeDataWithStaffId = async (staffId: number) => {
     try {
       const response = await fetch(
-        `/api/portal/data?type=home&staffId=${staffUser.id}`,
+        `/api/portal/data?type=home&staffId=${staffId}`,
         {
-          credentials: 'include', // 🔑 關鍵：帶上 Cookie
+          credentials: 'include',
         }
       );
       
       if (response.status === 401) {
         console.error('[Portal] 401 Unauthorized - 請重新登入');
-        window.location.href = '/login';
         return;
       }
       
@@ -376,36 +356,23 @@ export default function EmployeePortal() {
 
       console.log('[Portal] 首頁資料 API 回應:', json);
 
-      // 🟢 強健的資料解析：兼容不同的 API 回傳結構
-      // 1. 處理個人資料 (相容多種結構)
       const profileData = json.data?.profile || json.profile || null;
       if (profileData) {
         console.log('[Portal] ✅ 設定 Profile:', profileData);
         setProfile(profileData);
-      } else {
-        console.warn('[Portal] ⚠️ API 未回傳 profile 資料');
       }
 
-      // 2. 處理公告 (相容多種結構)
       const announcementData = json.data?.announcements || json.announcements || [];
       if (Array.isArray(announcementData)) {
         console.log('[Portal] ✅ 設定公告:', announcementData.length, '則');
         setAnnouncements(announcementData);
       } else {
-        console.warn('[Portal] ⚠️ 公告資料格式不正確:', announcementData);
         setAnnouncements([]);
       }
 
-      // 3. 處理打卡狀態
       const logsData = json.data?.todayLogs || json.todayLogs || [];
       if (Array.isArray(logsData)) {
         setLogs(logsData);
-        const lastLog = logsData[0];
-        if (lastLog && lastLog.clock_in && !lastLog.clock_out) {
-          setIsWorking(true);
-        } else {
-          setIsWorking(false);
-        }
       }
     } catch (error) {
       console.error('[Portal] 讀取首頁資料失敗:', error);
@@ -413,41 +380,37 @@ export default function EmployeePortal() {
     }
   };
 
-  // 🟢 強健的個人資料讀取
+  const fetchHomeData = async () => {
+    if (!staffUser?.id) return;
+    await fetchHomeDataWithStaffId(staffUser.id);
+  };
+
   const fetchProfile = async () => {
     if (!staffUser?.id) return;
     try {
       const response = await fetch(
         `/api/portal/data?type=home&staffId=${staffUser.id}`,
         {
-          credentials: 'include', // 🔑 關鍵：帶上 Cookie
+          credentials: 'include',
         }
       );
       
       if (response.status === 401) {
         console.error('[Portal] 401 Unauthorized - 請重新登入');
-        window.location.href = '/login';
         return;
       }
       
       const json = await response.json();
 
-      console.log('[Portal] 個人資料 API 回應:', json);
-
-      // 🟢 強健的資料解析：兼容不同的 API 回傳結構
       const profileData = json.data?.profile || json.profile || null;
       if (profileData) {
-        console.log('[Portal] ✅ 設定 Profile:', profileData);
         setProfile(profileData);
-      } else {
-        console.warn('[Portal] ⚠️ API 未回傳 profile 資料');
       }
     } catch (error) {
       console.error('[Portal] 讀取個人資料失敗:', error);
     }
   };
 
-  // 🟢 實作更新個人資料（使用專用的 /api/staff/profile 端點）
   const updateProfile = async (payload: {
     phone: string;
     address: string;
@@ -463,12 +426,11 @@ export default function EmployeePortal() {
           address: payload.address,
           emergency_contact: payload.emergency_contact,
         }),
-        credentials: 'include', // 🔑 關鍵：帶上 Cookie
+        credentials: 'include',
       });
 
       if (response.status === 401) {
         alert('❌ 請重新登入');
-        window.location.href = '/login';
         return;
       }
 
@@ -480,7 +442,6 @@ export default function EmployeePortal() {
 
       alert('✅ 個人資料已更新');
       
-      // 更新本地 state
       setProfile((prev: any) =>
         prev
           ? {
@@ -492,7 +453,6 @@ export default function EmployeePortal() {
           : prev,
       );
       
-      // 刷新資料
       await fetchProfile();
     } catch (error: any) {
       console.error('[Portal] 更新個人資料失敗:', error);
@@ -500,16 +460,14 @@ export default function EmployeePortal() {
     }
   };
 
-  // 取得加班設定
   useEffect(() => {
     if (!staffUser) return;
     fetch('/api/settings?type=clinic', {
-      credentials: 'include', // 🔑 關鍵：帶上 Cookie
+      credentials: 'include',
     })
       .then((res) => {
         if (res.status === 401) {
           console.error('[Portal] 401 Unauthorized - 請重新登入');
-          window.location.href = '/login';
           return { data: null };
         }
         return res.json();
@@ -590,12 +548,11 @@ export default function EmployeePortal() {
           reason: form.reason,
           status: 'pending',
         }),
-        credentials: 'include', // 🔑 關鍵：帶上 Cookie
+        credentials: 'include',
       });
       
       if (response.status === 401) {
         alert('❌ 請重新登入');
-        window.location.href = '/login';
         return;
       }
 
@@ -625,12 +582,11 @@ export default function EmployeePortal() {
           id: logId,
           anomaly_reason: reason,
         }),
-        credentials: 'include', // 🔑 關鍵：帶上 Cookie
+        credentials: 'include',
       });
       
       if (response.status === 401) {
         alert('❌ 請重新登入');
-        window.location.href = '/login';
         return;
       }
 
@@ -676,12 +632,11 @@ export default function EmployeePortal() {
           reason: leaveForm.reason,
           status: 'pending',
         }),
-        credentials: 'include', // 🔑 關鍵：帶上 Cookie
+        credentials: 'include',
       });
       
       if (response.status === 401) {
         alert('❌ 請重新登入');
-        window.location.href = '/login';
         return;
       }
 
@@ -796,12 +751,11 @@ export default function EmployeePortal() {
             gpsLng: lng,
             isBypass: isBypass,
           }),
-          credentials: 'include', // 🔑 關鍵：帶上 Cookie
+          credentials: 'include',
         });
         
         if (response.status === 401) {
           alert('❌ 請重新登入');
-          window.location.href = '/login';
           return;
         }
         const result = await response.json();
@@ -827,12 +781,11 @@ export default function EmployeePortal() {
             isBypass: isBypass,
             applyOvertime,
           }),
-          credentials: 'include', // 🔑 關鍵：帶上 Cookie
+          credentials: 'include',
         });
         
         if (response.status === 401) {
           alert('❌ 請重新登入');
-          window.location.href = '/login';
           return;
         }
         const result = await response.json();
@@ -862,54 +815,61 @@ export default function EmployeePortal() {
     }
   };
 
-  // 狀態頁
-  if (status === 'loading') {
+  // 🟢 UI 呈現：Loading
+  if (step === 'loading') {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50">
         <div className="w-12 h-12 border-4 border-teal-500 border-t-transparent rounded-full animate-spin" />
-        <p className="mt-4 text-slate-400 font-bold">系統載入中...</p>
+        <p className="mt-4 text-slate-400 font-bold">系統識別中...</p>
       </div>
     );
   }
 
-  if (status === 'bind_needed') {
+  // 🟢 UI 呈現：Binding (首次使用)
+  if (step === 'binding') {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6">
         <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-sm text-center">
-          <User className="w-16 h-16 text-teal-600 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold mb-2">員工綁定 (V33.0)</h2>
+          <div className="w-16 h-16 bg-teal-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Lock className="w-8 h-8 text-teal-600" />
+          </div>
+          <h2 className="text-2xl font-bold mb-2 text-slate-800">歡迎使用員工入口</h2>
           <p className="text-slate-500 mb-6 text-sm">
-            請選擇姓名並輸入密碼
+            初次使用請輸入手機與預設密碼進行身份綁定
           </p>
+          
+          {bindError && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm">
+              {bindError}
+            </div>
+          )}
+
           <div className="space-y-4 text-left">
-            <select
-              className="w-full p-3 border rounded-xl bg-slate-50 font-bold"
-              value={bindForm.id}
-              onChange={(e) =>
-                setBindForm({ ...bindForm, id: e.target.value })
-              }
-            >
-              <option value="">請選擇...</option>
-              {unboundList.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-            <input
-              type="password"
-              value={bindForm.password}
-              onChange={(e) =>
-                setBindForm({ ...bindForm, password: e.target.value })
-              }
-              className="w-full p-3 border rounded-xl bg-slate-50 font-bold"
-              placeholder="密碼 (預設為生日四碼)"
-            />
+            <div>
+              <label className="block text-sm font-bold text-slate-700 mb-2">手機號碼</label>
+              <input
+                type="tel"
+                value={bindForm.phone}
+                onChange={(e) => setBindForm({ ...bindForm, phone: e.target.value })}
+                className="w-full p-3 border rounded-xl bg-slate-50 font-bold"
+                placeholder="例如：0912345678"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-bold text-slate-700 mb-2">預設密碼</label>
+              <input
+                type="password"
+                value={bindForm.password}
+                onChange={(e) => setBindForm({ ...bindForm, password: e.target.value })}
+                className="w-full p-3 border rounded-xl bg-slate-50 font-bold"
+                placeholder="預設為 0000"
+              />
+            </div>
             <button
               onClick={handleBind}
-              className="w-full bg-teal-600 text-white py-4 rounded-xl font-bold shadow-lg mt-4"
+              className="w-full bg-teal-600 text-white py-4 rounded-xl font-bold shadow-lg mt-4 hover:bg-teal-700 transition"
             >
-              確認綁定
+              驗證並綁定
             </button>
           </div>
         </div>
@@ -917,7 +877,8 @@ export default function EmployeePortal() {
     );
   }
 
-  if (!staffUser) {
+  // 🟢 UI 呈現：Portal (主系統)
+  if (step !== 'portal' || !staffUser) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 text-sm text-slate-400">
         無法取得員工資料
@@ -1106,4 +1067,3 @@ export default function EmployeePortal() {
     </div>
   );
 }
-
