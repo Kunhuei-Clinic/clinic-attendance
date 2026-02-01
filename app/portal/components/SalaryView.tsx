@@ -25,6 +25,7 @@ export default function PortalSalaryView({ user }: { user: any }) {
 
   const [list, setList] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false); // 🟢 新增：驗證密碼時的 loading 狀態
   const [selectedSlip, setSelectedSlip] = useState<any>(null);
 
   // 當解鎖成功後，才去抓資料
@@ -32,13 +33,50 @@ export default function PortalSalaryView({ user }: { user: any }) {
     if (isUnlocked && user) fetchSalaryList();
   }, [isUnlocked, user]);
 
-  const handleUnlock = () => {
-    // 比對資料庫裡的 password (預設 0000)
-    if (inputPwd === user.password || inputPwd === '0000') {
-      setIsUnlocked(true);
+  // 🟢 修改：直接呼叫後端 API 驗證密碼（與 staff 資料表連動）
+  const handleUnlock = async () => {
+    if (!inputPwd || inputPwd.trim() === '') {
+      setErrorMsg('請輸入密碼');
+      return;
+    }
+
+    // 檢查 user 是否有 phone 欄位
+    if (!user.phone) {
+      setErrorMsg('❌ 無法驗證：缺少手機號碼資訊');
+      setInputPwd('');
+      return;
+    }
+
+    // 呼叫後端 API 驗證密碼（與 staff 資料表的 password 欄位比對）
+    try {
+      setIsVerifying(true);
       setErrorMsg('');
-    } else {
-      setErrorMsg('❌ 密碼錯誤');
+
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: user.phone,
+          password: inputPwd,
+        }),
+        credentials: 'include',
+      });
+
+      const result = await response.json();
+
+      if (response.ok && result.success) {
+        // 驗證成功：密碼與 staff 資料表的 password 欄位匹配
+        setIsUnlocked(true);
+        setErrorMsg('');
+      } else {
+        // 驗證失敗：密碼錯誤
+        setErrorMsg('❌ 密碼錯誤');
+      }
+    } catch (error) {
+      console.error('密碼驗證錯誤:', error);
+      setErrorMsg('❌ 系統錯誤，請稍後再試');
+    } finally {
+      setIsVerifying(false);
       setInputPwd('');
     }
   };
@@ -114,9 +152,23 @@ export default function PortalSalaryView({ user }: { user: any }) {
           )}
           <button
             onClick={handleUnlock}
-            className="w-full bg-teal-600 text-white py-3 rounded-xl font-bold hover:bg-teal-700 transition shadow-lg shadow-teal-200 flex items-center justify-center gap-2"
+            disabled={isVerifying}
+            className={`w-full bg-teal-600 text-white py-3 rounded-xl font-bold transition shadow-lg shadow-teal-200 flex items-center justify-center gap-2 ${
+              isVerifying
+                ? 'opacity-50 cursor-not-allowed'
+                : 'hover:bg-teal-700'
+            }`}
           >
-            <Unlock size={18} /> 解鎖查看
+            {isVerifying ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                驗證中...
+              </>
+            ) : (
+              <>
+                <Unlock size={18} /> 解鎖查看
+              </>
+            )}
           </button>
         </div>
       </div>

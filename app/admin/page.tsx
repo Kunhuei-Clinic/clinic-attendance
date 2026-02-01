@@ -28,6 +28,9 @@ export default function AdminPage() {
   const [authLevel, setAuthLevel] = useState<'boss' | 'manager' | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'tasks' | 'attendance' | 'staff_roster' | 'doctor_roster' | 'labor_rules' | 'salary' | 'settings' | 'leave' | 'doctor_salary' | 'salary_report' | 'announcements'>('tasks');
+  
+  // 🟢 新增：診所名稱 State
+  const [clinicName, setClinicName] = useState('診所');
 
   // 檢查認證狀態
   useEffect(() => {
@@ -55,6 +58,47 @@ export default function AdminPage() {
     };
     checkAuth();
   }, [router]);
+
+  // 🟢 新增：讀取診所名稱
+  useEffect(() => {
+    if (!authLevel) return;
+
+    const fetchClinicName = async () => {
+      try {
+        // 策略 A：嘗試直接從 clinics 資料表讀取 (依賴 RLS 自動過濾)
+        const { data: clinicData, error: clinicError } = await supabase
+          .from('clinics')
+          .select('name')
+          .single();
+        
+        if (!clinicError && clinicData && clinicData.name) {
+          setClinicName(clinicData.name);
+          return;
+        }
+
+        // 策略 B：如果讀不到 (例如權限問題)，嘗試從 Settings API 讀取
+        const res = await fetch('/api/settings', {
+          credentials: 'include',
+        });
+        const json = await res.json();
+        if (json.data) {
+          const setting = json.data.find((s: any) => s.key === 'clinic_name');
+          if (setting && setting.value) {
+            setClinicName(setting.value);
+            return;
+          }
+        }
+
+        // 如果都失敗，保持預設值「診所」
+        console.warn('[AdminPage] 無法讀取診所名稱，使用預設值');
+      } catch (e) {
+        console.error('[AdminPage] Fetch clinic name error:', e);
+        // 發生錯誤時保持預設值「診所」
+      }
+    };
+
+    fetchClinicName();
+  }, [authLevel]);
 
   // 登出處理（使用 @supabase/ssr 的 createBrowserClient）
   const handleLogout = async () => {
@@ -101,9 +145,11 @@ export default function AdminPage() {
         <div className="flex-1">
           <div className="mb-6 flex flex-col md:flex-row justify-between items-center gap-4">
             <div className="flex items-center gap-4">
-              <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-                診所管理中樞 V30.0
-                {authLevel === 'manager' && <span className="text-xs bg-gray-200 text-gray-600 px-2 py-1 rounded-full">排班模式</span>}
+              {/* 🟢 修改：動態標題 */}
+              <h1 className="text-2xl font-black text-slate-900 flex items-center gap-2 tracking-tight">
+                {clinicName}管理系統
+                <span className="text-sm font-normal text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">V30.0</span>
+                {authLevel === 'manager' && <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full font-bold">排班模式</span>}
               </h1>
               {authLevel === 'boss' && (
                 <button

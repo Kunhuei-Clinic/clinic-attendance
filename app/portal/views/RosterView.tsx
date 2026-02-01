@@ -47,6 +47,14 @@ export default function RosterView({ rosterData, staffUser }: RosterViewProps) {
             NIGHT: { start: '18:00', end: '21:30' }
         }
     });
+    
+    // 🟢 新增 state 存員工清單 (分流後)
+    const [doctorStaff, setDoctorStaff] = useState<any[]>([]);
+    const [generalStaff, setGeneralStaff] = useState<any[]>([]);
+    
+    // 🟢 醫師班表專用 state
+    const [doctorRoster, setDoctorRoster] = useState<any[]>([]);
+    const [closedDays, setClosedDays] = useState<string[]>([]);
 
     // 初始化
     useEffect(() => {
@@ -63,7 +71,7 @@ export default function RosterView({ rosterData, staffUser }: RosterViewProps) {
         if (currentDate) {
             loadAllData();
         }
-    }, [currentDate]);
+    }, [currentDate, activeTab]); // 🟢 當切換 tab 時重新載入
 
     // 🟢 載入所有資料：使用 Promise.all 同時載入
     const loadAllData = async () => {
@@ -140,27 +148,114 @@ export default function RosterView({ rosterData, staffUser }: RosterViewProps) {
     const loadData = async () => {
         if (!currentDate) return;
         try {
-            await Promise.all([
-                fetchStaff(),
-                fetchRoster(),
-                fetchHolidays()
-            ]);
-            
-            // 🟢 空值防禦：確保即使資料載入失敗，也有基本值
-            if (staffList.length === 0) {
-                console.warn('[RosterView] ⚠️ 員工列表為空，可能載入失敗');
-            }
-            if (Object.keys(rosterMap).length === 0) {
-                console.warn('[RosterView] ⚠️ 班表資料為空，可能載入失敗');
+            if (activeTab === 'doctor') {
+                // 🟢 醫師門診模式：讀取醫師班表
+                await Promise.all([
+                    fetchDoctorRoster(),
+                    fetchClosedDays()
+                ]);
+            } else {
+                // 一般人員模式：讀取一般員工班表
+                await Promise.all([
+                    fetchStaff(),
+                    fetchRoster(),
+                    fetchHolidays()
+                ]);
+                
+                // 🟢 空值防禦：確保即使資料載入失敗，也有基本值
+                if (staffList.length === 0) {
+                    console.warn('[RosterView] ⚠️ 員工列表為空，可能載入失敗');
+                }
+                if (Object.keys(rosterMap).length === 0) {
+                    console.warn('[RosterView] ⚠️ 班表資料為空，可能載入失敗');
+                }
             }
         } catch (error) {
             console.error('[RosterView] 載入資料失敗:', error);
             // 確保至少有空陣列，避免畫面崩潰
-            if (staffList.length === 0) setStaffList([]);
-            if (Object.keys(rosterMap).length === 0) setRosterMap({});
-            if (holidays.length === 0) setHolidays([]);
+            if (activeTab === 'doctor') {
+                setDoctorRoster([]);
+                setClosedDays([]);
+            } else {
+                if (staffList.length === 0) setStaffList([]);
+                if (Object.keys(rosterMap).length === 0) setRosterMap({});
+                if (holidays.length === 0) setHolidays([]);
+            }
         }
     };
+
+    // 🟢 員工分流邏輯：在資料載入後執行
+    useEffect(() => {
+        if (staffList.length === 0 || jobTitleConfigs.length === 0) {
+            setDoctorStaff([]);
+            setGeneralStaff([]);
+            return;
+        }
+
+        // 1. 解析職稱設定 (關鍵修正)
+        const configuredRoleSet = new Set(jobTitleConfigs.map((j: JobTitleConfig) => j.name));
+        const allowedRoleSet = new Set(
+            jobTitleConfigs.filter((j: JobTitleConfig) => j.in_roster === true).map((j: JobTitleConfig) => j.name)
+        );
+
+        console.log('[RosterView] 職稱設定:', {
+            configured: Array.from(configuredRoleSet),
+            allowed: Array.from(allowedRoleSet)
+        });
+
+        // 2. 員工分流邏輯 (與後台完全一致)
+        const docs: any[] = [];
+        const gens: any[] = [];
+
+        staffList.forEach((s: any) => {
+            // 只顯示在職員工 (portal 視圖只顯示在職)
+            if (s.is_active !== true) return;
+
+            const role = s.role || '';
+
+            // 醫師：只顯示角色為「醫師」的人員
+            if (role === '醫師') {
+                docs.push(s);
+            } else {
+                // 一般員工：嚴格篩選邏輯 (與後台完全一致)
+                // 1. 系統未設定任何職稱時，預設顯示 (避免空白)
+                if (configuredRoleSet.size === 0) {
+                    gens.push(s);
+                    return;
+                }
+
+                // 2. 若該職稱不在設定清單中 (新職稱)，預設顯示 (避免遺漏)
+                if (!configuredRoleSet.has(role)) {
+                    gens.push(s);
+                    return;
+                }
+
+                // 3. 若該職稱有設定，則依據 in_roster 決定
+                if (allowedRoleSet.has(role)) {
+                    gens.push(s);
+                }
+            }
+        });
+
+        // 排序
+        docs.sort((a, b) => (a.display_order || 99) - (b.display_order || 99));
+        gens.sort((a, b) => (a.display_order || 99) - (b.display_order || 99));
+
+        setDoctorStaff(docs);
+        setGeneralStaff(gens);
+
+        console.log('[RosterView] 員工分流結果:', {
+            doctor: docs.length,
+            general: gens.length
+        });
+    }, [staffList, jobTitleConfigs]);
+
+    // 🟢 當 doctorStaff 更新時，重新載入醫師班表（以取得醫師姓名）
+    useEffect(() => {
+        if (activeTab === 'doctor' && doctorStaff.length > 0 && currentDate) {
+            fetchDoctorRoster();
+        }
+    }, [doctorStaff, activeTab, currentDate]);
 
     const fetchGlobalSettings = async () => {
         try {
@@ -388,6 +483,78 @@ export default function RosterView({ rosterData, staffUser }: RosterViewProps) {
         }
     };
 
+    // 🟢 載入醫師班表
+    const fetchDoctorRoster = async () => {
+        if (!currentDate) return;
+        try {
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth() + 1;
+            const response = await fetch(`/api/roster/doctor?year=${year}&month=${month}`, {
+                credentials: 'include', // 🔑 關鍵：帶上 Cookie
+            });
+            
+            if (response.status === 401) {
+                console.error('[RosterView] 401 Unauthorized - 請重新登入');
+                setDoctorRoster([]);
+                return;
+            }
+            
+            const result = await response.json();
+            
+            if (result.data) {
+                // 關聯醫師姓名（如果 doctorStaff 還沒載入，先從 staffList 找）
+                const rosterWithNames = result.data.map((r: any) => {
+                    let doctor = doctorStaff.find((d: any) => d.id === r.doctor_id);
+                    if (!doctor) {
+                        // 如果 doctorStaff 還沒載入，從 staffList 找
+                        doctor = staffList.find((s: any) => s.id === r.doctor_id && s.role === '醫師');
+                    }
+                    return {
+                        ...r,
+                        doctor_name: doctor?.name || `醫師 #${r.doctor_id}`,
+                        shift_code: r.shift_code || 'AM' // 確保有 shift_code
+                    };
+                });
+                setDoctorRoster(rosterWithNames);
+                console.log('[RosterView] ✅ 醫師班表載入成功:', rosterWithNames.length, '筆');
+            } else {
+                setDoctorRoster([]);
+                console.warn('[RosterView] ⚠️ 醫師班表為空');
+            }
+        } catch (error) {
+            console.error('[RosterView] Fetch doctor roster error:', error);
+            setDoctorRoster([]);
+        }
+    };
+
+    // 🟢 載入休診日
+    const fetchClosedDays = async () => {
+        if (!currentDate) return;
+        try {
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth() + 1;
+            const response = await fetch(`/api/roster/closed-days?year=${year}&month=${month}`, {
+                credentials: 'include',
+            });
+            
+            if (response.status === 401) {
+                console.error('[RosterView] 401 Unauthorized - 請重新登入');
+                setClosedDays([]);
+                return;
+            }
+            
+            const result = await response.json();
+            if (result.data) {
+                setClosedDays(result.data);
+            } else {
+                setClosedDays([]);
+            }
+        } catch (error) {
+            console.error('[RosterView] Fetch closed days error:', error);
+            setClosedDays([]);
+        }
+    };
+
     const getDaysInMonth = () => {
         if (!currentDate) return [];
         const year = currentDate.getFullYear();
@@ -400,33 +567,7 @@ export default function RosterView({ rosterData, staffUser }: RosterViewProps) {
         });
     };
 
-    // 🟢 資料分流邏輯
-    const configuredRoleSet = new Set(jobTitleConfigs.map(j => j.name));
-    const allowedRoleSet = new Set(
-        jobTitleConfigs.filter(j => j.in_roster === true).map(j => j.name)
-    );
-
-    // 醫師：只顯示角色為「醫師」的人員
-    const doctorStaff = staffList.filter((s: Staff) => {
-        const role = s.role || '';
-        return role.includes('醫師') || role === '醫師';
-    });
-
-    // 一般員工：排除醫師，只顯示設定中 in_roster: true 的職位
-    const generalStaff = staffList.filter((s: Staff) => {
-        const role = s.role || '';
-        // 排除醫師
-        if (role.includes('醫師') || role === '醫師') return false;
-        
-        // 如果沒有設定職稱，預設顯示
-        if (configuredRoleSet.size === 0) return true;
-        
-        // 若職稱未在設定中出現，為避免遺漏，預設顯示
-        if (!configuredRoleSet.has(role)) return true;
-        
-        // 其餘依 in_roster 決定是否顯示
-        return allowedRoleSet.has(role);
-    });
+    // 🟢 資料分流邏輯已移至 useEffect，使用 state 儲存分流後的員工
 
     // 取得班別時間顯示
     const getShiftTimeDisplay = (shift: Shift, shiftDetails?: Record<string, { start: string, end: string }>) => {
@@ -452,6 +593,24 @@ export default function RosterView({ rosterData, staffUser }: RosterViewProps) {
 
     const days = getDaysInMonth();
     const weekDays = ['日', '一', '二', '三', '四', '五', '六'];
+
+    // 🟢 醫師班表專用：定義診次
+    const SHIFTS = [
+        { key: 'AM', label: '早診', color: 'text-orange-700 bg-orange-50 border-orange-200' },
+        { key: 'PM', label: '午診', color: 'text-blue-700 bg-blue-50 border-blue-200' },
+        { key: 'NIGHT', label: '晚診', color: 'text-purple-700 bg-purple-50 border-purple-200' }
+    ];
+
+    // 🟢 Helper: 找出某日某時段的醫師
+    const getDoctorsForShift = (dateStr: string, shiftKey: string) => {
+        return doctorRoster.filter((r: any) => r.date === dateStr && r.shift_code === shiftKey);
+    };
+
+    // 🟢 Helper: 檢查是否為今天
+    const isToday = (date: Date) => {
+        const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+        return dateStr === todayStr;
+    };
 
     // UI Render Helper：渲染表格
     const renderTable = (title: string, staffForTable: Staff[], colorClass: string, isDoctorTable: boolean = false) => {
@@ -693,10 +852,114 @@ export default function RosterView({ rosterData, staffUser }: RosterViewProps) {
                             }
                             return null;
                         })()}
-                    </>
+                    </> 
                 ) : (
-                    // 醫師門診模式：直接顯示一個大表格
-                    renderTable('👨‍⚕️ 醫師門診表', doctorStaff, 'border-teal-500 text-teal-700', true)
+                    // 🟢 醫師門診模式：專屬 UI 設計
+                    <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
+                        <h3 className="font-bold text-sm p-3 border-b border-l-4 border-teal-500 text-teal-700 bg-teal-50">
+                            👨‍⚕️ 醫師門診表
+                        </h3>
+                        <div className="overflow-x-auto">
+                            <table className="w-full min-w-[350px] border-collapse text-sm bg-white">
+                                <thead className="bg-slate-100 text-slate-600 border-b sticky top-0 z-10">
+                                    <tr>
+                                        <th className="p-2 text-left w-16 border-r sticky left-0 z-20 bg-slate-100">日期</th>
+                                        {SHIFTS.map(s => (
+                                            <th key={s.key} className={`p-2 text-center min-w-[100px] border-r ${s.color} bg-opacity-30 font-bold`}>
+                                                {s.label}
+                                            </th>
+                                        ))}
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {days.map((d: any) => {
+                                        const dateStr = d.dateStr;
+                                        const dateObj = d.dateObj;
+                                        const weekDay = d.dayOfWeek;
+                                        const isWeekend = weekDay === 0 || weekDay === 6;
+                                        const isHoliday = holidays.includes(dateStr);
+                                        const isClosed = closedDays.includes(dateStr);
+                                        const isTodayDate = dateStr === todayStr;
+
+                                        return (
+                                            <tr 
+                                                key={dateStr} 
+                                                className={`${isTodayDate ? 'bg-yellow-50/50' : ''} ${isHoliday ? 'bg-red-50/30' : ''}`}
+                                            >
+                                                {/* 日期欄 */}
+                                                <td className="p-2 border-r text-xs sticky left-0 z-5 bg-white">
+                                                    <div className="font-bold text-slate-700">{dateObj.getDate()}</div>
+                                                    <div className={`text-[10px] ${weekDay === 0 ? 'text-red-500' : weekDay === 6 ? 'text-green-600' : 'text-slate-400'}`}>
+                                                        {weekDays[weekDay]}
+                                                    </div>
+                                                    {isClosed && (
+                                                        <div className="text-[9px] text-slate-400 mt-0.5">休診</div>
+                                                    )}
+                                                </td>
+
+                                                {/* 時段欄位 */}
+                                                {SHIFTS.map(shift => {
+                                                    const docs = getDoctorsForShift(dateStr, shift.key);
+                                                    const isClosedForShift = isClosed;
+                                                    
+                                                    return (
+                                                        <td 
+                                                            key={shift.key} 
+                                                            className={`p-1 border-r align-top text-center ${isClosedForShift ? 'bg-slate-100/50' : ''}`}
+                                                        >
+                                                            {isClosedForShift ? (
+                                                                <div className="text-[10px] text-slate-400 italic">休診</div>
+                                                            ) : docs.length === 0 ? (
+                                                                <div className="text-[10px] text-slate-300">-</div>
+                                                            ) : (
+                                                                <div className="flex flex-col gap-1 items-center">
+                                                                    {docs.map((doc: any, idx: number) => (
+                                                                        <div 
+                                                                            key={idx} 
+                                                                            className="bg-white border border-slate-200 rounded px-1.5 py-1 shadow-sm w-full"
+                                                                        >
+                                                                            <div className="font-bold text-slate-800 text-xs">
+                                                                                {doc.doctor_name}
+                                                                            </div>
+                                                                            {/* 專科標籤 */}
+                                                                            {doc.special_tags && Array.isArray(doc.special_tags) && doc.special_tags.length > 0 && (
+                                                                                <div className="flex flex-wrap gap-0.5 justify-center mt-0.5">
+                                                                                    {doc.special_tags.map((t: string, tagIdx: number) => (
+                                                                                        <span 
+                                                                                            key={tagIdx} 
+                                                                                            className="text-[9px] bg-slate-100 text-slate-600 px-1 rounded"
+                                                                                        >
+                                                                                            {t}
+                                                                                        </span>
+                                                                                    ))}
+                                                                                </div>
+                                                                            )}
+                                                                            {/* 異動標記 */}
+                                                                            {doc.is_substitution && (
+                                                                                <div className="text-[9px] text-red-500 font-bold mt-0.5">
+                                                                                    代診
+                                                                                </div>
+                                                                            )}
+                                                                            {/* 時間顯示 */}
+                                                                            {doc.start_time && doc.end_time && (
+                                                                                <div className="text-[9px] text-slate-400 mt-0.5 font-mono">
+                                                                                    {doc.start_time}-{doc.end_time}
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            )}
+                                                        </td>
+                                                    );
+                                                })}
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                 )}
             </div>
         </div>
