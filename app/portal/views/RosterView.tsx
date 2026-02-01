@@ -95,26 +95,48 @@ export default function RosterView({ rosterData, staffUser }: RosterViewProps) {
         }
     };
 
-    // 🟢 載入系統設定
+    // 🟢 載入系統設定（強健的錯誤處理）
     const loadSettings = async () => {
         try {
             await Promise.all([
                 fetchGlobalSettings(),
                 fetchRosterSettings()
             ]);
+            
+            // 🟢 空值防禦：確保即使設定載入失敗，也有 fallback 值
+            if (entities.length === 0) {
+                console.log('[RosterView] 使用 fallback entities');
+                setEntities(FALLBACK_ENTITIES);
+            }
+            if (jobTitleConfigs.length === 0) {
+                console.log('[RosterView] 使用 fallback job titles');
+                setJobTitleConfigs([
+                    { name: '醫師', in_roster: false },
+                    { name: '護理師', in_roster: true },
+                    { name: '行政', in_roster: true },
+                    { name: '藥師', in_roster: true },
+                    { name: '櫃台', in_roster: true },
+                    { name: '診所助理', in_roster: true },
+                    { name: '藥局助理', in_roster: true }
+                ]);
+            }
         } catch (error) {
-            console.error('[RosterView] 載入設定失敗:', error);
+            console.error('[RosterView] 載入設定失敗，使用 fallback:', error);
+            // 🟢 設定失敗時使用 fallback
             setEntities(FALLBACK_ENTITIES);
             setJobTitleConfigs([
                 { name: '醫師', in_roster: false },
                 { name: '護理師', in_roster: true },
                 { name: '行政', in_roster: true },
-                { name: '藥師', in_roster: true }
+                { name: '藥師', in_roster: true },
+                { name: '櫃台', in_roster: true },
+                { name: '診所助理', in_roster: true },
+                { name: '藥局助理', in_roster: true }
             ]);
         }
     };
 
-    // 🟢 載入資料（員工、班表、假日）
+    // 🟢 載入資料（員工、班表、假日）- 強健的錯誤處理
     const loadData = async () => {
         if (!currentDate) return;
         try {
@@ -123,14 +145,34 @@ export default function RosterView({ rosterData, staffUser }: RosterViewProps) {
                 fetchRoster(),
                 fetchHolidays()
             ]);
+            
+            // 🟢 空值防禦：確保即使資料載入失敗，也有基本值
+            if (staffList.length === 0) {
+                console.warn('[RosterView] ⚠️ 員工列表為空，可能載入失敗');
+            }
+            if (Object.keys(rosterMap).length === 0) {
+                console.warn('[RosterView] ⚠️ 班表資料為空，可能載入失敗');
+            }
         } catch (error) {
             console.error('[RosterView] 載入資料失敗:', error);
+            // 確保至少有空陣列，避免畫面崩潰
+            if (staffList.length === 0) setStaffList([]);
+            if (Object.keys(rosterMap).length === 0) setRosterMap({});
+            if (holidays.length === 0) setHolidays([]);
         }
     };
 
     const fetchGlobalSettings = async () => {
         try {
-            const response = await fetch('/api/settings?key=clinic_business_hours');
+            const response = await fetch('/api/settings?key=clinic_business_hours', {
+                credentials: 'include', // 🔑 關鍵：帶上 Cookie
+            });
+            
+            if (response.status === 401) {
+                console.error('[RosterView] 401 Unauthorized - 請重新登入');
+                return;
+            }
+            
             const result = await response.json();
             if (result.data && result.data.length > 0 && result.data[0].value) {
                 try {
@@ -147,7 +189,23 @@ export default function RosterView({ rosterData, staffUser }: RosterViewProps) {
 
     const fetchRosterSettings = async () => {
         try {
-            const response = await fetch('/api/settings');
+            const response = await fetch('/api/settings', {
+                credentials: 'include', // 🔑 關鍵：帶上 Cookie
+            });
+            
+            if (response.status === 401) {
+                console.error('[RosterView] 401 Unauthorized - 請重新登入');
+                // 使用 fallback 值
+                setJobTitleConfigs([
+                    { name: '醫師', in_roster: false },
+                    { name: '護理師', in_roster: true },
+                    { name: '行政', in_roster: true },
+                    { name: '藥師', in_roster: true }
+                ]);
+                setEntities(FALLBACK_ENTITIES);
+                return;
+            }
+            
             const result = await response.json();
 
             // job_titles
@@ -177,15 +235,21 @@ export default function RosterView({ rosterData, staffUser }: RosterViewProps) {
                     console.error('[RosterView] Parse job_titles error:', e);
                 }
             }
+            // 🟢 職稱篩選：如果 job_titles 設定抓不到，預設顯示所有非醫師員工
             if (!loadedJobTitles || loadedJobTitles.length === 0) {
+                console.log('[RosterView] 使用預設職稱設定（顯示所有職稱，醫師除外）');
                 loadedJobTitles = [
                     { name: '醫師', in_roster: false },
                     { name: '護理師', in_roster: true },
                     { name: '行政', in_roster: true },
-                    { name: '藥師', in_roster: true }
+                    { name: '藥師', in_roster: true },
+                    { name: '櫃台', in_roster: true },
+                    { name: '診所助理', in_roster: true },
+                    { name: '藥局助理', in_roster: true }
                 ];
             }
             setJobTitleConfigs(loadedJobTitles);
+            console.log('[RosterView] 職稱設定:', loadedJobTitles);
 
             // org_entities
             const entItem = result.data?.find((item: any) => item.key === 'org_entities');
@@ -205,17 +269,24 @@ export default function RosterView({ rosterData, staffUser }: RosterViewProps) {
                     console.error('[RosterView] Parse org_entities error:', e);
                 }
             }
+            // 🟢 空值防禦：如果組織單位讀取失敗，使用 fallback
             if (!loadedEntities || loadedEntities.length === 0) {
+                console.log('[RosterView] 使用 fallback entities');
                 loadedEntities = FALLBACK_ENTITIES;
             }
             setEntities(loadedEntities);
+            console.log('[RosterView] 組織單位:', loadedEntities);
         } catch (error) {
             console.error('[RosterView] Fetch roster settings error:', error);
+            // 🟢 設定失敗時使用 fallback
             setJobTitleConfigs([
                 { name: '醫師', in_roster: false },
                 { name: '護理師', in_roster: true },
                 { name: '行政', in_roster: true },
-                { name: '藥師', in_roster: true }
+                { name: '藥師', in_roster: true },
+                { name: '櫃台', in_roster: true },
+                { name: '診所助理', in_roster: true },
+                { name: '藥局助理', in_roster: true }
             ]);
             setEntities(FALLBACK_ENTITIES);
         }
@@ -223,10 +294,23 @@ export default function RosterView({ rosterData, staffUser }: RosterViewProps) {
 
     const fetchStaff = async () => {
         try {
-            const response = await fetch('/api/staff');
+            const response = await fetch('/api/staff', {
+                credentials: 'include', // 🔑 關鍵：帶上 Cookie
+            });
+            
+            if (response.status === 401) {
+                console.error('[RosterView] 401 Unauthorized - 請重新登入');
+                setStaffList([]);
+                return;
+            }
+            
             const result = await response.json();
             if (result.data) {
                 setStaffList(result.data);
+                console.log('[RosterView] ✅ 員工列表載入成功:', result.data.length, '人');
+            } else {
+                setStaffList([]);
+                console.warn('[RosterView] ⚠️ 員工列表為空');
             }
         } catch (error) {
             console.error('[RosterView] Fetch staff error:', error);
@@ -239,7 +323,16 @@ export default function RosterView({ rosterData, staffUser }: RosterViewProps) {
         try {
             const year = currentDate.getFullYear();
             const month = currentDate.getMonth() + 1;
-            const response = await fetch(`/api/roster/holidays?year=${year}&month=${month}`);
+            const response = await fetch(`/api/roster/holidays?year=${year}&month=${month}`, {
+                credentials: 'include', // 🔑 關鍵：帶上 Cookie
+            });
+            
+            if (response.status === 401) {
+                console.error('[RosterView] 401 Unauthorized - 請重新登入');
+                setHolidays([]);
+                return;
+            }
+            
             const result = await response.json();
             if (result.data) {
                 setHolidays(result.data);
@@ -257,7 +350,16 @@ export default function RosterView({ rosterData, staffUser }: RosterViewProps) {
         try {
             const year = currentDate.getFullYear();
             const month = currentDate.getMonth() + 1;
-            const response = await fetch(`/api/roster/staff?year=${year}&month=${month}`);
+            const response = await fetch(`/api/roster/staff?year=${year}&month=${month}`, {
+                credentials: 'include', // 🔑 關鍵：帶上 Cookie
+            });
+            
+            if (response.status === 401) {
+                console.error('[RosterView] 401 Unauthorized - 請重新登入');
+                setRosterMap({});
+                return;
+            }
+            
             const result = await response.json();
 
             const map: Record<string, RosterData> = {};
@@ -275,8 +377,10 @@ export default function RosterView({ rosterData, staffUser }: RosterViewProps) {
                     map[`${r.staff_id}_${r.date}`] = { shifts, day_type, shift_details };
                 });
                 setRosterMap(map);
+                console.log('[RosterView] ✅ 班表資料載入成功:', Object.keys(map).length, '筆');
             } else {
                 setRosterMap({});
+                console.warn('[RosterView] ⚠️ 班表資料為空');
             }
         } catch (error) {
             console.error('[RosterView] Fetch roster error:', error);
@@ -362,8 +466,8 @@ export default function RosterView({ rosterData, staffUser }: RosterViewProps) {
                 <h3 className={`font-bold text-sm p-3 border-b border-l-4 ${colorClass}`}>
                     {title}
                 </h3>
-                <div className="overflow-x-auto">
-                    <table className="w-full border-collapse text-xs">
+                <div className="overflow-x-auto -mx-2 md:mx-0">
+                    <table className="w-full border-collapse text-xs bg-white">
                         <thead>
                             <tr>
                                 <th className="p-2 border bg-slate-50 sticky left-0 z-30 min-w-[80px] text-left text-slate-500 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
@@ -543,7 +647,7 @@ export default function RosterView({ rosterData, staffUser }: RosterViewProps) {
                         }`}
                     >
                         <User size={16} />
-                        護理行政
+                        行政班表
                     </button>
                     <button
                         onClick={() => setActiveTab('doctor')}

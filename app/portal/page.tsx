@@ -99,7 +99,17 @@ export default function EmployeePortal() {
     try {
       const response = await fetch(
         `/api/portal/data?type=home&staffId=${staffId}`,
+        {
+          credentials: 'include', // 🔑 關鍵：帶上 Cookie
+        }
       );
+      
+      if (response.status === 401) {
+        console.error('[Portal] 401 Unauthorized - 請重新登入');
+        window.location.href = '/login';
+        return;
+      }
+      
       const json = await response.json();
 
       console.log('[Portal] 預先載入 API 回應:', json);
@@ -150,7 +160,16 @@ export default function EmployeePortal() {
 
   const checkBinding = async (lineId: string) => {
     try {
-      const response = await fetch(`/api/portal/auth?lineUserId=${lineId}`);
+      const response = await fetch(`/api/portal/auth?lineUserId=${lineId}`, {
+        credentials: 'include', // 🔑 關鍵：帶上 Cookie
+      });
+      
+      if (response.status === 401) {
+        console.error('[Portal] 401 Unauthorized - 請重新登入');
+        window.location.href = '/login';
+        return;
+      }
+      
       const result = await response.json();
 
       if (result.status === 'bound' && result.staff) {
@@ -188,6 +207,7 @@ export default function EmployeePortal() {
           password: bindForm.password,
           lineUserId: liffProfile.userId,
         }),
+        credentials: 'include', // 🔑 關鍵：帶上 Cookie
       });
 
       const result = await response.json();
@@ -218,7 +238,17 @@ export default function EmployeePortal() {
       const ym = new Date().toISOString().slice(0, 7);
       const response = await fetch(
         `/api/portal/data?type=history&staffId=${staffId}&month=${ym}`,
+        {
+          credentials: 'include', // 🔑 關鍵：帶上 Cookie
+        }
       );
+      
+      if (response.status === 401) {
+        console.error('[Portal] 401 Unauthorized - 請重新登入');
+        window.location.href = '/login';
+        return;
+      }
+      
       const result = await response.json();
 
       if (result.data) {
@@ -241,7 +271,17 @@ export default function EmployeePortal() {
     try {
       const response = await fetch(
         `/api/portal/data?type=history&staffId=${staffUser.id}&month=${selectedMonth}`,
+        {
+          credentials: 'include', // 🔑 關鍵：帶上 Cookie
+        }
       );
+      
+      if (response.status === 401) {
+        console.error('[Portal] 401 Unauthorized - 請重新登入');
+        window.location.href = '/login';
+        return;
+      }
+      
       const result = await response.json();
       setHistoryLogs(result.data || []);
     } catch (error) {
@@ -254,7 +294,17 @@ export default function EmployeePortal() {
     try {
       const response = await fetch(
         `/api/portal/data?type=roster&staffId=${staffUser.id}`,
+        {
+          credentials: 'include', // 🔑 關鍵：帶上 Cookie
+        }
       );
+      
+      if (response.status === 401) {
+        console.error('[Portal] 401 Unauthorized - 請重新登入');
+        window.location.href = '/login';
+        return;
+      }
+      
       const result = await response.json();
 
       const sorted = (result.data || []).sort((a: any, b: any) => {
@@ -276,7 +326,17 @@ export default function EmployeePortal() {
     try {
       const response = await fetch(
         `/api/portal/data?type=leave&staffId=${staffUser.id}`,
+        {
+          credentials: 'include', // 🔑 關鍵：帶上 Cookie
+        }
       );
+      
+      if (response.status === 401) {
+        console.error('[Portal] 401 Unauthorized - 請重新登入');
+        window.location.href = '/login';
+        return;
+      }
+      
       const result = await response.json();
 
       if (result.data && typeof result.data === 'object' && 'leaves' in result.data) {
@@ -301,7 +361,17 @@ export default function EmployeePortal() {
     try {
       const response = await fetch(
         `/api/portal/data?type=home&staffId=${staffUser.id}`,
+        {
+          credentials: 'include', // 🔑 關鍵：帶上 Cookie
+        }
       );
+      
+      if (response.status === 401) {
+        console.error('[Portal] 401 Unauthorized - 請重新登入');
+        window.location.href = '/login';
+        return;
+      }
+      
       const json = await response.json();
 
       console.log('[Portal] 首頁資料 API 回應:', json);
@@ -349,7 +419,17 @@ export default function EmployeePortal() {
     try {
       const response = await fetch(
         `/api/portal/data?type=home&staffId=${staffUser.id}`,
+        {
+          credentials: 'include', // 🔑 關鍵：帶上 Cookie
+        }
       );
+      
+      if (response.status === 401) {
+        console.error('[Portal] 401 Unauthorized - 請重新登入');
+        window.location.href = '/login';
+        return;
+      }
+      
       const json = await response.json();
 
       console.log('[Portal] 個人資料 API 回應:', json);
@@ -367,51 +447,73 @@ export default function EmployeePortal() {
     }
   };
 
+  // 🟢 實作更新個人資料（使用專用的 /api/staff/profile 端點）
   const updateProfile = async (payload: {
     phone: string;
     address: string;
     emergency_contact: string;
   }) => {
     try {
-      const response = await fetch('/api/staff', {
-        method: 'PATCH',
+      const response = await fetch('/api/staff/profile', {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          id: staffUser.id,
+          staff_id: staffUser.id,
           phone: payload.phone,
           address: payload.address,
           emergency_contact: payload.emergency_contact,
         }),
+        credentials: 'include', // 🔑 關鍵：帶上 Cookie
       });
+
+      if (response.status === 401) {
+        alert('❌ 請重新登入');
+        window.location.href = '/login';
+        return;
+      }
 
       const result = await response.json();
 
-      if (result.success) {
-        alert('個人資料已更新');
-        setProfile((prev: any) =>
-          prev
-            ? {
-                ...prev,
-                phone: payload.phone,
-                address: payload.address,
-                emergency_contact: payload.emergency_contact,
-              }
-            : prev,
-        );
-      } else {
-        alert('更新失敗: ' + (result.message || result.error));
+      if (!response.ok || !result.success) {
+        throw new Error(result.message || result.error || '更新失敗');
       }
+
+      alert('✅ 個人資料已更新');
+      
+      // 更新本地 state
+      setProfile((prev: any) =>
+        prev
+          ? {
+              ...prev,
+              phone: payload.phone,
+              address: payload.address,
+              emergency_contact: payload.emergency_contact,
+            }
+          : prev,
+      );
+      
+      // 刷新資料
+      await fetchProfile();
     } catch (error: any) {
-      console.error('更新個人資料失敗:', error);
-      alert('更新失敗: ' + error.message);
+      console.error('[Portal] 更新個人資料失敗:', error);
+      alert(`❌ ${error.message || '更新失敗，請稍後再試'}`);
     }
   };
 
   // 取得加班設定
   useEffect(() => {
     if (!staffUser) return;
-    fetch('/api/settings?type=clinic')
-      .then((res) => res.json())
+    fetch('/api/settings?type=clinic', {
+      credentials: 'include', // 🔑 關鍵：帶上 Cookie
+    })
+      .then((res) => {
+        if (res.status === 401) {
+          console.error('[Portal] 401 Unauthorized - 請重新登入');
+          window.location.href = '/login';
+          return { data: null };
+        }
+        return res.json();
+      })
       .then((result) => {
         if (result.data) {
           setOvertimeSettings({
@@ -488,7 +590,14 @@ export default function EmployeePortal() {
           reason: form.reason,
           status: 'pending',
         }),
+        credentials: 'include', // 🔑 關鍵：帶上 Cookie
       });
+      
+      if (response.status === 401) {
+        alert('❌ 請重新登入');
+        window.location.href = '/login';
+        return;
+      }
 
       const result = await response.json();
 
@@ -516,7 +625,14 @@ export default function EmployeePortal() {
           id: logId,
           anomaly_reason: reason,
         }),
+        credentials: 'include', // 🔑 關鍵：帶上 Cookie
       });
+      
+      if (response.status === 401) {
+        alert('❌ 請重新登入');
+        window.location.href = '/login';
+        return;
+      }
 
       const result = await response.json();
       if (result.success) {
@@ -560,7 +676,14 @@ export default function EmployeePortal() {
           reason: leaveForm.reason,
           status: 'pending',
         }),
+        credentials: 'include', // 🔑 關鍵：帶上 Cookie
       });
+      
+      if (response.status === 401) {
+        alert('❌ 請重新登入');
+        window.location.href = '/login';
+        return;
+      }
 
       const result = await response.json();
 
@@ -673,7 +796,14 @@ export default function EmployeePortal() {
             gpsLng: lng,
             isBypass: isBypass,
           }),
+          credentials: 'include', // 🔑 關鍵：帶上 Cookie
         });
+        
+        if (response.status === 401) {
+          alert('❌ 請重新登入');
+          window.location.href = '/login';
+          return;
+        }
         const result = await response.json();
         if (!result.success) throw new Error(result.message || '打卡失敗');
         alert('上班打卡成功！');
@@ -697,7 +827,14 @@ export default function EmployeePortal() {
             isBypass: isBypass,
             applyOvertime,
           }),
+          credentials: 'include', // 🔑 關鍵：帶上 Cookie
         });
+        
+        if (response.status === 401) {
+          alert('❌ 請重新登入');
+          window.location.href = '/login';
+          return;
+        }
         const result = await response.json();
         if (!result.success) throw new Error(result.message || '打卡失敗');
         alert('下班打卡成功！');
