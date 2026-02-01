@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Settings, Save, Plus, User, Briefcase } from 'lucide-react';
+import { Settings, Save, Plus, User, Shield, DollarSign, ChevronDown, ChevronRight, Briefcase } from 'lucide-react';
 
 interface StaffEditModalProps {
   isOpen: boolean;
@@ -35,6 +35,7 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
   const [jobTitles, setJobTitles] = useState<JobTitleConfig[]>(DEFAULT_JOB_TITLES);
   const [entities, setEntities] = useState<Entity[]>([]);
   const [phoneError, setPhoneError] = useState('');
+  const [expandedSection, setExpandedSection] = useState<string>('basic'); // 🟢 控制區塊展開
 
   // 讀取系統設定：職稱與組織單位
   useEffect(() => {
@@ -107,16 +108,19 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
           setJobTitles(loadedJobTitles);
           setEntities(loadedEntities);
 
-          // 初始化 editData
+          // 🟢 初始化 editData（密碼邏輯）
           if (initialData) {
+            // 編輯模式：密碼預設空白，避免誤改
             const defaultRole = loadedJobTitles[0]?.name || '護理師';
             const defaultEntity = loadedEntities[0]?.id || 'clinic';
             setEditData({
               ...initialData,
               role: initialData.role || defaultRole,
-              entity: initialData.entity || defaultEntity
+              entity: initialData.entity || defaultEntity,
+              password: '' // 🟢 編輯模式：密碼預設空白
             });
           } else {
+            // 新增模式：給予預設值
             const defaultRole = loadedJobTitles[0]?.name || '護理師';
             const defaultEntity = loadedEntities[0]?.id || 'clinic';
             setEditData({
@@ -137,12 +141,13 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
               id_number: ''
             });
           }
+          setExpandedSection('basic'); // 每次打開重置為展開基本資料
         } catch (error) {
           console.error('Fetch staff edit settings error:', error);
           setJobTitles(DEFAULT_JOB_TITLES);
           setEntities(FALLBACK_ENTITIES);
           if (initialData) {
-            setEditData({ ...initialData });
+            setEditData({ ...initialData, password: '' }); // 🟢 編輯模式：密碼預設空白
           } else {
             setEditData({
               name: '',
@@ -162,6 +167,7 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
               id_number: ''
             });
           }
+          setExpandedSection('basic');
         }
       };
 
@@ -170,6 +176,10 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
       setEditData(null);
     }
   }, [isOpen, initialData]);
+
+  const toggleSection = (sec: string) => {
+    setExpandedSection(expandedSection === sec ? '' : sec);
+  };
 
   const handleSave = async () => {
     if (!editData?.name) {
@@ -180,6 +190,8 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
     // 🟢 驗證手機號碼（必填）
     if (!editData.phone || editData.phone.trim() === '') {
       setPhoneError('手機號碼為綁定帳號，務必填寫');
+      // 自動展開基本資料區塊
+      setExpandedSection('basic');
       return;
     } else {
       setPhoneError('');
@@ -188,14 +200,14 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
     const payload: any = {
       name: editData.name,
       role: editData.role,
-      entity: editData.entity || 'clinic', // 確保 entity 有預設值
+      entity: editData.entity || 'clinic',
       is_active: editData.is_active,
       start_date: editData.start_date || null,
       salary_mode: editData.salary_mode || 'hourly',
       base_salary: Number(editData.base_salary) || 0,
       insurance_labor: Number(editData.insurance_labor) || 0,
       insurance_health: Number(editData.insurance_health) || 0,
-      phone: editData.phone.trim(), // 🟢 必填，去除空白
+      phone: editData.phone.trim(),
       address: editData.address || null,
       emergency_contact: editData.emergency_contact || null,
       bank_account: editData.bank_account || null,
@@ -233,7 +245,7 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
       const result = await response.json();
       if (result.success) {
         alert("儲存成功！");
-        onSave(); // 呼叫回呼函數
+        onSave();
         onClose();
       } else {
         alert("儲存失敗: " + result.message);
@@ -248,7 +260,7 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
         <div className="bg-slate-900 text-white p-4 flex justify-between items-center">
           <h3 className="font-bold text-lg flex items-center gap-2">
             {editData.id ? <Settings size={18}/> : <Plus size={18}/>} 
@@ -259,231 +271,310 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
           </button>
         </div>
         <div className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="col-span-1">
-              <label className="block text-xs font-bold text-slate-500 mb-1">姓名</label>
-              <input 
-                type="text" 
-                value={editData.name} 
-                onChange={e => setEditData({...editData, name: e.target.value})} 
-                className="w-full border p-2 rounded focus:ring-2 ring-blue-200 outline-none" 
-                placeholder="真實姓名"
-              />
-            </div>
-            <div className="col-span-1">
-              <label className="block text-xs font-bold text-slate-500 mb-1">職稱</label>
-              <select 
-                value={editData.role} 
-                onChange={e => setEditData({...editData, role: e.target.value})} 
-                className="w-full border p-2 rounded bg-white"
-              >
-                {jobTitles.map((title) => (
-                  <option key={title.name} value={title.name}>{title.name}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-500 mb-1">所屬單位</label>
-              {entities.length === 0 ? (
-                <div className="text-xs text-slate-400 bg-slate-50 border border-dashed border-slate-200 rounded p-2">
-                  尚未設定組織單位，請先至「系統設定 &gt; 組織單位管理」新增單位。
-                </div>
-              ) : (
-                <div className="flex flex-wrap gap-2">
-                  {entities.map((ent) => (
-                    <button
-                      key={ent.id}
-                      onClick={() => setEditData({ ...editData, entity: ent.id })}
-                      className={`px-3 py-2 rounded border text-xs md:text-sm font-bold transition ${
-                        editData.entity === ent.id
-                          ? 'bg-blue-50 border-blue-500 text-blue-700'
-                          : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-50'
-                      }`}
+          {/* 🟢 區塊 1: 基本資料 (預設展開) */}
+          <div className="border border-slate-200 rounded-xl overflow-hidden">
+            <button 
+              onClick={() => toggleSection('basic')} 
+              className="w-full flex items-center justify-between p-4 bg-slate-50 hover:bg-slate-100 transition font-bold text-slate-700"
+            >
+              <span className="flex items-center gap-2">
+                <User size={18}/> 基本資料
+              </span>
+              {expandedSection === 'basic' ? <ChevronDown size={18}/> : <ChevronRight size={18}/>}
+            </button>
+            {expandedSection === 'basic' && (
+              <div className="p-4 bg-white space-y-4 animate-fade-in">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-1">姓名</label>
+                    <input 
+                      type="text" 
+                      value={editData.name} 
+                      onChange={e => setEditData({...editData, name: e.target.value})} 
+                      className="w-full border p-2 rounded focus:ring-2 ring-blue-200 outline-none" 
+                      placeholder="真實姓名"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-1">職稱</label>
+                    <select 
+                      value={editData.role} 
+                      onChange={e => setEditData({...editData, role: e.target.value})} 
+                      className="w-full border p-2 rounded bg-white"
                     >
-                      {ent.name}
-                    </button>
-                  ))}
+                      {jobTitles.map((title) => (
+                        <option key={title.name} value={title.name}>{title.name}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
-              )}
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-500 mb-1">到職日期</label>
-              <input 
-                type="date" 
-                value={editData.start_date || ''} 
-                onChange={e => setEditData({...editData, start_date: e.target.value})} 
-                className="w-full border p-2 rounded"
-              />
-            </div>
-          </div>
-          
-          {/* 基本個資區塊 */}
-          <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
-            <h4 className="text-xs font-bold text-slate-700 mb-3 flex items-center gap-2">
-              <User size={14}/>
-              基本個資
-            </h4>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">
-                  電話 <span className="text-red-500">*</span>
-                </label>
-                <input 
-                  type="tel" 
-                  value={editData.phone || ''} 
-                  onChange={e => {
-                    setEditData({...editData, phone: e.target.value});
-                    if (phoneError) setPhoneError(''); // 清除錯誤訊息
-                  }} 
-                  className={`w-full border p-2 rounded bg-white ${
-                    phoneError ? 'border-red-300 focus:ring-red-200' : ''
-                  }`}
-                  placeholder="例：0912-345-678"
-                  required
-                />
-                {phoneError && (
-                  <p className="text-xs text-red-500 mt-1 font-bold">{phoneError}</p>
-                )}
-                <p className="text-xs text-slate-400 mt-1">
-                  手機號碼為綁定帳號，務必填寫
-                </p>
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">密碼</label>
-                <input 
-                  type="password" 
-                  value={editData.password || ''} 
-                  onChange={e => setEditData({...editData, password: e.target.value})} 
-                  className="w-full border p-2 rounded bg-white"
-                  placeholder={editData.id ? "若不修改請留空" : "預設為 0000"}
-                />
-                {!editData.id && (
-                  <p className="text-xs text-slate-400 mt-1">
-                    預設密碼為 0000，員工綁定時使用
-                  </p>
-                )}
-                {editData.id && (
-                  <p className="text-xs text-slate-400 mt-1">
-                    留空則保持原密碼不變
-                  </p>
-                )}
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">身分證字號</label>
-                <input 
-                  type="text" 
-                  value={editData.id_number || ''} 
-                  onChange={e => setEditData({...editData, id_number: e.target.value})} 
-                  className="w-full border p-2 rounded bg-white"
-                  placeholder="例：A123456789"
-                  maxLength={10}
-                />
-              </div>
-              <div className="col-span-2">
-                <label className="block text-xs font-bold text-slate-500 mb-1">地址</label>
-                <input 
-                  type="text" 
-                  value={editData.address || ''} 
-                  onChange={e => setEditData({...editData, address: e.target.value})} 
-                  className="w-full border p-2 rounded bg-white"
-                  placeholder="例：台北市信義區..."
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">緊急聯絡人</label>
-                <input 
-                  type="text" 
-                  value={editData.emergency_contact || ''} 
-                  onChange={e => setEditData({...editData, emergency_contact: e.target.value})} 
-                  className="w-full border p-2 rounded bg-white"
-                  placeholder="姓名 + 電話"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">銀行帳號</label>
-                <input 
-                  type="text" 
-                  value={editData.bank_account || ''} 
-                  onChange={e => setEditData({...editData, bank_account: e.target.value})} 
-                  className="w-full border p-2 rounded bg-white"
-                  placeholder="例：123-456-7890123"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* 薪資設定（非醫師） */}
-          {editData.role !== '醫師' && (
-            <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-100 space-y-3">
-              <div>
-                <label className="block text-xs font-bold text-yellow-800 mb-2 flex items-center gap-1">
-                  <Briefcase size={12}/> 薪資計算模式
-                </label>
-                <div className="flex gap-2">
-                  <button 
-                    onClick={() => setEditData({...editData, salary_mode: 'monthly'})} 
-                    className={`flex-1 py-2 rounded border text-sm font-bold transition ${
-                      editData.salary_mode === 'monthly' 
-                        ? 'bg-slate-800 text-white border-slate-800' 
-                        : 'bg-white text-slate-500 border-slate-300 hover:bg-slate-50'
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-1">所屬單位</label>
+                    {entities.length === 0 ? (
+                      <div className="text-xs text-slate-400 bg-slate-50 border border-dashed border-slate-200 rounded p-2">
+                        尚未設定組織單位，請先至「系統設定 &gt; 組織單位管理」新增單位。
+                      </div>
+                    ) : (
+                      <div className="flex flex-wrap gap-2">
+                        {entities.map((ent) => (
+                          <button
+                            key={ent.id}
+                            onClick={() => setEditData({ ...editData, entity: ent.id })}
+                            className={`px-3 py-2 rounded border text-xs md:text-sm font-bold transition ${
+                              editData.entity === ent.id
+                                ? 'bg-blue-50 border-blue-500 text-blue-700'
+                                : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-50'
+                            }`}
+                          >
+                            {ent.name}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-1">狀態</label>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setEditData({...editData, is_active: true})}
+                        className={`flex-1 py-2 rounded border text-sm font-bold transition ${
+                          editData.is_active
+                            ? 'bg-green-50 border-green-500 text-green-700'
+                            : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-50'
+                        }`}
+                      >
+                        在職
+                      </button>
+                      <button
+                        onClick={() => setEditData({...editData, is_active: false})}
+                        className={`flex-1 py-2 rounded border text-sm font-bold transition ${
+                          !editData.is_active
+                            ? 'bg-red-50 border-red-500 text-red-700'
+                            : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-50'
+                        }`}
+                      >
+                        離職
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-1">
+                    電話 <span className="text-red-500">*</span>
+                  </label>
+                  <input 
+                    type="tel" 
+                    value={editData.phone || ''} 
+                    onChange={e => {
+                      setEditData({...editData, phone: e.target.value});
+                      if (phoneError) setPhoneError('');
+                    }} 
+                    className={`w-full border p-2 rounded bg-white ${
+                      phoneError ? 'border-red-300 focus:ring-red-200' : ''
                     }`}
-                  >
-                    月薪制
-                  </button>
-                  <button 
-                    onClick={() => setEditData({...editData, salary_mode: 'hourly'})} 
-                    className={`flex-1 py-2 rounded border text-sm font-bold transition ${
-                      editData.salary_mode === 'hourly' 
-                        ? 'bg-slate-800 text-white border-slate-800' 
-                        : 'bg-white text-slate-500 border-slate-300 hover:bg-slate-50'
-                    }`}
-                  >
-                    時薪制
-                  </button>
+                    placeholder="例：0912-345-678"
+                    required
+                  />
+                  {phoneError && (
+                    <p className="text-xs text-red-500 mt-1 font-bold">{phoneError}</p>
+                  )}
+                  <p className="text-xs text-slate-400 mt-1">
+                    手機號碼為綁定帳號，務必填寫
+                  </p>
                 </div>
               </div>
-              <div>
-                <label className="block text-xs font-bold text-yellow-800 mb-1">
-                  基礎薪資 {editData.salary_mode === 'monthly' ? '(月薪)' : '(時薪)'}
-                </label>
-                <input 
-                  type="number" 
-                  value={editData.base_salary} 
-                  onChange={e => setEditData({...editData, base_salary: e.target.value})} 
-                  className="w-full border p-2 rounded font-mono font-bold text-right"
-                />
-                <p className="text-[10px] text-yellow-600 mt-1">
-                  * {editData.salary_mode === 'monthly' ? '月薪制：用於計算每日薪資 (月薪 ÷ 30)' : '時薪制：用於計算工時薪資'}
-                </p>
-              </div>
-            </div>
-          )}
+            )}
+          </div>
 
-          {/* 保險設定 */}
-          <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
-            <h4 className="text-xs font-bold text-slate-500 mb-3 border-b pb-1">保險設定 (每月固定扣除)</h4>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs text-slate-400 mb-1">勞保自付額</label>
-                <input 
-                  type="number" 
-                  value={editData.insurance_labor} 
-                  onChange={e => setEditData({...editData, insurance_labor: e.target.value})} 
-                  className="w-full border p-2 rounded text-right text-red-500 font-bold"
-                />
+          {/* 🟢 區塊 2: 帳號與安全 (預設收合) */}
+          <div className="border border-slate-200 rounded-xl overflow-hidden">
+            <button 
+              onClick={() => toggleSection('security')} 
+              className="w-full flex items-center justify-between p-4 bg-slate-50 hover:bg-slate-100 transition font-bold text-slate-700"
+            >
+              <span className="flex items-center gap-2">
+                <Shield size={18}/> 帳號與安全
+              </span>
+              {expandedSection === 'security' ? <ChevronDown size={18}/> : <ChevronRight size={18}/>}
+            </button>
+            {expandedSection === 'security' && (
+              <div className="p-4 bg-white space-y-4 animate-fade-in">
+                <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-200 text-xs text-yellow-700">
+                  <p className="font-bold mb-1">💡 提示</p>
+                  <p>員工可透過 LINE 綁定自動登入。若需手動登入，請使用手機號碼與此密碼。</p>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-1">登入密碼</label>
+                  <input 
+                    type="text" 
+                    value={editData.password || ''} 
+                    onChange={e => setEditData({...editData, password: e.target.value})}
+                    className="w-full border p-2 rounded font-mono tracking-widest bg-white"
+                    placeholder={initialData ? "若不修改請留空 (保持原密碼)" : "預設 0000"}
+                  />
+                  {!initialData && (
+                    <p className="text-xs text-slate-400 mt-1">
+                      預設密碼為 0000，員工綁定時使用
+                    </p>
+                  )}
+                  {initialData && (
+                    <p className="text-xs text-slate-400 mt-1">
+                      留空則保持原密碼不變
+                    </p>
+                  )}
+                </div>
               </div>
-              <div>
-                <label className="block text-xs text-slate-400 mb-1">健保自付額</label>
-                <input 
-                  type="number" 
-                  value={editData.insurance_health} 
-                  onChange={e => setEditData({...editData, insurance_health: e.target.value})} 
-                  className="w-full border p-2 rounded text-right text-red-500 font-bold"
-                />
+            )}
+          </div>
+
+          {/* 🟢 區塊 3: 薪資與人資設定 (預設收合) */}
+          <div className="border border-slate-200 rounded-xl overflow-hidden">
+            <button 
+              onClick={() => toggleSection('hr')} 
+              className="w-full flex items-center justify-between p-4 bg-slate-50 hover:bg-slate-100 transition font-bold text-slate-700"
+            >
+              <span className="flex items-center gap-2">
+                <DollarSign size={18}/> 薪資與人資設定
+              </span>
+              {expandedSection === 'hr' ? <ChevronDown size={18}/> : <ChevronRight size={18}/>}
+            </button>
+            {expandedSection === 'hr' && (
+              <div className="p-4 bg-white space-y-4 animate-fade-in">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-1">到職日期</label>
+                  <input 
+                    type="date" 
+                    value={editData.start_date || ''} 
+                    onChange={e => setEditData({...editData, start_date: e.target.value})} 
+                    className="w-full border p-2 rounded bg-white"
+                  />
+                </div>
+
+                {/* 薪資設定（非醫師） */}
+                {editData.role !== '醫師' && (
+                  <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-100 space-y-3">
+                    <div>
+                      <label className="block text-xs font-bold text-yellow-800 mb-2 flex items-center gap-1">
+                        <Briefcase size={12}/> 薪資計算模式
+                      </label>
+                      <div className="flex gap-2">
+                        <button 
+                          onClick={() => setEditData({...editData, salary_mode: 'monthly'})} 
+                          className={`flex-1 py-2 rounded border text-sm font-bold transition ${
+                            editData.salary_mode === 'monthly' 
+                              ? 'bg-slate-800 text-white border-slate-800' 
+                              : 'bg-white text-slate-500 border-slate-300 hover:bg-slate-50'
+                          }`}
+                        >
+                          月薪制
+                        </button>
+                        <button 
+                          onClick={() => setEditData({...editData, salary_mode: 'hourly'})} 
+                          className={`flex-1 py-2 rounded border text-sm font-bold transition ${
+                            editData.salary_mode === 'hourly' 
+                              ? 'bg-slate-800 text-white border-slate-800' 
+                              : 'bg-white text-slate-500 border-slate-300 hover:bg-slate-50'
+                          }`}
+                        >
+                          時薪制
+                        </button>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-yellow-800 mb-1">
+                        基礎薪資 {editData.salary_mode === 'monthly' ? '(月薪)' : '(時薪)'}
+                      </label>
+                      <input 
+                        type="number" 
+                        value={editData.base_salary} 
+                        onChange={e => setEditData({...editData, base_salary: e.target.value})} 
+                        className="w-full border p-2 rounded font-mono font-bold text-right bg-white"
+                      />
+                      <p className="text-[10px] text-yellow-600 mt-1">
+                        * {editData.salary_mode === 'monthly' ? '月薪制：用於計算每日薪資 (月薪 ÷ 30)' : '時薪制：用於計算工時薪資'}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* 保險設定 */}
+                <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                  <h4 className="text-xs font-bold text-slate-500 mb-3 border-b pb-1">保險設定 (每月固定扣除)</h4>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1">勞保自付額</label>
+                      <input 
+                        type="number" 
+                        value={editData.insurance_labor} 
+                        onChange={e => setEditData({...editData, insurance_labor: e.target.value})} 
+                        className="w-full border p-2 rounded text-right text-red-500 font-bold bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1">健保自付額</label>
+                      <input 
+                        type="number" 
+                        value={editData.insurance_health} 
+                        onChange={e => setEditData({...editData, insurance_health: e.target.value})} 
+                        className="w-full border p-2 rounded text-right text-red-500 font-bold bg-white"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 個人資料 */}
+                <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
+                  <h4 className="text-xs font-bold text-slate-700 mb-3 flex items-center gap-2">
+                    <User size={14}/>
+                    個人資料
+                  </h4>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 mb-1">身分證字號</label>
+                      <input 
+                        type="text" 
+                        value={editData.id_number || ''} 
+                        onChange={e => setEditData({...editData, id_number: e.target.value})} 
+                        className="w-full border p-2 rounded bg-white"
+                        placeholder="例：A123456789"
+                        maxLength={10}
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-xs font-bold text-slate-500 mb-1">地址</label>
+                      <input 
+                        type="text" 
+                        value={editData.address || ''} 
+                        onChange={e => setEditData({...editData, address: e.target.value})} 
+                        className="w-full border p-2 rounded bg-white"
+                        placeholder="例：台北市信義區..."
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 mb-1">緊急聯絡人</label>
+                      <input 
+                        type="text" 
+                        value={editData.emergency_contact || ''} 
+                        onChange={e => setEditData({...editData, emergency_contact: e.target.value})} 
+                        className="w-full border p-2 rounded bg-white"
+                        placeholder="姓名 + 電話"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 mb-1">銀行帳號</label>
+                      <input 
+                        type="text" 
+                        value={editData.bank_account || ''} 
+                        onChange={e => setEditData({...editData, bank_account: e.target.value})} 
+                        className="w-full border p-2 rounded bg-white"
+                        placeholder="例：123-456-7890123"
+                      />
+                    </div>
+                  </div>
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
           {/* 操作按鈕 */}

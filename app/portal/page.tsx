@@ -32,7 +32,7 @@ const getDist = (lat1: number, lon1: number, lat2: number, lon2: number) => {
 
 type ViewType = 'home' | 'history' | 'roster' | 'leave' | 'payslip' | 'profile';
 type GpsStatus = 'idle' | 'locating' | 'ok' | 'out_of_range' | 'error';
-type StepType = 'loading' | 'binding' | 'portal';
+type StepType = 'loading' | 'binding' | 'login' | 'portal';
 
 interface LeaveFormState {
   type: string;
@@ -48,8 +48,10 @@ export default function EmployeePortal() {
   const [step, setStep] = useState<StepType>('loading');
   const [lineUserId, setLineUserId] = useState<string>('');
   const [clinicId, setClinicId] = useState<string>(''); // 🔑 SaaS：從 URL 讀取的診所 ID
-  const [bindForm, setBindForm] = useState({ phone: '', password: '' });
+  const [bindForm, setBindForm] = useState({ phone: '', password: '' }); // LINE 綁定用
   const [bindError, setBindError] = useState('');
+  const [loginForm, setLoginForm] = useState({ phone: '', password: '' }); // 🟢 手動登入用
+  const [loginError, setLoginError] = useState('');
 
   const [view, setView] = useState<ViewType>('home');
   const [staffUser, setStaffUser] = useState<any>(null);
@@ -111,63 +113,151 @@ export default function EmployeePortal() {
     }
   }, []);
 
-  // 🟢 初始化流程：LIFF init → line-check
+  // 🟢 初始化流程：雙軌並行（LIFF 自動登入 / 網頁手動登入）
   useEffect(() => {
-    const initLiffAndCheck = async () => {
+    const initAuth = async () => {
       try {
-        // 1. 初始化 LIFF
-        await liff.init({ liffId: LIFF_ID });
-        
-        if (!liff.isLoggedIn()) {
-          liff.login(); // 沒登入就叫他登入 LINE
-          return;
-        }
-
-        const profile = await liff.getProfile();
-        const userId = profile.userId;
-        setLineUserId(userId);
-
-        console.log('[Portal] 取得 LINE ID:', userId);
-
-        // 2. 檢查綁定狀態
-        const checkRes = await fetch('/api/auth/line-check', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ lineUserId: userId }),
-          credentials: 'include', // 🔑 關鍵：帶上 Cookie
-        });
-
-        if (!checkRes.ok) {
-          console.error('[Portal] line-check 失敗:', checkRes.status);
-          setStep('binding');
-          return;
-        }
-
-        const checkResult = await checkRes.json();
-
-        if (checkResult.bound && checkResult.staff) {
-          // 已綁定：進入系統
-          console.log('[Portal] ✅ 已綁定:', checkResult.staff);
-          setStaffUser(checkResult.staff);
-          setStep('portal');
+        // 1. 嘗試初始化 LIFF
+        let isInLine = false;
+        try {
+          await liff.init({ liffId: LIFF_ID });
+          isInLine = liff.isInClient() && liff.isLoggedIn();
           
-          // 載入資料
-          await fetchTodayLogs(checkResult.staff.id);
-          await fetchHomeDataWithStaffId(checkResult.staff.id);
-        } else {
-          // 未綁定：進入綁定模式
-          console.log('[Portal] ⚠️ 未綁定，進入綁定模式');
-          setStep('binding');
+          if (isInLine && !liff.isLoggedIn()) {
+            liff.login(); // 在 LINE 內但未登入，觸發登入
+            return;
+          }
+        } catch (liffError) {
+          // LIFF 初始化失敗（不在 LINE 內或瀏覽器環境）
+          console.log('[Portal] 不在 LINE 環境，使用網頁登入模式');
+          isInLine = false;
         }
 
+        // 2. 分支判斷
+        if (isInLine) {
+          // 🟢 情境 A：在 LINE 內，執行 LINE Check/Bind 流程
+          console.log('[Portal] 在 LINE 環境，執行 LINE 綁定流程');
+          
+          const profile = await liff.getProfile();
+          const userId = profile.userId;
+          setLineUserId(userId);
+
+          console.log('[Portal] 取得 LINE ID:', userId);
+
+          // 檢查綁定狀態
+          const checkRes = await fetch('/api/auth/line-check', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ lineUserId: userId }),
+            credentials: 'include',
+          });
+
+          if (!checkRes.ok) {
+            console.error('[Portal] line-check 失敗:', checkRes.status);
+            setStep('binding');
+            return;
+          }
+
+          const checkResult = await checkRes.json();
+
+          if (checkResult.bound && checkResult.staff) {
+            // 已綁定：進入系統
+            console.log('[Portal] ✅ 已綁定:', checkResult.staff);
+            setStaffUser(checkResult.staff);
+            setStep('portal');
+            
+            // 載入資料
+            await fetchTodayLogs(checkResult.staff.id);
+            await fetchHomeDataWithStaffId(checkResult.staff.id);
+          } else {
+            // 未綁定：進入綁定模式
+            console.log('[Portal] ⚠️ 未綁定，進入綁定模式');
+            setStep('binding');
+          }
+        } else {
+          // 🟢 情境 B：在瀏覽器/電腦，使用網頁登入模式
+          console.log('[Portal] 在瀏覽器環境，檢查 Cookie');
+          
+          // 檢查是否已有有效 Cookie
+          try {
+            const testRes = await fetch('/api/portal/data?type=home', {
+              credentials: 'include',
+            });
+            
+            if (testRes.ok) {
+              const testResult = await testRes.json();
+              if (testResult.data && testResult.data.profile) {
+                // 已有有效 Cookie，直接進入系統
+                console.log('[Portal] ✅ 已有有效 Cookie，直接進入系統');
+                setStaffUser(testResult.data.profile);
+                setStep('portal');
+                await fetchTodayLogs(testResult.data.profile.id);
+                await fetchHomeDataWithStaffId(testResult.data.profile.id);
+                return;
+              }
+            }
+          } catch (e) {
+            console.log('[Portal] Cookie 檢查失敗，顯示登入頁面');
+          }
+          
+          // 若無有效 Cookie，顯示手動登入介面
+          setStep('login');
+        }
       } catch (e) {
-        console.error('[Portal] LIFF Init Error:', e);
-        setStep('binding'); // 發生錯誤時也顯示綁定表單
+        console.error('[Portal] 初始化錯誤:', e);
+        // 發生錯誤時，顯示手動登入介面
+        setStep('login');
       }
     };
 
-    initLiffAndCheck();
+    initAuth();
   }, []);
+
+  // 🟢 手動登入動作
+  const handleLogin = async () => {
+    if (!loginForm.phone || !loginForm.password) {
+      setLoginError('請輸入手機號碼和密碼');
+      return;
+    }
+
+    setLoginError('');
+
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: loginForm.phone,
+          password: loginForm.password,
+        }),
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        const result = await response.json();
+        setLoginError(result.message || '帳號或密碼錯誤');
+        return;
+      }
+
+      const result = await response.json();
+
+      if (result.success && result.staff) {
+        // 登入成功：進入系統
+        console.log('[Portal] ✅ 登入成功:', result.staff);
+        setStaffUser(result.staff);
+        setStep('portal');
+
+        // 載入資料
+        await fetchTodayLogs(result.staff.id);
+        await fetchHomeDataWithStaffId(result.staff.id);
+      } else {
+        setLoginError('登入失敗，請稍後再試');
+      }
+    } catch (error: any) {
+      console.error('[Portal] 登入錯誤:', error);
+      setLoginError('登入失敗，請稍後再試');
+    }
+  };
 
   // 🟢 綁定動作
   const handleBind = async () => {
@@ -846,6 +936,70 @@ export default function EmployeePortal() {
       <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50">
         <div className="w-12 h-12 border-4 border-teal-500 border-t-transparent rounded-full animate-spin" />
         <p className="mt-4 text-slate-400 font-bold">系統識別中...</p>
+      </div>
+    );
+  }
+
+  // 🟢 UI 呈現：手動登入 (網頁登入)
+  if (step === 'login') {
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6">
+        <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-sm text-center">
+          <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <User className="w-8 h-8 text-blue-600" />
+          </div>
+          <h2 className="text-2xl font-bold mb-2 text-slate-800">員工系統登入</h2>
+          <p className="text-slate-500 mb-6 text-sm">
+            請輸入手機號碼和密碼進行登入
+          </p>
+          
+          {loginError && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm">
+              {loginError}
+            </div>
+          )}
+
+          <div className="space-y-4 text-left">
+            <div>
+              <label className="block text-sm font-bold text-slate-700 mb-2">手機號碼</label>
+              <input
+                type="tel"
+                value={loginForm.phone}
+                onChange={(e) => {
+                  setLoginForm({ ...loginForm, phone: e.target.value });
+                  if (loginError) setLoginError('');
+                }}
+                className="w-full p-3 border rounded-xl bg-slate-50 font-bold"
+                placeholder="例如：0912345678"
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter') handleLogin();
+                }}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-bold text-slate-700 mb-2">密碼</label>
+              <input
+                type="password"
+                value={loginForm.password}
+                onChange={(e) => {
+                  setLoginForm({ ...loginForm, password: e.target.value });
+                  if (loginError) setLoginError('');
+                }}
+                className="w-full p-3 border rounded-xl bg-slate-50 font-bold"
+                placeholder="請輸入密碼"
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter') handleLogin();
+                }}
+              />
+            </div>
+            <button
+              onClick={handleLogin}
+              className="w-full bg-blue-600 text-white py-4 rounded-xl font-bold shadow-lg mt-4 hover:bg-blue-700 transition"
+            >
+              登入
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
