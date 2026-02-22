@@ -122,8 +122,7 @@ export default function DoctorRosterPrint({ onClose }: { onClose: () => void }) 
             const canvas = await html2canvas(printRef.current, { 
                 scale: 2, 
                 backgroundColor: '#ffffff', 
-                useCORS: true,
-                logging: false
+                useCORS: true 
             });
             
             const imgData = canvas.toDataURL('image/png');
@@ -131,36 +130,24 @@ export default function DoctorRosterPrint({ onClose }: { onClose: () => void }) 
             
             const pdfWidth = pdf.internal.pageSize.getWidth();
             const pdfHeight = pdf.internal.pageSize.getHeight();
-            const imgWidth = canvas.width;
-            const imgHeight = canvas.height;
             
-            // 計算縮放比例以適應頁面寬度
-            const ratio = pdfWidth / imgWidth;
+            // 核心修正：同時考慮寬高比，確保不超出邊界
+            // 將 canvas 的像素尺寸轉換為 mm（假設 96 DPI，1 inch = 25.4mm）
+            const mmPerPixel = 25.4 / 96;
+            const imgWidth = canvas.width * mmPerPixel;
+            const imgHeight = canvas.height * mmPerPixel;
+            
+            // 計算縮放比例，確保圖片能完整塞進單一頁面
+            const ratio = Math.min(pdfWidth / imgWidth, pdfHeight / imgHeight);
+            const scaledWidth = imgWidth * ratio;
             const scaledHeight = imgHeight * ratio;
             
-            // 如果內容高度超過一頁，需要分頁
-            if (scaledHeight > pdfHeight) {
-                let heightLeft = scaledHeight;
-                let position = 0;
-                
-                // 添加第一頁
-                pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, scaledHeight);
-                heightLeft -= pdfHeight;
-                
-                // 如果還有剩餘內容，添加更多頁
-                while (heightLeft > 0) {
-                    position = heightLeft - scaledHeight;
-                    pdf.addPage();
-                    pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, scaledHeight);
-                    heightLeft -= pdfHeight;
-                }
-            } else {
-                // 內容適合單頁，居中顯示
-                const imgX = 0;
-                const imgY = (pdfHeight - scaledHeight) / 2;
-                pdf.addImage(imgData, 'PNG', imgX, imgY, pdfWidth, scaledHeight);
-            }
+            // 居中計算：讓縮放後的門診表在 A4 橫向頁面中水平與垂直置中
+            const imgX = (pdfWidth - scaledWidth) / 2;
+            const imgY = (pdfHeight - scaledHeight) / 2;
             
+            // 單頁輸出，避免切割問題
+            pdf.addImage(imgData, 'PNG', imgX, imgY, scaledWidth, scaledHeight);
             pdf.save(`${clinicName}_門診表_${startDateStr}.pdf`);
         } catch (e) { 
             console.error(e);
@@ -232,7 +219,7 @@ export default function DoctorRosterPrint({ onClose }: { onClose: () => void }) 
                 <div ref={printRef} className="bg-white p-10 shadow-2xl min-w-[1000px]">
                     <div className="text-center mb-8 border-b-4 border-teal-600 pb-4">
                         <h1 className="text-5xl font-black text-slate-800 tracking-widest mb-2">{clinicName} 門診時間表</h1>
-                        <p className="text-xl text-slate-500 font-bold tracking-widest mt-2">{showDate ? `${startDateStr.replace(/-/g,'.')} - ${endDateStr.replace(/-/g,'.')}` : '門診時刻表'}</p>
+                        <p className="text-xl text-slate-500 font-bold tracking-widest mt-2">{showDate ? `${startDateStr.replace(/-/g,'.')} - ${endDateStr.replace(/-/g,'.')}` : '常規門診表'}</p>
                     </div>
 
                     {weekChunks.map((weekDays, weekIdx) => {

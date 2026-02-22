@@ -148,7 +148,6 @@ export default function AdminPage() {
               {/* 🟢 修改：動態標題 */}
               <h1 className="text-2xl font-black text-slate-900 flex items-center gap-2 tracking-tight">
                 {clinicName}管理系統
-                <span className="text-sm font-normal text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">V30.0</span>
                 {authLevel === 'manager' && <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full font-bold">排班模式</span>}
               </h1>
               {authLevel === 'boss' && (
