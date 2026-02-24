@@ -136,7 +136,7 @@ const ResultTable: React.FC<Props> = ({ ocrResult, records, setRecords }) => {
   };
 
   return (
-    <div className="flex-1 flex flex-col">
+    <div className="flex-1 flex flex-col min-h-0">
       <div className="p-3 border-b flex items-center justify-between bg-slate-50">
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-2">

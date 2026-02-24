@@ -17,6 +17,7 @@ const ScannerModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null); // 影像層
   const overlayRef = useRef<HTMLCanvasElement | null>(null); // 網格層（不跟著縮放/拖曳）
+  const containerRef = useRef<HTMLDivElement | null>(null); // 包覆兩個 canvas 的容器
 
   const [image, setImage] = useState<HTMLImageElement | null>(null);
   const [scale, setScale] = useState(1);
@@ -140,10 +141,40 @@ const ScannerModal: React.FC<Props> = ({ isOpen, onClose }) => {
     }
   }, [image, scale, rotation, offset]);
 
+  // 監聽容器尺寸變化，讓 canvas 動態適應大小
   useEffect(() => {
-    // 初始化或尺寸固定時重畫一次網格
-    drawOverlayGrid();
-  }, []);
+    const container = containerRef.current;
+    const canvas = canvasRef.current;
+    const overlay = overlayRef.current;
+    if (!container || !canvas || !overlay) return;
+
+    const resize = () => {
+      const width = container.clientWidth;
+      const height = container.clientHeight;
+      if (!width || !height) return;
+
+      canvas.width = width;
+      canvas.height = height;
+      overlay.width = width;
+      overlay.height = height;
+
+      if (image) {
+        drawImage(image);
+      } else {
+        const ctx = canvas.getContext('2d');
+        if (ctx) ctx.clearRect(0, 0, width, height);
+      }
+      drawOverlayGrid();
+    };
+
+    const observer = new ResizeObserver(resize);
+    observer.observe(container);
+    resize();
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [image, cardSide]);
 
   const handleWheel: React.WheelEventHandler<HTMLDivElement> = (e) => {
     e.preventDefault();
@@ -267,8 +298,8 @@ const ScannerModal: React.FC<Props> = ({ isOpen, onClose }) => {
           </button>
         </div>
 
-        <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-0 overflow-hidden">
-          <div className="border-r flex flex-col">
+        <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-0 overflow-hidden min-h-0">
+          <div className="border-r flex flex-col min-h-0">
             <div className="p-3 flex items-center justify-between border-b">
               <div className="flex items-center gap-2 flex-wrap">
                 <input
@@ -319,13 +350,12 @@ const ScannerModal: React.FC<Props> = ({ isOpen, onClose }) => {
               </div>
             </div>
             <div
-              className="flex-1 bg-slate-100 flex items-center justify-center relative"
+              ref={containerRef}
+              className="flex-1 bg-slate-100 flex items-center justify-center relative overflow-hidden min-h-0"
               onWheel={handleWheel}
             >
               <canvas
                 ref={canvasRef}
-                width={800}
-                height={1000}
                 className="bg-white shadow-lg cursor-move"
                 onMouseDown={handleMouseDown}
                 onMouseMove={handleMouseMove}
@@ -334,9 +364,7 @@ const ScannerModal: React.FC<Props> = ({ isOpen, onClose }) => {
               />
               <canvas
                 ref={overlayRef}
-                width={800}
-                height={1000}
-                className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
+                className="pointer-events-none absolute inset-0"
               />
               {!image && (
                 <div className="absolute inset-0 flex items-center justify-center text-slate-400 text-sm text-center px-4">
