@@ -18,6 +18,7 @@ const ScannerModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null); // 影像層
   const overlayRef = useRef<HTMLCanvasElement | null>(null); // 網格層（不跟著縮放/拖曳）
   const containerRef = useRef<HTMLDivElement | null>(null); // 包覆兩個 canvas 的容器
+  const gridBoxRef = useRef<{ x: number; y: number; w: number; h: number }>({ x: 0, y: 0, w: 0, h: 0 });
 
   const [image, setImage] = useState<HTMLImageElement | null>(null);
   const [scale, setScale] = useState(1);
@@ -59,10 +60,40 @@ const ScannerModal: React.FC<Props> = ({ isOpen, onClose }) => {
     const w = canvas.width;
     const h = canvas.height;
 
-    const x0 = GRID_MARGIN;
-    const y0 = GRID_MARGIN;
-    const gridW = w - GRID_MARGIN * 2;
-    const gridH = h - GRID_MARGIN * 2;
+    const margin = 20;
+    const availableW = Math.max(w - margin * 2, 0);
+    const availableH = Math.max(h - margin * 2, 0);
+
+    if (!availableW || !availableH) {
+      ctx.clearRect(0, 0, w, h);
+      return;
+    }
+
+    // 打卡單格實際比例：寬 2.5 : 高 1
+    const gridRatioW = GRID_COLS * 2.5;
+    const gridRatioH = rows * 1;
+    const targetRatio = gridRatioW / gridRatioH;
+    const containerRatio = availableW / availableH;
+
+    let boxW: number;
+    let boxH: number;
+
+    if (containerRatio > targetRatio) {
+      // 高度受限，吃滿高度，寬度依比例
+      boxH = availableH;
+      boxW = boxH * targetRatio;
+    } else {
+      // 寬度受限，吃滿寬度，高度依比例
+      boxW = availableW;
+      boxH = boxW / targetRatio;
+    }
+
+    const x0 = (w - boxW) / 2;
+    const y0 = (h - boxH) / 2;
+    const gridW = boxW;
+    const gridH = boxH;
+
+    gridBoxRef.current = { x: x0, y: y0, w: gridW, h: gridH };
 
     ctx.clearRect(0, 0, w, h);
 
@@ -212,11 +243,13 @@ const ScannerModal: React.FC<Props> = ({ isOpen, onClose }) => {
     try {
       const srcCanvas = canvasRef.current;
 
-      // 只擷取紅色網格區域作為 OCR 來源
-      const gridX = GRID_MARGIN;
-      const gridY = GRID_MARGIN;
-      const gridW = srcCanvas.width - GRID_MARGIN * 2;
-      const gridH = srcCanvas.height - GRID_MARGIN * 2;
+      // 只擷取紅色網格區域作為 OCR 來源（使用等比例置中的紅框）
+      const { x, y, w, h } = gridBoxRef.current;
+      const hasBox = w > 0 && h > 0;
+      const gridX = hasBox ? x : 0;
+      const gridY = hasBox ? y : 0;
+      const gridW = hasBox ? w : srcCanvas.width;
+      const gridH = hasBox ? h : srcCanvas.height;
 
       const cropped = document.createElement('canvas');
       cropped.width = gridW;
@@ -285,7 +318,7 @@ const ScannerModal: React.FC<Props> = ({ isOpen, onClose }) => {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl max-h-[90vh] flex flex-col">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-7xl h-[95vh] flex flex-col">
         <div className="px-4 py-3 border-b flex items-center justify-between bg-slate-50">
           <div className="flex items-center gap-2">
             <span className="font-bold text-slate-800">實體打卡卡 OCR 辨識 (預備版)</span>

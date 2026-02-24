@@ -57,28 +57,31 @@ export async function recognizeAttendanceCard(
 
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
+      // 0: 日期、7: 小計 → 這兩欄不需要 OCR，直接略過以節省效能
+      if (c === 0 || c === 7) continue;
+
       const x = c * cellWidth;
       const y = r * cellHeight;
 
       // 從主 canvas 擷取當前 cell 的影像
       // 為了排除左側「橫向小日期」干擾，只取中右側 70% 區域做 OCR
-      const srcX = x + cellWidth * 0.3;
-      const srcW = cellWidth * 0.7;
+      const cropX = x + cellWidth * 0.3;
+      const cropW = cellWidth * 0.7;
 
       const cellCanvas = document.createElement('canvas');
-      cellCanvas.width = srcW;
+      cellCanvas.width = cropW;
       cellCanvas.height = cellHeight;
       const ctx = cellCanvas.getContext('2d');
       if (!ctx) continue;
       ctx.drawImage(
         canvas,
-        srcX,
+        cropX,
         y,
-        srcW,
+        cropW,
         cellHeight,
         0,
         0,
-        srcW,
+        cropW,
         cellHeight
       );
 
@@ -86,8 +89,7 @@ export async function recognizeAttendanceCard(
       const rawText = (data.text || '').trim();
 
       // 嚴格萃取時間格式 (HH:mm)，避免日期數字與時間黏在一起
-      const match = rawText.match(/([012]?\d:[0-5]\d)/);
-      const value = match ? match[1] : '';
+      const value = rawText.match(/([012]?\d:[0-5]\d)/)?.[0] || '';
 
       if (rawText.length === 0 && value.length === 0) {
         // 空白或未偵測到合法時間的格子略過，減少雜訊與加速處理
