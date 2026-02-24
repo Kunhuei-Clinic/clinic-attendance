@@ -15,22 +15,23 @@ export type OcrGridResult = {
 };
 
 // 單例 worker（避免多次載入 Tesseract）
-let workerPromise: Promise<ReturnType<typeof createWorker>> | null = null;
+let workerPromise: any | null = null;
 
 async function getWorker() {
   if (!workerPromise) {
-    workerPromise = createWorker({
-      logger: () => {}, // 如需除錯可印出 progress
-    });
-    const worker = await workerPromise;
-    await worker.loadLanguage('eng');
-    await worker.initialize('eng');
+    workerPromise = await createWorker({
+      // 型別定義較舊，這裡直接使用 any 以避免 logger 型別錯誤
+      logger: () => {},
+    } as any);
+
+    await workerPromise.loadLanguage('eng');
+    await workerPromise.initialize('eng');
     // 僅辨識數字與冒號
-    await worker.setParameters({
+    await workerPromise.setParameters({
       tessedit_char_whitelist: '0123456789:',
     });
   }
-  return workerPromise!;
+  return workerPromise;
 }
 
 /**
@@ -46,7 +47,7 @@ export async function recognizeAttendanceCard(
   const worker = await getWorker();
 
   const rows = side === 'front' ? 15 : 16;
-  const cols = 8; // 日期、早上上/下、下午上/下、加班上/下、小計
+  const cols = 6; // 6 欄時間欄位（早上上/下、下午上/下、加班上/下）
 
   const cellWidth = canvas.width / cols;
   const cellHeight = canvas.height / rows;
@@ -57,9 +58,6 @@ export async function recognizeAttendanceCard(
 
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
-      // 0: 日期、7: 小計 → 這兩欄不需要 OCR，直接略過以節省效能
-      if (c === 0 || c === 7) continue;
-
       const x = c * cellWidth;
       const y = r * cellHeight;
 

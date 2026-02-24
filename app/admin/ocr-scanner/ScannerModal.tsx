@@ -11,7 +11,7 @@ type Props = {
 };
 
 const GRID_MARGIN = 40; // 紅色外框與邊界距離
-const GRID_COLS = 8;
+const GRID_COLS = 6;
 
 const ScannerModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -69,10 +69,8 @@ const ScannerModal: React.FC<Props> = ({ isOpen, onClose }) => {
       return;
     }
 
-    // 打卡單格實際比例：寬 2.5 : 高 1
-    const gridRatioW = GRID_COLS * 2.5;
-    const gridRatioH = rows * 1;
-    const targetRatio = gridRatioW / gridRatioH;
+    // 鎖定紅框實體長寬比：實體卡片 6 欄寬 (每欄 1.2cm) / rows 列高 (每列 0.6cm)
+    const targetRatio = 7.2 / (rows * 0.6);
     const containerRatio = availableW / availableH;
 
     let boxW: number;
@@ -288,9 +286,9 @@ const ScannerModal: React.FC<Props> = ({ isOpen, onClose }) => {
 
         const parseTime = (v?: string) => (v && /^\d{1,2}:\d{2}$/.test(v) ? v : '');
 
-        // 0: 日期、7: 小計 → 忽略，只用 1~6 取時間
-        const startTime = parseTime(cols[1] || cols[3] || cols[5]);
-        const endTime = parseTime(cols[2] || cols[4] || cols[6]);
+        // 回到 6 欄時間欄架構：0/1 早上上/下、2/3 下午上/下、4/5 加班上/下
+        const startTime = parseTime(cols[0] || cols[2] || cols[4]);
+        const endTime = parseTime(cols[1] || cols[3] || cols[5]);
 
         if (!startTime && !endTime) return;
 
@@ -318,7 +316,7 @@ const ScannerModal: React.FC<Props> = ({ isOpen, onClose }) => {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-7xl h-[95vh] flex flex-col">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-7xl h-[95vh] flex flex-col overflow-hidden">
         <div className="px-4 py-3 border-b flex items-center justify-between bg-slate-50">
           <div className="flex items-center gap-2">
             <span className="font-bold text-slate-800">實體打卡卡 OCR 辨識 (預備版)</span>
@@ -401,7 +399,7 @@ const ScannerModal: React.FC<Props> = ({ isOpen, onClose }) => {
               />
               {!image && (
                 <div className="absolute inset-0 flex items-center justify-center text-slate-400 text-sm text-center px-4">
-                  請先上傳實體打卡卡的照片，並拖曳與縮放圖片，讓【紅色網格的外框】完美貼合打卡片上的【表格最外層實線】（包含日期與小計欄位），再執行辨識。
+                  請先上傳實體打卡卡的照片，並拖曳與縮放圖片，讓【紅色網格的外框】對齊打卡片的【6個時間欄位】（左貼「上午上班」線，右貼「加班下班」線），再執行辨識。
                 </div>
               )}
             </div>
