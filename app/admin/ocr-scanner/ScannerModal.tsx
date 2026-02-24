@@ -1,0 +1,372 @@
+'use client';
+
+import React, { useRef, useState, useEffect } from 'react';
+import { X, RotateCcw, ZoomIn, Move } from 'lucide-react';
+import { recognizeAttendanceCard, OcrGridResult, CardSide } from './RecognitionEngine';
+import ResultTable, { OcrAttendanceRecord } from './ResultTable';
+
+type Props = {
+  isOpen: boolean;
+  onClose: () => void;
+};
+
+const GRID_MARGIN = 40; // 紅色外框與邊界距離
+const GRID_COLS = 8;
+
+const ScannerModal: React.FC<Props> = ({ isOpen, onClose }) => {
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null); // 影像層
+  const overlayRef = useRef<HTMLCanvasElement | null>(null); // 網格層（不跟著縮放/拖曳）
+
+  const [image, setImage] = useState<HTMLImageElement | null>(null);
+  const [scale, setScale] = useState(1);
+  const [rotation, setRotation] = useState(0);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
+
+  const [cardSide, setCardSide] = useState<CardSide>('front');
+  const [selectedMonth, setSelectedMonth] = useState(() => {
+    const now = new Date();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    return `${now.getFullYear()}-${m}`;
+  });
+
+  const [isRecognizing, setIsRecognizing] = useState(false);
+  const [ocrResult, setOcrResult] = useState<OcrGridResult | null>(null);
+  const [attendanceRecords, setAttendanceRecords] = useState<OcrAttendanceRecord[]>([]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setImage(null);
+      setScale(1);
+      setRotation(0);
+      setOffset({ x: 0, y: 0 });
+      setOcrResult(null);
+      setAttendanceRecords([]);
+      setCardSide('front');
+    }
+  }, [isOpen]);
+
+  const drawOverlayGrid = () => {
+    const canvas = overlayRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const rows = cardSide === 'front' ? 15 : 16;
+    const w = canvas.width;
+    const h = canvas.height;
+
+    const x0 = GRID_MARGIN;
+    const y0 = GRID_MARGIN;
+    const gridW = w - GRID_MARGIN * 2;
+    const gridH = h - GRID_MARGIN * 2;
+
+    ctx.clearRect(0, 0, w, h);
+
+    // 外框
+    ctx.strokeStyle = 'rgba(220,38,38,0.85)'; // red-600
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x0, y0, gridW, gridH);
+
+    // 內部格線
+    ctx.strokeStyle = 'rgba(248,113,113,0.6)'; // red-400
+    ctx.lineWidth = 1;
+
+    // 垂直線 (依 GRID_COLS 格)
+    const colWidth = gridW / GRID_COLS;
+    for (let c = 1; c < GRID_COLS; c++) {
+      const x = x0 + c * colWidth;
+      ctx.beginPath();
+      ctx.moveTo(x, y0);
+      ctx.lineTo(x, y0 + gridH);
+      ctx.stroke();
+    }
+
+    // 水平線 (依 rows)
+    const rowHeight = gridH / rows;
+    for (let r = 1; r < rows; r++) {
+      const y = y0 + r * rowHeight;
+      ctx.beginPath();
+      ctx.moveTo(x0, y);
+      ctx.lineTo(x0 + gridW, y);
+      ctx.stroke();
+    }
+  };
+
+  useEffect(() => {
+    drawOverlayGrid();
+  }, [cardSide]);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const img = new Image();
+    img.onload = () => {
+      setImage(img);
+      drawImage(img);
+    };
+    img.src = URL.createObjectURL(file);
+  };
+
+  const drawImage = (img: HTMLImageElement) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const cw = canvas.width;
+    const ch = canvas.height;
+
+    ctx.clearRect(0, 0, cw, ch);
+    ctx.save();
+    ctx.translate(cw / 2 + offset.x, ch / 2 + offset.y);
+    ctx.rotate((rotation * Math.PI) / 180);
+    ctx.scale(scale, scale);
+
+    const ratio = Math.min(cw / img.width, ch / img.height);
+    const drawWidth = img.width * ratio;
+    const drawHeight = img.height * ratio;
+
+    ctx.drawImage(img, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
+    ctx.restore();
+  };
+
+  useEffect(() => {
+    if (image && canvasRef.current) {
+      drawImage(image);
+    }
+  }, [image, scale, rotation, offset]);
+
+  useEffect(() => {
+    // 初始化或尺寸固定時重畫一次網格
+    drawOverlayGrid();
+  }, []);
+
+  const handleWheel: React.WheelEventHandler<HTMLDivElement> = (e) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -0.1 : 0.1;
+    setScale((prev) => Math.max(0.3, Math.min(3, prev + delta)));
+  };
+
+  const handleMouseDown: React.MouseEventHandler<HTMLCanvasElement> = (e) => {
+    setIsDragging(true);
+    setDragStart({ x: e.clientX - offset.x, y: e.clientY - offset.y });
+  };
+
+  const handleMouseMove: React.MouseEventHandler<HTMLCanvasElement> = (e) => {
+    if (!isDragging || !dragStart) return;
+    setOffset({
+      x: e.clientX - dragStart.x,
+      y: e.clientY - dragStart.y,
+    });
+  };
+
+  const handleMouseUpOrLeave = () => {
+    setIsDragging(false);
+    setDragStart(null);
+  };
+
+  const resetView = () => {
+    setScale(1);
+    setRotation(0);
+    setOffset({ x: 0, y: 0 });
+  };
+
+  const handleRecognize = async () => {
+    if (!canvasRef.current) return;
+    setIsRecognizing(true);
+    try {
+      const srcCanvas = canvasRef.current;
+
+      // 只擷取紅色網格區域作為 OCR 來源
+      const gridX = GRID_MARGIN;
+      const gridY = GRID_MARGIN;
+      const gridW = srcCanvas.width - GRID_MARGIN * 2;
+      const gridH = srcCanvas.height - GRID_MARGIN * 2;
+
+      const cropped = document.createElement('canvas');
+      cropped.width = gridW;
+      cropped.height = gridH;
+      const ctx = cropped.getContext('2d');
+      if (!ctx) return;
+      ctx.drawImage(
+        srcCanvas,
+        gridX,
+        gridY,
+        gridW,
+        gridH,
+        0,
+        0,
+        gridW,
+        gridH
+      );
+
+      const grid = await recognizeAttendanceCard(cropped, cardSide);
+      setOcrResult(grid);
+
+      const records: OcrAttendanceRecord[] = [];
+      const byDay = new Map<number, { [key: number]: string }>();
+      grid.cells.forEach((cell) => {
+        if (!byDay.has(cell.row)) byDay.set(cell.row, {});
+        byDay.get(cell.row)![cell.col] = cell.value;
+      });
+
+      const [yearStr, monthStr] = selectedMonth.split('-');
+
+      byDay.forEach((cols, day) => {
+        const pad = (n: number) => String(n).padStart(2, '0');
+        const year = yearStr || String(new Date().getFullYear());
+        const month = monthStr || pad(new Date().getMonth() + 1);
+        const dateStr = `${year}-${month}-${pad(day)}`;
+
+        const parseTime = (v?: string) => (v && /^\d{1,2}:\d{2}$/.test(v) ? v : '');
+
+        // 0: 日期、7: 小計 → 忽略，只用 1~6 取時間
+        const startTime = parseTime(cols[1] || cols[3] || cols[5]);
+        const endTime = parseTime(cols[2] || cols[4] || cols[6]);
+
+        if (!startTime && !endTime) return;
+
+        records.push({
+          id: `${dateStr}`,
+          date: dateStr,
+          startTime,
+          endTime,
+          workType: '正常班',
+          note: '',
+          errors: [],
+        });
+      });
+
+      setAttendanceRecords(records);
+    } catch (err) {
+      console.error(err);
+      alert('OCR 辨識失敗，請稍後再試或調整圖片。');
+    } finally {
+      setIsRecognizing(false);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl max-h-[90vh] flex flex-col">
+        <div className="px-4 py-3 border-b flex items-center justify-between bg-slate-50">
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-slate-800">實體打卡卡 OCR 辨識 (預備版)</span>
+            <span className="text-xs text-orange-500 border border-orange-200 px-2 py-0.5 rounded-full">
+              實驗功能・不影響現有考勤
+            </span>
+          </div>
+          <button onClick={onClose} className="p-1 text-slate-500 hover:text-slate-800 rounded-full hover:bg-slate-100">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-0 overflow-hidden">
+          <div className="border-r flex flex-col">
+            <div className="p-3 flex items-center justify-between border-b">
+              <div className="flex items-center gap-2 flex-wrap">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleFileChange}
+                />
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="px-3 py-1.5 text-sm rounded-lg border bg-slate-50 hover:bg-slate-100 font-bold"
+                >
+                  上傳打卡卡照片
+                </button>
+                <button
+                  onClick={resetView}
+                  className="px-2 py-1.5 text-xs rounded-lg border bg-white hover:bg-slate-50 flex items-center gap-1"
+                >
+                  <RotateCcw size={14} />
+                  重置視圖
+                </button>
+                <select
+                  value={cardSide}
+                  onChange={(e) => setCardSide(e.target.value as CardSide)}
+                  className="px-2 py-1.5 text-xs rounded-lg border bg-white"
+                >
+                  <option value="front">正面 1 ~ 15 日</option>
+                  <option value="back">背面 16 ~ 31 日</option>
+                </select>
+                <div className="flex items-center gap-1 text-xs">
+                  <span className="text-slate-500">月份：</span>
+                  <input
+                    type="month"
+                    value={selectedMonth}
+                    onChange={(e) => setSelectedMonth(e.target.value)}
+                    className="border rounded-lg px-2 py-1 text-xs"
+                  />
+                </div>
+              </div>
+              <div className="flex items-center gap-2 text-xs text-slate-500">
+                <span className="flex items-center gap-1 px-2 py-0.5 rounded-full border bg-slate-50">
+                  <ZoomIn size={14} /> 滾輪縮放
+                </span>
+                <span className="flex items-center gap-1 px-2 py-0.5 rounded-full border bg-slate-50">
+                  <Move size={14} /> 拖曳移動
+                </span>
+              </div>
+            </div>
+            <div
+              className="flex-1 bg-slate-100 flex items-center justify-center relative"
+              onWheel={handleWheel}
+            >
+              <canvas
+                ref={canvasRef}
+                width={800}
+                height={1000}
+                className="bg-white shadow-lg cursor-move"
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUpOrLeave}
+                onMouseLeave={handleMouseUpOrLeave}
+              />
+              <canvas
+                ref={overlayRef}
+                width={800}
+                height={1000}
+                className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
+              />
+              {!image && (
+                <div className="absolute inset-0 flex items-center justify-center text-slate-400 text-sm text-center px-4">
+                  請先上傳實體打卡卡的照片，並拖曳與縮放圖片，讓【紅色網格的外框】完美貼合打卡片上的【表格最外層實線】（包含日期與小計欄位），再執行辨識。
+                </div>
+              )}
+            </div>
+            <div className="p-3 border-t flex justify-end">
+              <button
+                disabled={!image || isRecognizing}
+                onClick={handleRecognize}
+                className="px-4 py-1.5 text-sm rounded-lg bg-blue-600 text-white font-bold hover:bg-blue-700 disabled:opacity-50"
+              >
+                {isRecognizing ? '辨識中...' : '開始 OCR 辨識'}
+              </button>
+            </div>
+          </div>
+
+          <div className="flex flex-col">
+            <ResultTable
+              ocrResult={ocrResult}
+              records={attendanceRecords}
+              setRecords={setAttendanceRecords}
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default ScannerModal;
+

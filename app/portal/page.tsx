@@ -173,7 +173,7 @@ export default function EmployeePortal() {
             // 未綁定：進入綁定模式
             console.log('[Portal] ⚠️ 未綁定，進入綁定模式');
             setStep('binding');
-          }
+    }
         } else {
           // 🟢 情境 B：在瀏覽器/電腦，使用網頁登入模式
           console.log('[Portal] 在瀏覽器環境，檢查 Cookie');
@@ -193,10 +193,10 @@ export default function EmployeePortal() {
                 setStep('portal');
                 await fetchTodayLogs(testResult.data.profile.id);
                 await fetchHomeDataWithStaffId(testResult.data.profile.id);
-                return;
-              }
+          return;
+        }
             }
-          } catch (e) {
+      } catch (e) {
             console.log('[Portal] Cookie 檢查失敗，顯示登入頁面');
           }
           
@@ -234,7 +234,7 @@ export default function EmployeePortal() {
       });
 
       if (!response.ok) {
-        const result = await response.json();
+      const result = await response.json();
         setLoginError(result.message || '帳號或密碼錯誤');
         return;
       }
@@ -292,7 +292,7 @@ export default function EmployeePortal() {
       });
 
       if (!response.ok) {
-        const result = await response.json();
+      const result = await response.json();
         if (response.status === 404) {
           setBindError('找不到員工資料');
         } else if (response.status === 401) {
@@ -557,16 +557,16 @@ export default function EmployeePortal() {
 
       alert('✅ 個人資料已更新');
       
-      setProfile((prev: any) =>
-        prev
-          ? {
-              ...prev,
-              phone: payload.phone,
-              address: payload.address,
-              emergency_contact: payload.emergency_contact,
-            }
-          : prev,
-      );
+        setProfile((prev: any) =>
+          prev
+            ? {
+                ...prev,
+                phone: payload.phone,
+                address: payload.address,
+                emergency_contact: payload.emergency_contact,
+              }
+            : prev,
+        );
       
       await fetchProfile();
     } catch (error: any) {
@@ -969,7 +969,7 @@ export default function EmployeePortal() {
                   setLoginForm({ ...loginForm, phone: e.target.value });
                   if (loginError) setLoginError('');
                 }}
-                className="w-full p-3 border rounded-xl bg-slate-50 font-bold"
+              className="w-full p-3 border rounded-xl bg-slate-50 font-bold"
                 placeholder="例如：0912345678"
                 onKeyPress={(e) => {
                   if (e.key === 'Enter') handleLogin();
@@ -1053,14 +1053,14 @@ export default function EmployeePortal() {
             </div>
             <div>
               <label className="block text-sm font-bold text-slate-700 mb-2">預設密碼</label>
-              <input
-                type="password"
-                value={bindForm.password}
+            <input
+              type="password"
+              value={bindForm.password}
                 onChange={(e) => setBindForm({ ...bindForm, password: e.target.value })}
-                className="w-full p-3 border rounded-xl bg-slate-50 font-bold"
+              className="w-full p-3 border rounded-xl bg-slate-50 font-bold"
                 placeholder="預設為 0000"
                 disabled={!clinicId} // 若無 clinicId，禁用輸入
-              />
+            />
             </div>
             <button
               onClick={handleBind}
