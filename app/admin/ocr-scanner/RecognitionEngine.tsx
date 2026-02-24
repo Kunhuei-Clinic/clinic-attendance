@@ -20,8 +20,8 @@ let workerPromise: any | null = null;
 async function getWorker() {
   if (!workerPromise) {
     workerPromise = await createWorker({
-      // 型別定義較舊，這裡直接使用 any 以避免 logger 型別錯誤
-      logger: () => {},
+      // 型別定義較舊，這裡直接使用 any 以避免 logger 型別錯誤，順便在 console 顯示載入進度
+      logger: (m: any) => console.log(m),
     } as any);
 
     await workerPromise.loadLanguage('eng');
@@ -40,9 +40,31 @@ async function getWorker() {
  * @param canvas 已經裁切好、僅包含打卡數字格子的 Canvas
  * @param side   'front' | 'back' 用來決定天數與日期位移
  */
+
+function isBlankCell(ctx: CanvasRenderingContext2D, width: number, height: number): boolean {
+  const imageData = ctx.getImageData(0, 0, width, height);
+  const data = imageData.data;
+  const totalPixels = width * height;
+  let darkCount = 0;
+
+  for (let i = 0; i < data.length; i += 4) {
+    const r = data[i];
+    const g = data[i + 1];
+    const b = data[i + 2];
+    const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+    if (brightness < 150) {
+      darkCount++;
+    }
+  }
+
+  // 若深色像素比例小於 1.5%，視為空白格
+  return darkCount / totalPixels < 0.015;
+}
+
 export async function recognizeAttendanceCard(
   canvas: HTMLCanvasElement,
-  side: CardSide
+  side: CardSide,
+  onProgress?: (currentDay: number, totalDays: number) => void
 ): Promise<OcrGridResult> {
   const worker = await getWorker();
 
@@ -83,6 +105,11 @@ export async function recognizeAttendanceCard(
         cellHeight
       );
 
+      // 預先檢查是否為空白格，若幾乎沒有墨水，直接略過，不送給 Tesseract
+      if (isBlankCell(ctx, cropW, cellHeight)) {
+        continue;
+      }
+
       const { data } = await worker.recognize(cellCanvas);
       const rawText = (data.text || '').trim();
 
@@ -101,6 +128,11 @@ export async function recognizeAttendanceCard(
         value,
         confidence: data.confidence,
       });
+    }
+
+    // 每處理完一整天（1 列），回報一次進度
+    if (onProgress) {
+      onProgress(r + 1, rows);
     }
   }
 

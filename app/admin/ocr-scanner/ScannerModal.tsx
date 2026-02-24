@@ -35,6 +35,7 @@ const ScannerModal: React.FC<Props> = ({ isOpen, onClose }) => {
   });
 
   const [isRecognizing, setIsRecognizing] = useState(false);
+  const [progressMsg, setProgressMsg] = useState<string>('');
   const [ocrResult, setOcrResult] = useState<OcrGridResult | null>(null);
   const [attendanceRecords, setAttendanceRecords] = useState<OcrAttendanceRecord[]>([]);
 
@@ -234,6 +235,7 @@ const ScannerModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const handleRecognize = async () => {
     if (!canvasRef.current) return;
     setIsRecognizing(true);
+    setProgressMsg('正在載入 AI 模型 (首次約需 10 秒)...');
     try {
       const srcCanvas = canvasRef.current;
 
@@ -262,7 +264,9 @@ const ScannerModal: React.FC<Props> = ({ isOpen, onClose }) => {
         gridH
       );
 
-      const grid = await recognizeAttendanceCard(cropped, cardSide);
+      const grid = await recognizeAttendanceCard(cropped, cardSide, (currentDay, totalDays) => {
+        setProgressMsg(`正在辨識... 第 ${currentDay} / ${totalDays} 天`);
+      });
       setOcrResult(grid);
 
       const records: OcrAttendanceRecord[] = [];
@@ -305,6 +309,7 @@ const ScannerModal: React.FC<Props> = ({ isOpen, onClose }) => {
       alert('OCR 辨識失敗，請稍後再試或調整圖片。');
     } finally {
       setIsRecognizing(false);
+      setProgressMsg('');
     }
   };
 
@@ -405,7 +410,7 @@ const ScannerModal: React.FC<Props> = ({ isOpen, onClose }) => {
                 onClick={handleRecognize}
                 className="px-4 py-1.5 text-sm rounded-lg bg-blue-600 text-white font-bold hover:bg-blue-700 disabled:opacity-50"
               >
-                {isRecognizing ? '辨識中... (首次需下載模型約15秒)' : '開始 OCR 辨識'}
+                {isRecognizing ? (progressMsg || '辨識中...') : '開始 OCR 辨識'}
               </button>
             </div>
           </div>
