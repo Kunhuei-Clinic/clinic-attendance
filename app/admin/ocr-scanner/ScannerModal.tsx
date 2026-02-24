@@ -60,34 +60,30 @@ const ScannerModal: React.FC<Props> = ({ isOpen, onClose }) => {
     const w = canvas.width;
     const h = canvas.height;
 
-    const margin = 20;
-    const availableW = Math.max(w - margin * 2, 0);
-    const availableH = Math.max(h - margin * 2, 0);
+    // 最大紅框尺寸限制：高度最多佔整體 55%，寬度最多佔整體 80%
+    const maxGridH = h * 0.55;
+    const maxGridW = w * 0.8;
 
-    if (!availableW || !availableH) {
+    if (!maxGridH || !maxGridW) {
       ctx.clearRect(0, 0, w, h);
       return;
     }
 
     // 鎖定紅框實體長寬比：實體卡片 6 欄寬 (每欄 1.2cm) / rows 列高 (每列 0.6cm)
     const targetRatio = 7.2 / (rows * 0.6);
-    const containerRatio = availableW / availableH;
 
-    let boxW: number;
-    let boxH: number;
+    // 先以高度為主計算，若寬度超過上限再反向以寬度計算
+    let boxH: number = maxGridH;
+    let boxW: number = boxH * targetRatio;
 
-    if (containerRatio > targetRatio) {
-      // 高度受限，吃滿高度，寬度依比例
-      boxH = availableH;
-      boxW = boxH * targetRatio;
-    } else {
-      // 寬度受限，吃滿寬度，高度依比例
-      boxW = availableW;
+    if (boxW > maxGridW) {
+      boxW = maxGridW;
       boxH = boxW / targetRatio;
     }
 
     const x0 = (w - boxW) / 2;
-    const y0 = (h - boxH) / 2;
+    // 網格從視覺上偏中下方開始，預留上方標頭空間，並確保不超出底部
+    const y0 = Math.min(h * 0.35, h - boxH - 20);
     const gridW = boxW;
     const gridH = boxH;
 
@@ -409,7 +405,7 @@ const ScannerModal: React.FC<Props> = ({ isOpen, onClose }) => {
                 onClick={handleRecognize}
                 className="px-4 py-1.5 text-sm rounded-lg bg-blue-600 text-white font-bold hover:bg-blue-700 disabled:opacity-50"
               >
-                {isRecognizing ? '辨識中...' : '開始 OCR 辨識'}
+                {isRecognizing ? '辨識中... (首次需下載模型約15秒)' : '開始 OCR 辨識'}
               </button>
             </div>
           </div>
