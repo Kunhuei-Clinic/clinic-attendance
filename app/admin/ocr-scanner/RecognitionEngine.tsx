@@ -17,19 +17,30 @@ export type OcrGridResult = {
 // 單例 worker（避免多次載入 Tesseract）
 let workerPromise: any | null = null;
 
-async function getWorker() {
+async function getWorker(onLog?: (m: any) => void) {
   if (!workerPromise) {
-    workerPromise = await createWorker({
-      // 型別定義較舊，這裡直接使用 any 以避免 logger 型別錯誤，順便在 console 顯示載入進度
-      logger: (m: any) => console.log(m),
-    } as any);
+    workerPromise = (async () => {
+      try {
+        const worker = await createWorker('eng', 1, {
+          // 型別定義較舊，這裡直接使用 any 以避免 logger 型別錯誤
+          logger: (m: any) => {
+            console.log(m);
+            onLog?.(m);
+          },
+        } as any);
 
-    await workerPromise.loadLanguage('eng');
-    await workerPromise.initialize('eng');
-    // 僅辨識數字與冒號
-    await workerPromise.setParameters({
-      tessedit_char_whitelist: '0123456789:',
-    });
+        // 僅辨識數字與冒號
+        await worker.setParameters({
+          tessedit_char_whitelist: '0123456789:',
+        });
+
+        return worker;
+      } catch (err) {
+        // 初始化失敗時重置，避免之後永遠卡在壞掉的 Promise
+        workerPromise = null;
+        throw err;
+      }
+    })();
   }
   return workerPromise;
 }
@@ -64,9 +75,17 @@ function isBlankCell(ctx: CanvasRenderingContext2D, width: number, height: numbe
 export async function recognizeAttendanceCard(
   canvas: HTMLCanvasElement,
   side: CardSide,
-  onProgress?: (currentDay: number, totalDays: number) => void
+  onProgress?: (message: string) => void
 ): Promise<OcrGridResult> {
-  const worker = await getWorker();
+  const worker = await getWorker((m) => {
+    if (!onProgress || !m) return;
+    if (m.status === 'downloading language traineddata') {
+      const percent = m.progress ? Math.round(m.progress * 100) : 0;
+      onProgress(`下載 AI 模型 (${percent}%)...`);
+    } else if (m.status === 'initializing api') {
+      onProgress('初始化引擎...');
+    }
+  });
 
   const rows = side === 'front' ? 15 : 16;
   const cols = 6; // 6 欄時間欄位（早上上/下、下午上/下、加班上/下）
@@ -89,8 +108,10 @@ export async function recognizeAttendanceCard(
       const cropW = cellWidth * 0.7;
 
       const cellCanvas = document.createElement('canvas');
-      cellCanvas.width = cropW;
-      cellCanvas.height = cellHeight;
+      const safeW = Math.max(1, Math.floor(cropW));
+      const safeH = Math.max(1, Math.floor(cellHeight));
+      cellCanvas.width = safeW;
+      cellCanvas.height = safeH;
       const ctx = cellCanvas.getContext('2d');
       if (!ctx) continue;
       ctx.drawImage(
@@ -101,8 +122,8 @@ export async function recognizeAttendanceCard(
         cellHeight,
         0,
         0,
-        cropW,
-        cellHeight
+        safeW,
+        safeH
       );
 
       // 預先檢查是否為空白格，若幾乎沒有墨水，直接略過，不送給 Tesseract
@@ -132,7 +153,7 @@ export async function recognizeAttendanceCard(
 
     // 每處理完一整天（1 列），回報一次進度
     if (onProgress) {
-      onProgress(r + 1, rows);
+      onProgress(`正在掃描... 第 ${r + 1} / ${rows} 天`);
     }
   }
 

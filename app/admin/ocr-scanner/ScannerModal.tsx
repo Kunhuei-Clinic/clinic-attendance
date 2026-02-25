@@ -264,8 +264,8 @@ const ScannerModal: React.FC<Props> = ({ isOpen, onClose }) => {
         gridH
       );
 
-      const grid = await recognizeAttendanceCard(cropped, cardSide, (currentDay, totalDays) => {
-        setProgressMsg(`正在辨識... 第 ${currentDay} / ${totalDays} 天`);
+      const grid = await recognizeAttendanceCard(cropped, cardSide, (msg) => {
+        setProgressMsg(msg);
       });
       setOcrResult(grid);
 
