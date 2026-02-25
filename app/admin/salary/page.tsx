@@ -155,19 +155,28 @@ export default function SalaryPage() {
       
       const holidaySet = new Set<string>((holidays || []).map((h: any) => String(h.date)));
       
-      // 建構 Roster Map，包含班表細節
+      // 建構 Roster Map，包含班表細節（加入日期清理與 JSON 解析防呆）
       const rosterMap: Record<string, any> = {};
       roster?.forEach((r: any) => {
-        rosterMap[`${r.staff_id}_${r.date}`] = {
+        const cleanDate = r.date ? String(r.date).split('T')[0] : '';
+        let parsedShifts = r.shift_details;
+        if (typeof parsedShifts === 'string') {
+          try { 
+            parsedShifts = JSON.parse(parsedShifts); 
+          } catch (e) { 
+            parsedShifts = {}; 
+          }
+        }
+        rosterMap[`${r.staff_id}_${cleanDate}`] = {
           day_type: r.day_type,
-          shift_details: r.shift_details // 傳入 Shift JSON
+          shift_details: parsedShifts
         };
       });
 
       const reports: any[] = [];
 
       staffList.forEach(staff => {
-        const myLogs = logs?.filter((l: any) => l.staff_name === staff.name) || [];
+        const myLogs = logs?.filter((l: any) => String(l.staff_id) === String(staff.id)) || [];
         const myLeaves = leaves?.filter((l: any) => l.staff_id === staff.id) || [];
 
         // 執行計算引擎

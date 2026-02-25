@@ -389,6 +389,167 @@ export default function AttendanceView() {
     saveAs(blob, `打卡表排班格式_${useDateFilter ? startDate+'_'+endDate : '全部'}.csv`);
   };
 
+  const exportFullMonthTimecardCSV = () => {
+    if (selectedStaffId === 'all') {
+      return alert('請先在上方選擇「特定員工」，再執行全月報表匯出！');
+    }
+    if (!useDateFilter || !startDate) {
+      return alert('請開啟「日期篩選」並選擇您要匯出的月份 (系統將以您設定的起始日期月份為主)！');
+    }
+
+    const staff = staffList.find((s) => String(s.id) === selectedStaffId);
+    if (!staff) return alert('找不到該員工資料');
+
+    const startD = new Date(startDate);
+    const year = startD.getFullYear();
+    const month = startD.getMonth() + 1;
+    const daysInMonth = new Date(year, month, 0).getDate();
+
+    const grouped: Record<string, any> = {};
+
+    logs.forEach((log) => {
+      if (!log.clock_in_time) return;
+
+      const logStaffId = log.staff_id ?? log.staffId;
+      const matchesStaff =
+        (logStaffId != null && String(logStaffId) === selectedStaffId) ||
+        log.staff_name === staff.name;
+      if (!matchesStaff) return;
+
+      const dateObj = new Date(log.clock_in_time);
+      if (dateObj.getFullYear() !== year || dateObj.getMonth() + 1 !== month) return;
+
+      const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(
+        dateObj.getDate()
+      ).padStart(2, '0')}`;
+
+      if (!grouped[dateStr]) {
+        grouped[dateStr] = {
+          amIn: '',
+          amOut: '',
+          amHrs: 0,
+          pmIn: '',
+          pmOut: '',
+          pmHrs: 0,
+          otIn: '',
+          otOut: '',
+          otHrs: 0,
+          notes: [] as string[],
+        };
+      }
+
+      const timeStr = dateObj.toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+      const outTimeStr = log.clock_out_time
+        ? new Date(log.clock_out_time).toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+          })
+        : '';
+      const hrs = Number(log.work_hours) || 0;
+      const note = log.note || '';
+      if (note) grouped[dateStr].notes.push(note);
+
+      if (note.includes('早') || dateObj.getHours() < 12) {
+        grouped[dateStr].amIn = timeStr;
+        grouped[dateStr].amOut = outTimeStr;
+        grouped[dateStr].amHrs = hrs;
+      } else if (
+        note.includes('午') ||
+        (dateObj.getHours() >= 12 && dateObj.getHours() < 17)
+      ) {
+        grouped[dateStr].pmIn = timeStr;
+        grouped[dateStr].pmOut = outTimeStr;
+        grouped[dateStr].pmHrs = hrs;
+      } else {
+        grouped[dateStr].otIn = timeStr;
+        grouped[dateStr].otOut = outTimeStr;
+        grouped[dateStr].otHrs = hrs;
+      }
+    });
+
+    const headers = [
+      '日期',
+      '星期',
+      '早上班',
+      '早下班',
+      '早時數',
+      '午上班',
+      '午下班',
+      '午時數',
+      '晚上班',
+      '晚下班',
+      '晚時數',
+      '單日總時數',
+      '備註',
+    ];
+    const rows: string[][] = [];
+    let totalMonthHours = 0;
+
+    for (let i = 1; i <= daysInMonth; i++) {
+      const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(i).padStart(
+        2,
+        '0'
+      )}`;
+      const dObj = new Date(year, month - 1, i);
+      const weekday = ['日', '一', '二', '三', '四', '五', '六'][dObj.getDay()];
+
+      if (grouped[dateStr]) {
+        const r = grouped[dateStr];
+        const total = (r.amHrs || 0) + (r.pmHrs || 0) + (r.otHrs || 0);
+        totalMonthHours += total;
+        const uniqueNotes = Array.from(new Set(r.notes)).join('; ');
+        rows.push([
+          `${month}/${i}`,
+          weekday,
+          r.amIn,
+          r.amOut,
+          r.amHrs ? r.amHrs.toFixed(2) : '',
+          r.pmIn,
+          r.pmOut,
+          r.pmHrs ? r.pmHrs.toFixed(2) : '',
+          r.otIn,
+          r.otOut,
+          r.otHrs ? r.otHrs.toFixed(2) : '',
+          total ? total.toFixed(2) : '',
+          uniqueNotes,
+        ]);
+      } else {
+        rows.push([`${month}/${i}`, weekday, '', '', '', '', '', '', '', '', '', '', '']);
+      }
+    }
+
+    rows.push([]);
+    rows.push([
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '本月總工時',
+      totalMonthHours.toFixed(2),
+      '',
+    ]);
+
+    const titleRow = [`${year}年${month}月 考勤表 - ${staff.name}`];
+    const csvContent =
+      '\uFEFF' +
+      titleRow.join(',') +
+      '\n' +
+      headers.join(',') +
+      '\n' +
+      rows.map((r) => r.join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    saveAs(blob, `${year}年${month}月_${staff.name}_完整打卡表.csv`);
+  };
+
   return (
     <div className="w-full animate-fade-in space-y-6 relative">
       
@@ -463,6 +624,9 @@ export default function AttendanceView() {
             </button>
             <button onClick={exportToTimecardCSV} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition text-sm">
                 <FileSpreadsheet size={18}/> 匯出打卡表 (排班格式)
+            </button>
+            <button onClick={exportFullMonthTimecardCSV} className="bg-fuchsia-600 hover:bg-fuchsia-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition text-sm">
+                <FileSpreadsheet size={18}/> 匯出單人全月表格
             </button>
           </div>
         </div>

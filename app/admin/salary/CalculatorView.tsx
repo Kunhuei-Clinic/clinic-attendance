@@ -147,9 +147,9 @@ export default function CalculatorView({ reports, adjustments, modifyAdjustment,
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100">
-                                        {rpt.dailyRecords.map((d:any, i:number) => (
+                                        {(rpt.dailyRecords || []).map((d:any, i:number) => (
                                             <tr key={i} className="hover:bg-blue-50/50">
-                                                <td className="p-2 font-mono text-slate-600">{d.date.slice(5)}</td>
+                                                <td className="p-2 font-mono text-slate-600">{d.date ? String(d.date).slice(5) : '-'}</td>
                                                 <td className="p-2 text-center">
                                                     {d.dayType==='holiday' && <span className="text-red-500 font-bold">國定</span>}
                                                     {d.dayType==='rest' && <span className="text-green-600 font-bold">休息</span>}
@@ -179,7 +179,7 @@ export default function CalculatorView({ reports, adjustments, modifyAdjustment,
                                  <li className="flex justify-between"><span>平日加班 ({rpt.normal_ot_hours}hr):</span> <span className="font-mono">${calculateTieredOt(rpt.normal_ot_hours, Math.round(rpt.base_pay/240))}</span></li>
                                  <li className="flex justify-between"><span>休息日/國定 ({rpt.rest_work_hours + rpt.holiday_work_hours}hr):</span> <span className="font-mono">${rpt.ot_pay + rpt.holiday_pay}</span></li>
                                  {rpt.period_ot_hours > 0 && <li className="flex justify-between text-orange-600 font-bold"><span>週期總量超時 ({rpt.period_ot_hours.toFixed(1)}hr):</span> <span>(已計入加班)</span></li>}
-                                 {rpt.bonus_details.map((b:any, i:number) => (
+                                 {(rpt.bonus_details || []).map((b:any, i:number) => (
                                      <li key={i} className="flex justify-between text-green-700"><span>[津貼] {b.name}:</span> <span className="font-mono">${b.amount}</span></li>
                                  ))}
                               </ul>
@@ -190,7 +190,7 @@ export default function CalculatorView({ reports, adjustments, modifyAdjustment,
                                  <li className="flex justify-between"><span>勞保自付:</span> <span className="font-mono">${rpt.insurance_labor}</span></li>
                                  <li className="flex justify-between"><span>健保自付:</span> <span className="font-mono">${rpt.insurance_health}</span></li>
                                  <li className="flex justify-between"><span>固定扣項:</span> <span className="font-mono">${rpt.fixed_deduction_pay}</span></li>
-                                 {rpt.deduction_details.map((b:any, i:number) => (
+                                 {(rpt.deduction_details || []).map((b:any, i:number) => (
                                      <li key={i} className="flex justify-between text-red-600"><span>[扣款] {b.name}:</span> <span className="font-mono">${b.amount}</span></li>
                                  ))}
                               </ul>
