@@ -321,6 +321,74 @@ export default function AttendanceView() {
 
   const totalHours = logs.reduce((sum, log) => sum + (Number(log.work_hours) || 0), 0);
 
+  const exportToTimecardCSV = () => {
+    if (logs.length === 0) return alert("無資料可匯出");
+
+    const grouped: Record<string, any> = {};
+
+    logs.forEach(log => {
+      if (!log.clock_in_time) return;
+      const staff = log.staff_name;
+      const dateObj = new Date(log.clock_in_time);
+      const dateStr = `${dateObj.getFullYear()}-${String(dateObj.getMonth()+1).padStart(2,'0')}-${String(dateObj.getDate()).padStart(2,'0')}`;
+      const key = `${staff}_${dateStr}`;
+
+      if (!grouped[key]) {
+        grouped[key] = {
+          staff,
+          date: dateStr,
+          weekday: ['日', '一', '二', '三', '四', '五', '六'][dateObj.getDay()],
+          amIn: '', amOut: '', amHrs: 0,
+          pmIn: '', pmOut: '', pmHrs: 0,
+          otIn: '', otOut: '', otHrs: 0,
+          notes: [] as string[],
+        };
+      }
+
+      const timeStr = dateObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+      const outTimeStr = log.clock_out_time
+        ? new Date(log.clock_out_time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
+        : '';
+      const hrs = Number(log.work_hours) || 0;
+      const note = log.note || '';
+      if (note) grouped[key].notes.push(note);
+
+      if (note.includes('早') || dateObj.getHours() < 12) {
+        grouped[key].amIn = timeStr;
+        grouped[key].amOut = outTimeStr;
+        grouped[key].amHrs = hrs;
+      } else if (note.includes('午') || (dateObj.getHours() >= 12 && dateObj.getHours() < 17)) {
+        grouped[key].pmIn = timeStr;
+        grouped[key].pmOut = outTimeStr;
+        grouped[key].pmHrs = hrs;
+      } else {
+        grouped[key].otIn = timeStr;
+        grouped[key].otOut = outTimeStr;
+        grouped[key].otHrs = hrs;
+      }
+    });
+
+    const headers = ["員工姓名", "日期", "星期", "早上班", "早下班", "早時數", "午上班", "午下班", "午時數", "晚上班", "晚下班", "晚時數", "單日總時數", "備註"];
+    const rows = Object.values(grouped).map((r: any) => {
+      const total = (r.amHrs || 0) + (r.pmHrs || 0) + (r.otHrs || 0);
+      const uniqueNotes = Array.from(new Set(r.notes)).join('; ');
+      return [
+        r.staff,
+        r.date,
+        r.weekday,
+        r.amIn, r.amOut, r.amHrs ? r.amHrs.toFixed(2) : '',
+        r.pmIn, r.pmOut, r.pmHrs ? r.pmHrs.toFixed(2) : '',
+        r.otIn, r.otOut, r.otHrs ? r.otHrs.toFixed(2) : '',
+        total ? total.toFixed(2) : '',
+        uniqueNotes,
+      ];
+    });
+
+    const csvContent = "\uFEFF" + [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    saveAs(blob, `打卡表排班格式_${useDateFilter ? startDate+'_'+endDate : '全部'}.csv`);
+  };
+
   return (
     <div className="w-full animate-fade-in space-y-6 relative">
       
@@ -382,16 +450,21 @@ export default function AttendanceView() {
               onClick={() => setIsOcrModalOpen(true)}
               className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition text-sm shadow-sm"
           >
-              <ScanLine size={18}/> 實體卡補登 (預備)
+              <ScanLine size={18}/> 實體卡 OCR 辨識
           </button>
           
           <div className="text-right hidden sm:block">
               <span className="block text-xs text-slate-400">總工時合計</span>
               <span className="text-xl font-bold text-blue-600 font-mono">{totalHours.toFixed(1)} <span className="text-sm">hr</span></span>
           </div>
-          <button onClick={exportToCSV} className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition text-sm">
-              <FileSpreadsheet size={18}/> 匯出 CSV
-          </button>
+          <div className="flex gap-2">
+            <button onClick={exportToCSV} className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition text-sm">
+                <FileSpreadsheet size={18}/> 匯出 CSV
+            </button>
+            <button onClick={exportToTimecardCSV} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition text-sm">
+                <FileSpreadsheet size={18}/> 匯出打卡表 (排班格式)
+            </button>
+          </div>
         </div>
       </div>
 

@@ -43,6 +43,17 @@ const timeStringToDate = (dateStr: string, timeStr: string) => {
   return new Date(`${dateStr}T${timeStr}:00`);
 };
 
+// 輔助：將 ISO 時間字串轉為本地日期 (YYYY-MM-DD)，避免 UTC 跨日偏移
+const toLocalDateString = (isoString?: string | null): string => {
+  if (!isoString) return '';
+  const d = new Date(isoString);
+  if (isNaN(d.getTime())) return '';
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
 // 輔助：加班費拆分 (前2小時 1.34, 之後 1.67)
 const splitOtHours = (hours: number) => {
   if (hours <= 0) return { ot134: 0, ot167: 0 };
@@ -104,9 +115,11 @@ export const calculateStaffSalary = (
   if (staff.work_rule === '2week' || staff.work_rule === '4week') dailyNormalLimit = 10;
   let accumulatedNormalHours = 0;
 
-  // 整理所有涉及的日期
-  const logDates = logs.map(l => l.clock_in_time.split('T')[0]);
-  const rosterDates = Object.keys(rosterMap).map(k => k.split('_')[1]);
+  // 整理所有涉及的日期（使用本地日期避免 UTC 跨日偏移）
+  const logDates = logs
+    .map((l) => toLocalDateString(l.clock_in_time))
+    .filter(Boolean);
+  const rosterDates = Object.keys(rosterMap).map((k) => k.split('_')[1]);
   const allDates = Array.from(new Set([...logDates, ...rosterDates])).sort();
 
   allDates.forEach((dateStr) => {
@@ -119,8 +132,10 @@ export const calculateStaffSalary = (
     if (isHoliday) dayType = 'holiday';
     else if (rosterInfo) dayType = rosterInfo.day_type;
 
-    // 取得當日打卡紀錄
-    const dailyLogs = logs.filter(l => l.clock_in_time.startsWith(dateStr));
+    // 取得當日打卡紀錄（以本地日期比對）
+    const dailyLogs = logs.filter(
+      (l) => toLocalDateString(l.clock_in_time) === dateStr
+    );
     let actualIn: Date | null = null;
     let actualOut: Date | null = null;
 
@@ -157,7 +172,7 @@ export const calculateStaffSalary = (
       
       shifts.sort((a, b) => a.start.localeCompare(b.start));
 
-      shifts.forEach((shift, index) => {
+      shifts.forEach((shift) => {
         const scheduleStart = timeStringToDate(dateStr, shift.start);
         const scheduleEnd = timeStringToDate(dateStr, shift.end);
         
@@ -167,17 +182,15 @@ export const calculateStaffSalary = (
           return;
         }
 
-        // 修正：確保比較的是 Date 物件
-        let effectiveStart = (actualIn.getTime() > scheduleStart.getTime()) ? actualIn : scheduleStart;
-        let effectiveEnd = actualOut;
-
-        const nextShift = shifts[index + 1];
-        if (nextShift) {
-           const nextShiftStart = timeStringToDate(dateStr, nextShift.start);
-           if (actualOut.getTime() > nextShiftStart.getTime()) {
-             effectiveEnd = nextShiftStart;
-           }
-        }
+        // 修正：僅在班表區間內計薪，休息時間不計入
+        const effectiveStart =
+          actualIn.getTime() > scheduleStart.getTime()
+            ? actualIn
+            : scheduleStart;
+        const effectiveEnd =
+          actualOut.getTime() < scheduleEnd.getTime()
+            ? actualOut
+            : scheduleEnd;
 
         if (effectiveEnd.getTime() > effectiveStart.getTime()) {
           const mins = differenceInMinutes(effectiveEnd, effectiveStart);

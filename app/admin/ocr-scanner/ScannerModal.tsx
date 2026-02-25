@@ -356,10 +356,7 @@ const ScannerModal: React.FC<Props> = ({ isOpen, onClose }) => {
         <div className="px-4 py-3 border-b flex items-center justify-between bg-slate-50">
           <div className="flex items-center gap-2">
             <span className="font-bold text-slate-800">
-              實體打卡卡 OCR 辨識 (預備版)
-            </span>
-            <span className="text-xs text-orange-500 border border-orange-200 px-2 py-0.5 rounded-full">
-              實驗功能・不影響現有考勤
+              實體打卡卡 OCR 辨識
             </span>
           </div>
           <button
