@@ -21,6 +21,13 @@ import {
 import { saveAs } from 'file-saver';
 import ScannerModal from './ocr-scanner/ScannerModal';
 
+const formatLocalDate = (isoString?: string) => {
+  if (!isoString) return '-';
+  const d = new Date(isoString);
+  if (isNaN(d.getTime())) return '-';
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
 const getInitialRange = () => {
     const now = new Date();
     const start = new Date(now.getFullYear(), 0, 1);
@@ -181,7 +188,7 @@ export default function AttendanceView() {
     const rows = logs.map(log => [
         log.staff_name,
         log.work_type === 'overtime' ? '加班' : '上班',
-        log.clock_in_time?.slice(0, 10) || '',
+        formatLocalDate(log.clock_in_time),
         log.clock_in_time ? new Date(log.clock_in_time).toLocaleTimeString() : '',
         log.clock_out_time ? new Date(log.clock_out_time).toLocaleTimeString() : '',
         log.work_hours ? Number(log.work_hours).toFixed(2) : '0',
@@ -208,7 +215,9 @@ export default function AttendanceView() {
 
   const openEditModal = (log: any) => {
     setEditingLogId(log.id);
-    const logDate = log.clock_in_time ? log.clock_in_time.split('T')[0] : new Date().toISOString().split('T')[0];
+    const logDate = log.clock_in_time
+      ? formatLocalDate(log.clock_in_time)
+      : new Date().toISOString().split('T')[0];
     // 直接從 ISO 字符串提取時間部分，避免時區轉換問題
     // 如果數據庫存的是 UTC，需要轉換為本地時間顯示
     let startTime = '08:00';
@@ -533,7 +542,7 @@ export default function AttendanceView() {
                                 </div>
                             </div>
                         </td>
-                        <td className="p-4 text-slate-500 font-mono">{log.clock_in_time?.slice(0, 10)}</td>
+                        <td className="p-4 text-slate-500 font-mono">{formatLocalDate(log.clock_in_time)}</td>
                         <td className="p-4">
                             <div className="flex flex-col gap-1">
                                 <span className={`px-2 py-1 rounded text-xs font-bold ${log.work_type === 'overtime' ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'}`}>

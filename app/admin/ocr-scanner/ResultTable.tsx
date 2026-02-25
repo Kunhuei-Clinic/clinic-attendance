@@ -70,6 +70,22 @@ export default function ResultTable({ records, setRecords }: Props) {
     );
   };
 
+  const handleTimeChange = (
+    id: string,
+    field: 'startTime' | 'endTime',
+    rawValue: string
+  ) => {
+    // 只保留數字
+    let val = rawValue.replace(/\D/g, '');
+    // 最多四碼 (HHmm)
+    val = val.slice(0, 4);
+    // 自動補冒號
+    if (val.length >= 3) {
+      val = val.slice(0, 2) + ':' + val.slice(2);
+    }
+    updateField(id, field, val);
+  };
+
   const handleSubmit = async () => {
     if (!records.length) {
       alert('目前沒有可送出的紀錄');
@@ -194,24 +210,26 @@ export default function ResultTable({ records, setRecords }: Props) {
                     <input
                       value={r.startTime}
                       onChange={(e) =>
-                        updateField(r.id, 'startTime', e.target.value)
+                        handleTimeChange(r.id, 'startTime', e.target.value)
                       }
                       className={`w-20 border rounded px-1 py-0.5 text-xs ${
                         !r.startTime ? 'border-red-400 bg-red-100' : ''
                       }`}
                       placeholder="HH:MM"
+                      maxLength={5}
                     />
                   </td>
                   <td className="px-2 py-1">
                     <input
                       value={r.endTime}
                       onChange={(e) =>
-                        updateField(r.id, 'endTime', e.target.value)
+                        handleTimeChange(r.id, 'endTime', e.target.value)
                       }
                       className={`w-20 border rounded px-1 py-0.5 text-xs ${
                         !r.endTime ? 'border-red-400 bg-red-100' : ''
                       }`}
                       placeholder="HH:MM"
+                      maxLength={5}
                     />
                   </td>
                   <td className="px-2 py-1 text-slate-700">{r.workType}</td>
