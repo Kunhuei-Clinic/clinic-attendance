@@ -29,9 +29,10 @@ async function getWorker(onLog?: (m: any) => void) {
           },
         } as any);
 
-        // 僅辨識數字與冒號，並鎖定 PSM 模式為單行文字（7），提高時間字串辨識率
+        // 僅辨識時間相關字元，並鎖定 PSM 模式為單行文字（7），提高時間字串辨識率
         await worker.setParameters({
-          tessedit_char_whitelist: '0123456789:',
+          // 放寬白名單，讓點矩陣字體把冒號看成 . 或 ; 或空白時也能被容忍
+          tessedit_char_whitelist: '0123456789:.; ',
           // 7 = Treat the image as a single text line
           tessedit_pageseg_mode: 7 as any,
         } as any);
@@ -78,7 +79,9 @@ function enhanceCellForOCR(srcCanvas: HTMLCanvasElement): { canvas: HTMLCanvasEl
     const g = data[i + 1];
     const b = data[i + 2];
 
-    const isDark = r < 120 && g < 120 && b < 120;
+    // 使用標準亮度公式，動態判斷「比淺灰還暗」的像素當作墨水
+    const luma = r * 0.299 + g * 0.587 + b * 0.114;
+    const isDark = luma < 160;
     if (isDark) {
       // 深色墨水：強制轉為純黑
       data[i] = 0;
@@ -95,8 +98,8 @@ function enhanceCellForOCR(srcCanvas: HTMLCanvasElement): { canvas: HTMLCanvasEl
 
   ctx.putImageData(imageData, 0, 0);
 
-  // 深色像素比例低於 1% 視為空白格
-  const isBlank = darkPixels / totalPixels < 0.01;
+  // 深色像素比例低於 0.5% 視為空白格（再放寬一點，避免墨水被漂白後全部判空）
+  const isBlank = darkPixels / totalPixels < 0.005;
   return { canvas, isBlank };
 }
 
@@ -165,10 +168,38 @@ export async function recognizeAttendanceCard(
       const { data } = await worker.recognize(enhancedCanvas);
       const rawText = (data.text || '').trim();
 
-      // 先清除非數字與冒號，再從尾端或最後一個時間樣式擷取 HH:mm，避免「小日期 + 時間」黏連
-      const cleanText = rawText.replace(/[^\d:]/g, '');
-      const timeMatches = cleanText.match(/\d{1,2}:\d{2}/g);
-      const value = timeMatches ? timeMatches[timeMatches.length - 1] : '';
+      let value = '';
+
+      // 第 1 階段：優先處理含有 : . ; 等分隔符的情況
+      if (rawText) {
+        let txt = rawText.toUpperCase().replace(/O/g, '0');
+        const colonLikeMatches = txt.match(/\d{1,2}[:.;]\d{2}/g);
+        if (colonLikeMatches && colonLikeMatches.length > 0) {
+          const last = colonLikeMatches[colonLikeMatches.length - 1];
+          const digits = last.replace(/[^0-9]/g, '');
+          if (digits.length >= 3) {
+            const last4 = digits.slice(-4).padStart(4, '0');
+            const hh = parseInt(last4.slice(0, 2), 10);
+            const mm = parseInt(last4.slice(2, 4), 10);
+            if (hh < 24 && mm < 60) {
+              value = `${last4.slice(0, 2)}:${last4.slice(2, 4)}`;
+            }
+          }
+        }
+
+        // 第 2 階段：沒有可靠分隔符時，使用純數字暴力切時間（處理 0750 / 0 7 5 0 / O75O 等）
+        if (!value) {
+          let clean = txt.replace(/[^0-9]/g, '');
+          if (clean.length >= 3) {
+            const last4 = clean.slice(-4).padStart(4, '0');
+            const hh = parseInt(last4.slice(0, 2), 10);
+            const mm = parseInt(last4.slice(2, 4), 10);
+            if (hh < 24 && mm < 60) {
+              value = `${last4.slice(0, 2)}:${last4.slice(2, 4)}`;
+            }
+          }
+        }
+      }
 
       if (rawText.length === 0 && value.length === 0) {
         // 空白或未偵測到合法時間的格子略過，減少雜訊與加速處理
