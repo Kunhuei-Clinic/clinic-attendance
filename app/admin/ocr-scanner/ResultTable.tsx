@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { AlertCircle } from 'lucide-react';
 import { OcrGridResult } from './RecognitionEngine';
 
 export type OcrAttendanceRecord = {
@@ -85,6 +86,11 @@ export default function ResultTable({ records, setRecords }: Props) {
       return;
     }
 
+    if (records.some((r) => !r.startTime || !r.endTime)) {
+      alert('尚有缺漏的上下班時間，請補齊後再送出！');
+      return;
+    }
+
     const validRecords = records.filter((r) => r.startTime || r.endTime);
     if (!validRecords.length) {
       alert('所有列皆為空白時間，無需送出');
@@ -162,42 +168,64 @@ export default function ResultTable({ records, setRecords }: Props) {
             </tr>
           </thead>
           <tbody>
-            {records.map((r) => (
-              <tr key={r.id} className="border-b last:border-0">
-                <td className="px-2 py-1 whitespace-nowrap text-slate-700">
-                  {r.date}
-                </td>
-                <td className="px-2 py-1">
-                  <input
-                    value={r.startTime}
-                    onChange={(e) =>
-                      updateField(r.id, 'startTime', e.target.value)
-                    }
-                    className="w-20 border rounded px-1 py-0.5 text-xs"
-                    placeholder="HH:MM"
-                  />
-                </td>
-                <td className="px-2 py-1">
-                  <input
-                    value={r.endTime}
-                    onChange={(e) =>
-                      updateField(r.id, 'endTime', e.target.value)
-                    }
-                    className="w-20 border rounded px-1 py-0.5 text-xs"
-                    placeholder="HH:MM"
-                  />
-                </td>
-                <td className="px-2 py-1 text-slate-700">{r.workType}</td>
-                <td className="px-2 py-1">
-                  <input
-                    value={r.note}
-                    onChange={(e) => updateField(r.id, 'note', e.target.value)}
-                    className="w-full border rounded px-1 py-0.5 text-xs"
-                    placeholder="備註"
-                  />
-                </td>
-              </tr>
-            ))}
+            {records.map((r) => {
+              const hasError = r.errors && r.errors.length > 0;
+              return (
+                <tr
+                  key={r.id}
+                  className={`border-b last:border-0 ${
+                    hasError
+                      ? 'bg-red-50 hover:bg-red-100'
+                      : 'hover:bg-slate-50'
+                  }`}
+                >
+                  <td className="px-2 py-1 whitespace-nowrap text-slate-700">
+                    {r.date}
+                    {hasError && (
+                      <span
+                        className="inline-flex items-center ml-1 text-red-500"
+                        title={r.errors.join('、')}
+                      >
+                        <AlertCircle size={14} className="inline" />
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-2 py-1">
+                    <input
+                      value={r.startTime}
+                      onChange={(e) =>
+                        updateField(r.id, 'startTime', e.target.value)
+                      }
+                      className={`w-20 border rounded px-1 py-0.5 text-xs ${
+                        !r.startTime ? 'border-red-400 bg-red-100' : ''
+                      }`}
+                      placeholder="HH:MM"
+                    />
+                  </td>
+                  <td className="px-2 py-1">
+                    <input
+                      value={r.endTime}
+                      onChange={(e) =>
+                        updateField(r.id, 'endTime', e.target.value)
+                      }
+                      className={`w-20 border rounded px-1 py-0.5 text-xs ${
+                        !r.endTime ? 'border-red-400 bg-red-100' : ''
+                      }`}
+                      placeholder="HH:MM"
+                    />
+                  </td>
+                  <td className="px-2 py-1 text-slate-700">{r.workType}</td>
+                  <td className="px-2 py-1">
+                    <input
+                      value={r.note}
+                      onChange={(e) => updateField(r.id, 'note', e.target.value)}
+                      className="w-full border rounded px-1 py-0.5 text-xs"
+                      placeholder="備註"
+                    />
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

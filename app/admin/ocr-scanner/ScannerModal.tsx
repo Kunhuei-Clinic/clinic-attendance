@@ -322,6 +322,10 @@ const ScannerModal: React.FC<Props> = ({ isOpen, onClose }) => {
             : cell.shift === 'PM'
             ? '午班'
             : '晚班/加班';
+        const errors: string[] = [];
+        if (!startTime || !endTime) {
+          errors.push('缺漏上下班時間');
+        }
 
         records.push({
           id: `${dateStr}-${cell.shift}`,
@@ -330,7 +334,7 @@ const ScannerModal: React.FC<Props> = ({ isOpen, onClose }) => {
           endTime,
           workType,
           note,
-          errors: [],
+          errors,
         });
       });
 

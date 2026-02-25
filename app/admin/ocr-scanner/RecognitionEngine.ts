@@ -43,13 +43,10 @@ export async function recognizeAttendanceCard(
   const totalWidth = canvas.width;
   const totalHeight = canvas.height;
 
-  // 左右裁切：移除日期與小計欄位，只保留中間時間格
-  const leftCut = totalWidth * 0.12;
-  const rightCut = totalWidth * 0.1;
-  const croppedWidth = Math.max(
-    1,
-    Math.floor(totalWidth - leftCut - rightCut)
-  );
+  // 由紅框已經精準裁切數字區，再額外裁切會造成欄位遺失，這裡不再做左右裁切
+  const leftCut = 0;
+  const rightCut = 0;
+  const croppedWidth = totalWidth;
 
   const rowHeight = totalHeight / rows;
 
@@ -124,37 +121,61 @@ export async function recognizeAttendanceCard(
     );
     if (!timeWords.length) continue;
 
-    const am: VisionWord[] = [];
-    const pm: VisionWord[] = [];
-    const ot: VisionWord[] = [];
+    const row = dayOffset + r + 1;
+    const colW = cropW / 6;
+
+    let amStart = '';
+    let amEnd = '';
+    let pmStart = '';
+    let pmEnd = '';
+    let otStart = '';
+    let otEnd = '';
 
     timeWords.forEach((w) => {
-      if (w.x < cropW * 0.34) {
-        am.push(w);
-      } else if (w.x < cropW * 0.67) {
-        pm.push(w);
-      } else {
-        ot.push(w);
+      // 將 X 座標映射到 0~5 的欄位索引，稍微右偏一點以增加容錯
+      const colIndex = Math.floor((w.x + colW * 0.2) / colW);
+      switch (colIndex) {
+        case 0: // 早上上
+          if (!amStart) amStart = w.text;
+          amEnd = w.text;
+          break;
+        case 1: // 早上下
+          if (!amEnd) amEnd = w.text;
+          else amEnd = w.text;
+          break;
+        case 2: // 午上
+          if (!pmStart) pmStart = w.text;
+          pmEnd = w.text;
+          break;
+        case 3: // 午下
+          if (!pmEnd) pmEnd = w.text;
+          else pmEnd = w.text;
+          break;
+        case 4: // 晚上/加班上
+          if (!otStart) otStart = w.text;
+          otEnd = w.text;
+          break;
+        case 5: // 晚下/加班下
+        default:
+          if (!otEnd) otEnd = w.text;
+          else otEnd = w.text;
+          break;
       }
     });
 
-    const row = dayOffset + r + 1;
-
-    const pushShift = (shift: ShiftCode, bucket: VisionWord[]) => {
-      if (!bucket.length) return;
-      const startTime = bucket[0].text;
-      const endTime = bucket[bucket.length - 1].text;
+    const pushShift = (shift: ShiftCode, st: string, et: string) => {
+      if (!st && !et) return;
       cells.push({
         row,
         shift,
-        startTime,
-        endTime,
+        startTime: st || '',
+        endTime: et || '',
       });
     };
 
-    pushShift('AM', am);
-    pushShift('PM', pm);
-    pushShift('OT', ot);
+    pushShift('AM', amStart, amEnd);
+    pushShift('PM', pmStart, pmEnd);
+    pushShift('OT', otStart, otEnd);
   }
 
   return { cells };
