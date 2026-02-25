@@ -10,7 +10,6 @@ type Props = {
   onClose: () => void;
 };
 
-const GRID_MARGIN = 40; // 紅色外框與邊界距離
 const GRID_COLS = 6;
 
 const ScannerModal: React.FC<Props> = ({ isOpen, onClose }) => {
@@ -18,14 +17,21 @@ const ScannerModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null); // 影像層
   const overlayRef = useRef<HTMLCanvasElement | null>(null); // 網格層（不跟著縮放/拖曳）
   const containerRef = useRef<HTMLDivElement | null>(null); // 包覆兩個 canvas 的容器
-  const gridBoxRef = useRef<{ x: number; y: number; w: number; h: number }>({ x: 0, y: 0, w: 0, h: 0 });
+  const gridBoxRef = useRef<{ x: number; y: number; w: number; h: number }>({
+    x: 0,
+    y: 0,
+    w: 0,
+    h: 0,
+  });
 
   const [image, setImage] = useState<HTMLImageElement | null>(null);
   const [scale, setScale] = useState(1);
   const [rotation, setRotation] = useState(0);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
-  const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
+  const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(
+    null
+  );
 
   const [cardSide, setCardSide] = useState<CardSide>('front');
   const [selectedMonth, setSelectedMonth] = useState(() => {
@@ -37,7 +43,9 @@ const ScannerModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const [isRecognizing, setIsRecognizing] = useState(false);
   const [progressMsg, setProgressMsg] = useState<string>('');
   const [ocrResult, setOcrResult] = useState<OcrGridResult | null>(null);
-  const [attendanceRecords, setAttendanceRecords] = useState<OcrAttendanceRecord[]>([]);
+  const [attendanceRecords, setAttendanceRecords] = useState<
+    OcrAttendanceRecord[]
+  >([]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -235,7 +243,7 @@ const ScannerModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const handleRecognize = async () => {
     if (!canvasRef.current) return;
     setIsRecognizing(true);
-    setProgressMsg('正在載入 AI 模型 (首次約需 10 秒)...');
+    setProgressMsg('雲端 AI 辨識中，請稍候...');
     try {
       const srcCanvas = canvasRef.current;
 
@@ -264,41 +272,42 @@ const ScannerModal: React.FC<Props> = ({ isOpen, onClose }) => {
         gridH
       );
 
-      const grid = await recognizeAttendanceCard(cropped, cardSide, (msg) => {
-        setProgressMsg(msg);
-      });
+      const grid = await recognizeAttendanceCard(cropped, cardSide);
       setOcrResult(grid);
 
       const records: OcrAttendanceRecord[] = [];
-      const byDay = new Map<number, { [key: number]: string }>();
-      grid.cells.forEach((cell) => {
-        if (!byDay.has(cell.row)) byDay.set(cell.row, {});
-        byDay.get(cell.row)![cell.col] = cell.value;
-      });
-
       const [yearStr, monthStr] = selectedMonth.split('-');
 
-      byDay.forEach((cols, day) => {
-        const pad = (n: number) => String(n).padStart(2, '0');
-        const year = yearStr || String(new Date().getFullYear());
-        const month = monthStr || pad(new Date().getMonth() + 1);
-        const dateStr = `${year}-${month}-${pad(day)}`;
+      const pad = (n: number) => String(n).padStart(2, '0');
+      const defaultYear = String(new Date().getFullYear());
+      const defaultMonth = pad(new Date().getMonth() + 1);
 
-        const parseTime = (v?: string) => (v && /^\d{1,2}:\d{2}$/.test(v) ? v : '');
+      grid.cells.forEach((cell) => {
+        const year = yearStr || defaultYear;
+        const month = monthStr || defaultMonth;
+        const dateStr = `${year}-${month}-${pad(cell.row)}`;
 
-        // 回到 6 欄時間欄架構：0/1 早上上/下、2/3 下午上/下、4/5 加班上/下
-        const startTime = parseTime(cols[0] || cols[2] || cols[4]);
-        const endTime = parseTime(cols[1] || cols[3] || cols[5]);
+        const startTime = cell.startTime;
+        let endTime = cell.endTime;
+        if (endTime === startTime) {
+          endTime = '';
+        }
 
-        if (!startTime && !endTime) return;
+        const workType = cell.shift === 'OT' ? '加班' : '正常班';
+        const note =
+          cell.shift === 'AM'
+            ? '早班'
+            : cell.shift === 'PM'
+            ? '午班'
+            : '晚班/加班';
 
         records.push({
-          id: `${dateStr}`,
+          id: `${dateStr}-${cell.shift}`,
           date: dateStr,
           startTime,
           endTime,
-          workType: '正常班',
-          note: '',
+          workType,
+          note,
           errors: [],
         });
       });
@@ -318,14 +327,19 @@ const ScannerModal: React.FC<Props> = ({ isOpen, onClose }) => {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-7xl h-[95vh] flex flex-col overflow-hidden">
-        <div className="px-4 py-3 border-b flex items-center justify-between bg-slate-50">
+        <div className="px-4 py-3 border-b祝 flex items-center justify-between bg-slate-50">
           <div className="flex items-center gap-2">
-            <span className="font-bold text-slate-800">實體打卡卡 OCR 辨識 (預備版)</span>
+            <span className="font-bold text-slate-800">
+              實體打卡卡 OCR 辨識 (預備版)
+            </span>
             <span className="text-xs text-orange-500 border border-orange-200 px-2 py-0.5 rounded-full">
               實驗功能・不影響現有考勤
             </span>
           </div>
-          <button onClick={onClose} className="p-1 text-slate-500 hover:text-slate-800 rounded-full hover:bg-slate-100">
+          <button
+            onClick={onClose}
+            className="p-1 text-slate-500 hover:text-slate-800 rounded-full hover:bg-slate-100"
+          >
             <X size={18} />
           </button>
         </div>
@@ -349,7 +363,7 @@ const ScannerModal: React.FC<Props> = ({ isOpen, onClose }) => {
                 </button>
                 <button
                   onClick={resetView}
-                  className="px-2 py-1.5 text-xs rounded-lg border bg-white hover:bg-slate-50 flex items-center gap-1"
+                  className="px-2 py-1.5 text-xs rounded-lg border bg白 hover:bg-slate-50 flex items-center gap-1"
                 >
                   <RotateCcw size={14} />
                   重置視圖
@@ -410,7 +424,9 @@ const ScannerModal: React.FC<Props> = ({ isOpen, onClose }) => {
                 onClick={handleRecognize}
                 className="px-4 py-1.5 text-sm rounded-lg bg-blue-600 text-white font-bold hover:bg-blue-700 disabled:opacity-50"
               >
-                {isRecognizing ? (progressMsg || '辨識中...') : '開始 OCR 辨識'}
+                {isRecognizing
+                  ? progressMsg || '辨識中...'
+                  : '開始 OCR 辨識'}
               </button>
             </div>
           </div>
