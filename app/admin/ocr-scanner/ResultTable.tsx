@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, FileSpreadsheet } from 'lucide-react';
+import { saveAs } from 'file-saver';
 import { OcrGridResult } from './RecognitionEngine';
 
 export type OcrAttendanceRecord = {
@@ -23,6 +24,16 @@ type Props = {
 type Staff = {
   id: string; // UUID
   name: string;
+};
+
+const calculateHours = (start: string, end: string) => {
+  if (!start || !end) return 0;
+  const [sh, sm] = start.split(':').map(Number);
+  const [eh, em] = end.split(':').map(Number);
+  if (isNaN(sh) || isNaN(sm) || isNaN(eh) || isNaN(em)) return 0;
+  let diff = eh * 60 + em - (sh * 60 + sm);
+  if (diff < 0) diff += 24 * 60; // 跨夜處理
+  return diff / 60;
 };
 
 export default function ResultTable({ records, setRecords }: Props) {
@@ -161,6 +172,143 @@ export default function ResultTable({ records, setRecords }: Props) {
     }
   };
 
+  const handleExportCSV = () => {
+    if (!records.length) {
+      return alert('沒有可匯出的資料');
+    }
+    if (!selectedStaffId) {
+      return alert('請先選擇歸屬員工，以便在報表上顯示姓名');
+    }
+
+    const staff = staffList.find((s) => String(s.id) === selectedStaffId);
+    const staffName = staff ? staff.name : '未知員工';
+
+    const firstDate = records[0].date;
+    const dateObj = new Date(firstDate);
+    const year = dateObj.getFullYear();
+    const month = dateObj.getMonth() + 1;
+    const daysInMonth = new Date(year, month, 0).getDate();
+
+    const grouped: Record<string, any> = {};
+
+    records.forEach((r) => {
+      if (!r.startTime && !r.endTime) return;
+
+      const d = r.date;
+      if (!grouped[d]) {
+        grouped[d] = {
+          amIn: '',
+          amOut: '',
+          amHrs: 0,
+          pmIn: '',
+          pmOut: '',
+          pmHrs: 0,
+          otIn: '',
+          otOut: '',
+          otHrs: 0,
+          notes: [] as string[],
+        };
+      }
+
+      const hrs = calculateHours(r.startTime, r.endTime);
+      const n = r.note || '';
+      if (n) grouped[d].notes.push(n);
+
+      if (n.includes('早')) {
+        grouped[d].amIn = r.startTime;
+        grouped[d].amOut = r.endTime;
+        grouped[d].amHrs = hrs;
+      } else if (n.includes('午')) {
+        grouped[d].pmIn = r.startTime;
+        grouped[d].pmOut = r.endTime;
+        grouped[d].pmHrs = hrs;
+      } else {
+        grouped[d].otIn = r.startTime;
+        grouped[d].otOut = r.endTime;
+        grouped[d].otHrs = hrs;
+      }
+    });
+
+    const headers = [
+      '日期',
+      '星期',
+      '早上班',
+      '早下班',
+      '早時數',
+      '午上班',
+      '午下班',
+      '午時數',
+      '晚上班',
+      '晚下班',
+      '晚時數',
+      '單日總時數',
+      '備註',
+    ];
+    const rows: string[][] = [];
+    let totalMonthHours = 0;
+
+    for (let i = 1; i <= daysInMonth; i++) {
+      const dStr = `${year}-${String(month).padStart(2, '0')}-${String(i).padStart(
+        2,
+        '0'
+      )}`;
+      const dObj2 = new Date(year, month - 1, i);
+      const weekday = ['日', '一', '二', '三', '四', '五', '六'][dObj2.getDay()];
+
+      if (grouped[dStr]) {
+        const r = grouped[dStr];
+        const total = (r.amHrs || 0) + (r.pmHrs || 0) + (r.otHrs || 0);
+        totalMonthHours += total;
+        const uniqueNotes = Array.from(new Set(r.notes)).join('; ');
+        rows.push([
+          `${month}/${i}`,
+          weekday,
+          r.amIn,
+          r.amOut,
+          r.amHrs ? r.amHrs.toFixed(2) : '',
+          r.pmIn,
+          r.pmOut,
+          r.pmHrs ? r.pmHrs.toFixed(2) : '',
+          r.otIn,
+          r.otOut,
+          r.otHrs ? r.otHrs.toFixed(2) : '',
+          total ? total.toFixed(2) : '',
+          uniqueNotes,
+        ]);
+      } else {
+        rows.push([`${month}/${i}`, weekday, '', '', '', '', '', '', '', '', '', '', '']);
+      }
+    }
+
+    rows.push([]);
+    rows.push([
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '本月總工時',
+      totalMonthHours.toFixed(2),
+      '',
+    ]);
+
+    const titleRow = [`${year}年${month}月 考勤表 (獨立 OCR 辨識) - ${staffName}`];
+    const csvContent =
+      '\uFEFF' +
+      titleRow.join(',') +
+      '\n' +
+      headers.join(',') +
+      '\n' +
+      rows.map((r) => r.join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    saveAs(blob, `${year}年${month}月_${staffName}_OCR打卡表.csv`);
+  };
+
   if (!records.length) {
     return (
       <div className="flex-1 flex flex-col min-h-0 items-center justify-center text-slate-400 text-sm">
@@ -265,6 +413,13 @@ export default function ResultTable({ records, setRecords }: Props) {
         </table>
       </div>
       <div className="px-3 py-2 border-t flex items-center justify-end gap-2">
+        <button
+          onClick={handleExportCSV}
+          disabled={!records.length}
+          className="px-4 py-1.5 text-xs rounded-lg bg-indigo-600 text-white font-bold hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-1"
+        >
+          <FileSpreadsheet size={14} /> 直接匯出全月 CSV (不寫入)
+        </button>
         <button
           onClick={handleSubmit}
           disabled={submitting || !records.length}

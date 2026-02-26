@@ -327,7 +327,23 @@ export default function SalaryPage() {
       const res = await fetch(`/api/salary/history?year_month=${selectedMonth}`);
       const json = await res.json();
       if (json.data && json.data.length > 0) {
-        setLiveReports(json.data.map((d: any) => ({ ...d.snapshot, is_archived: true, history_id: d.id })));
+        // 🟢 對舊版封存資料做防呆：補上缺少的欄位與預設值，避免薪資單明細按鈕觸發時當機
+        const normalized = json.data.map((d: any) => {
+          const snap = d.snapshot || {};
+          return {
+            // 先給預設值，再讓 snapshot 蓋過去（有值的話就用原本的）
+            total_work_hours: 0,
+            normal_hours: 0,
+            period_ot_hours: 0,
+            dailyRecords: [],
+            bonus_details: [],
+            deduction_details: [],
+            ...snap,
+            is_archived: true,
+            history_id: d.id,
+          };
+        });
+        setLiveReports(normalized);
         setIsSaved(true);
       } else {
         setLiveReports([]);

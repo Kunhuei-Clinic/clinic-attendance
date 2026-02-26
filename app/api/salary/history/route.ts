@@ -101,13 +101,30 @@ export async function DELETE(request: NextRequest) {
     }
 
     const searchParams = request.nextUrl.searchParams;
+    const id = searchParams.get('id');
     const yearMonth = searchParams.get('year_month');
 
-    if (!yearMonth) {
-      return NextResponse.json({ error: 'Missing year_month parameter' }, { status: 400 });
+    // ✅ 新增：支援單筆解除封存（依 id 刪除）
+    if (id) {
+      const { error } = await supabaseAdmin
+        .from('salary_history')
+        .delete()
+        .eq('id', id)
+        .eq('clinic_id', clinicId); // 🟢 確保只刪除該診所的紀錄
+
+      if (error) {
+        console.error('Error deleting single salary history record:', error);
+        return NextResponse.json({ error: error.message }, { status: 500 });
+      }
+
+      return NextResponse.json({ success: true });
     }
 
-    // 🟢 多租戶：刪除時也要加上 clinic_id 過濾
+    // ✅ 保留原本依 year_month 全月刪除的備用邏輯
+    if (!yearMonth) {
+      return NextResponse.json({ error: 'Missing year_month or id parameter' }, { status: 400 });
+    }
+
     const { error } = await supabaseAdmin
       .from('salary_history')
       .delete()
