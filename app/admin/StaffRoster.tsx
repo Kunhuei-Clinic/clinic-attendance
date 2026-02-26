@@ -31,7 +31,7 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
     const [staffList, setStaffList] = useState<Staff[]>([]);
     const [rosterMap, setRosterMap] = useState<Record<string, RosterData>>({});
     const [holidays, setHolidays] = useState<string[]>([]);
-    const [complianceErrors, setComplianceErrors] = useState<Record<number, string[]>>({});
+    const [complianceErrors, setComplianceErrors] = useState<Record<string, string[]>>({});
     const [entities, setEntities] = useState<Entity[]>([]);
     const [jobTitleConfigs, setJobTitleConfigs] = useState<JobTitleConfig[]>([]);
 
@@ -316,7 +316,7 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
     };
     useEffect(() => { validateCompliance(); }, [rosterMap, staffList]);
 
-    const updateWorkRule = async (staffId: number, rule: any) => {
+    const updateWorkRule = async (staffId: string, rule: any) => {
         try {
             const response = await fetch('/api/staff', {
                 method: 'PATCH',
@@ -358,7 +358,7 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
         }
     };
 
-    const cycleDayType = async (staffId: number, dateStr: string) => {
+    const cycleDayType = async (staffId: string, dateStr: string) => {
         const key = `${staffId}_${dateStr}`;
         const currentData = rosterMap[key] || { shifts: [], day_type: 'normal' };
         let nextType: DayType = 'normal';
@@ -369,7 +369,7 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
         updateRoster(staffId, dateStr, nextShifts, nextType, currentData.shift_details);
     };
 
-    const toggleShift = async (staffId: number, dateStr: string, shift: Shift) => {
+    const toggleShift = async (staffId: string, dateStr: string, shift: Shift) => {
         const key = `${staffId}_${dateStr}`;
         const currentData = rosterMap[key] || { shifts: [], day_type: 'normal', shift_details: {} };
 
@@ -420,7 +420,7 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
     };
 
     // 🟢 核心功能更新：將 shift_details 寫入資料庫
-    const updateRoster = async (staffId: number, dateStr: string, shifts: Shift[], dayType: DayType, details: any = {}) => {
+    const updateRoster = async (staffId: string, dateStr: string, shifts: Shift[], dayType: DayType, details: any = {}) => {
         const key = `${staffId}_${dateStr}`;
         
         // 計算當日整體的 Start/End (取最小值與最大值，供列表顯示或簡易計算用)
@@ -461,7 +461,7 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
     };
 
     // 🟢 統計功能更新：依據 Snapshot 的時間計算工時
-    const calculateStats = (staffId: number) => {
+    const calculateStats = (staffId: string) => {
         let totalDays = 0;
         let totalHours = 0;
         const days = getDaysInMonth();

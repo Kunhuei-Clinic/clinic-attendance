@@ -20,8 +20,8 @@ export default function DoctorRosterView() {
     const [closedDays, setClosedDays] = useState<string[]>([]);
     const [specialTypes, setSpecialTypes] = useState<string[]>([]);
     const [loading, setLoading] = useState(false);
-    const [focusedDocId, setFocusedDocId] = useState<number | null>(null);
-    const [stats, setStats] = useState<Record<number, { total: number, weekly: number[] }>>({});
+    const [focusedDocId, setFocusedDocId] = useState<string | null>(null);
+    const [stats, setStats] = useState<Record<string, { total: number, weekly: number[] }>>({});
 
     const [businessHours, setBusinessHours] = useState({
         openDays: [1, 2, 3, 4, 5, 6],
@@ -37,7 +37,7 @@ export default function DoctorRosterView() {
     const [isPrintOpen, setIsPrintOpen] = useState(false);
 
     const [selectedSlot, setSelectedSlot] = useState<{ date: string, shiftId: string, shiftName: string } | null>(null);
-    const [editingId, setEditingId] = useState<number | null>(null);
+    const [editingId, setEditingId] = useState<string | null>(null);
 
     const [assignForm, setAssignForm] = useState({
         doctorId: '',
@@ -65,7 +65,28 @@ export default function DoctorRosterView() {
         try {
             const response = await fetch('/api/staff?role=醫師');
             const result = await response.json();
-            if (result.data) setDoctors(result.data.filter((s: any) => s.role === '醫師'));
+            if (result.data) {
+                // 權重排序：依照職類分組排序（雖然都是醫師，但保持一致性）
+                const roleWeight: Record<string, number> = { 
+                  '醫師': 1, 
+                  '主管': 2, 
+                  '櫃台': 3, 
+                  '護理師': 4, 
+                  '營養師': 5, 
+                  '診助': 6, 
+                  '藥師': 7, 
+                  '藥局助理': 8 
+                };
+                const filtered = result.data.filter((s: any) => s.role === '醫師');
+                const sorted = [...filtered].sort((a, b) => {
+                  const aWeight = roleWeight[a.role || ''] ?? 999;
+                  const bWeight = roleWeight[b.role || ''] ?? 999;
+                  if (aWeight !== bWeight) return aWeight - bWeight;
+                  // 同職類內按姓名排序
+                  return (a.name || '').localeCompare(b.name || '');
+                });
+                setDoctors(sorted);
+            }
         } catch (error) {
             console.error('Fetch doctors error:', error);
         }
@@ -161,7 +182,7 @@ export default function DoctorRosterView() {
         }
     };
     const calculateStats = () => {
-        const newStats: Record<number, { total: number, weekly: number[] }> = {};
+        const newStats: Record<string, { total: number, weekly: number[] }> = {};
         doctors.forEach(d => { newStats[d.id] = { total: 0, weekly: [0, 0, 0, 0, 0, 0] }; });
         rosterData.forEach(r => {
             if (r.start_time && r.end_time) {
@@ -224,7 +245,7 @@ export default function DoctorRosterView() {
                     alert("更新失敗: " + result.message);
                 }
             } else {
-                const exists = rosterData.find(r => r.date === selectedSlot.date && r.shift_code === selectedSlot.shiftId && r.doctor_id === doctorId);
+                const exists = rosterData.find(r => r.date === selectedSlot.date && r.shift_code === selectedSlot.shiftId && r.doctor_id === assignForm.doctorId);
                 if (exists) {
                     if (!confirm("覆蓋？")) return;
                 }
@@ -247,7 +268,7 @@ export default function DoctorRosterView() {
         }
     };
     
-    const removeRoster = async (id: number) => {
+    const removeRoster = async (id: string) => {
         if (!confirm('確定刪除？')) return;
         try {
             setRosterData(prev => prev.filter(r => r.id !== id));

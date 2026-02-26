@@ -20,7 +20,7 @@ export default function StaffManagement() {
     try {
       const response = await fetch('/api/staff');
       const result = await response.json();
-      if (result.data) {
+      if (result.data && Array.isArray(result.data)) {
         // 權重排序：依照職類分組排序
         const roleWeight: Record<string, number> = { 
           '醫師': 1, 
@@ -33,16 +33,24 @@ export default function StaffManagement() {
           '藥局助理': 8 
         };
         const sorted = [...result.data].sort((a, b) => {
-          const aWeight = roleWeight[a.role || ''] ?? 999;
-          const bWeight = roleWeight[b.role || ''] ?? 999;
-          if (aWeight !== bWeight) return aWeight - bWeight;
-          // 同職類內按姓名排序
-          return (a.name || '').localeCompare(b.name || '');
+          try {
+            const aWeight = roleWeight[a?.role || ''] ?? 999;
+            const bWeight = roleWeight[b?.role || ''] ?? 999;
+            if (aWeight !== bWeight) return aWeight - bWeight;
+            // 同職類內按姓名排序
+            return (a?.name || '').localeCompare(b?.name || '');
+          } catch (e) {
+            console.error('Sort error:', e, a, b);
+            return 0;
+          }
         });
         setStaffList(sorted || []);
+      } else {
+        setStaffList([]);
       }
     } catch (error) {
       console.error('Fetch staff error:', error);
+      setStaffList([]);
     } finally {
       setLoadingStaff(false);
     }
@@ -85,7 +93,10 @@ export default function StaffManagement() {
     }
   };
 
-  const displayedStaff = staffList.filter(s => showResigned ? true : s.is_active);
+  const displayedStaff = staffList.filter(s => {
+    if (showResigned) return true;
+    return s?.is_active !== false; // 顯示所有非離職的員工（is_active 為 true 或 undefined/null）
+  });
 
   return (
     <>
