@@ -57,16 +57,25 @@ export default function DoctorRosterView() {
 
     const formatTimeDisplay = (time: string) => time ? (time.startsWith('0') ? time.slice(1) : time) : '';
 
-    useEffect(() => { fetchDoctors(); fetchSettings(); }, []);
-    useEffect(() => { fetchRoster(); fetchClosedDays(); }, [currentDate]);
+    useEffect(() => { loadInitialData(); }, []);
+    useEffect(() => { loadMonthData(); }, [currentDate]);
     useEffect(() => { calculateStats(); }, [rosterData, currentDate]);
 
-    const fetchDoctors = async () => {
+    // 🟢 優化：集中載入初始資料（醫師列表與系統設定）
+    const loadInitialData = async () => {
         try {
-            const response = await fetch('/api/staff?role=醫師');
-            const result = await response.json();
-            if (result.data) {
-                // 權重排序：依照職類分組排序（雖然都是醫師，但保持一致性）
+            const [doctorsRes, settingsRes] = await Promise.all([
+                fetch('/api/staff?role=醫師'),
+                fetch('/api/settings')
+            ]);
+
+            const [doctorsResult, settingsResult] = await Promise.all([
+                doctorsRes.json(),
+                settingsRes.json()
+            ]);
+
+            // 處理醫師列表
+            if (doctorsResult.data) {
                 const roleWeight: Record<string, number> = { 
                   '醫師': 1, 
                   '主管': 2, 
@@ -77,27 +86,19 @@ export default function DoctorRosterView() {
                   '藥師': 7, 
                   '藥局助理': 8 
                 };
-                const filtered = result.data.filter((s: any) => s.role === '醫師');
+                const filtered = doctorsResult.data.filter((s: any) => s.role === '醫師');
                 const sorted = [...filtered].sort((a, b) => {
                   const aWeight = roleWeight[a.role || ''] ?? 999;
                   const bWeight = roleWeight[b.role || ''] ?? 999;
                   if (aWeight !== bWeight) return aWeight - bWeight;
-                  // 同職類內按姓名排序
                   return (a.name || '').localeCompare(b.name || '');
                 });
                 setDoctors(sorted);
             }
-        } catch (error) {
-            console.error('Fetch doctors error:', error);
-        }
-    };
-    
-    const fetchSettings = async () => {
-        try {
-            const response = await fetch('/api/settings');
-            const result = await response.json();
-            if (result.data) {
-                result.data.forEach((item: any) => {
+
+            // 處理系統設定
+            if (settingsResult.data) {
+                settingsResult.data.forEach((item: any) => {
                     if (item.key === 'special_clinic_types') {
                         try { setSpecialTypes(JSON.parse(item.value)); } catch (e) { }
                     }
@@ -107,46 +108,47 @@ export default function DoctorRosterView() {
                 });
             }
         } catch (error) {
-            console.error('Fetch settings error:', error);
+            console.error('Load initial data error:', error);
         }
     };
-    
-    const fetchRoster = async () => {
+
+    // 🟢 優化：集中載入當月資料（班表與休診日），使用 Promise.all 減少重繪
+    const loadMonthData = async () => {
         setLoading(true);
         try {
             const year = currentDate.getFullYear();
             const month = currentDate.getMonth() + 1;
-            const response = await fetch(`/api/roster/doctor?year=${year}&month=${month}`);
-            const result = await response.json();
-            if (result.error) {
-                console.error('Error:', result.error);
+            
+            const [rosterRes, closedDaysRes] = await Promise.all([
+                fetch(`/api/roster/doctor?year=${year}&month=${month}`),
+                fetch(`/api/roster/closed-days?year=${year}&month=${month}`)
+            ]);
+
+            const [rosterResult, closedDaysResult] = await Promise.all([
+                rosterRes.json(),
+                closedDaysRes.json()
+            ]);
+
+            // 統一更新 State，減少重繪次數
+            if (rosterResult.error) {
+                console.error('Error:', rosterResult.error);
                 setRosterData([]);
             } else {
-                setRosterData(result.data || []);
+                setRosterData(rosterResult.data || []);
             }
-        } catch (error) {
-            console.error('Fetch roster error:', error);
-            setRosterData([]);
-        } finally {
-            setLoading(false);
-        }
-    };
-    
-    const fetchClosedDays = async () => {
-        try {
-            const year = currentDate.getFullYear();
-            const month = currentDate.getMonth() + 1;
-            const response = await fetch(`/api/roster/closed-days?year=${year}&month=${month}`);
-            const result = await response.json();
-            if (result.error) {
-                console.error('Error:', result.error);
+
+            if (closedDaysResult.error) {
+                console.error('Error:', closedDaysResult.error);
                 setClosedDays([]);
             } else {
-                setClosedDays(result.data || []);
+                setClosedDays(closedDaysResult.data || []);
             }
         } catch (error) {
-            console.error('Fetch closed days error:', error);
+            console.error('Load month data error:', error);
+            setRosterData([]);
             setClosedDays([]);
+        } finally {
+            setLoading(false);
         }
     };
     
@@ -240,7 +242,7 @@ export default function DoctorRosterView() {
                 const result = await response.json();
                 if (result.success) {
                     setIsModalOpen(false);
-                    fetchRoster();
+                    loadMonthData();
                 } else {
                     alert("更新失敗: " + result.message);
                 }
@@ -257,7 +259,7 @@ export default function DoctorRosterView() {
                 const result = await response.json();
                 if (result.success) {
                     setIsModalOpen(false);
-                    fetchRoster();
+                    loadMonthData();
                 } else {
                     alert("寫入失敗: " + result.message);
                 }
@@ -276,7 +278,7 @@ export default function DoctorRosterView() {
             const result = await response.json();
             if (result.success) {
                 setIsModalOpen(false);
-                fetchRoster();
+                loadMonthData();
             } else {
                 alert('刪除失敗: ' + result.message);
             }
@@ -294,7 +296,7 @@ export default function DoctorRosterView() {
             const result = await response.json();
             if (result.success) {
                 setIsBatchOpen(false);
-                fetchRoster();
+                loadMonthData();
             } else {
                 alert('刪除失敗: ' + result.message);
             }
@@ -317,7 +319,7 @@ export default function DoctorRosterView() {
             const result = await response.json();
             if (result.success) {
                 setIsBatchOpen(false);
-                fetchRoster();
+                loadMonthData();
                 alert(result.message || '已複製');
             } else {
                 alert('複製失敗: ' + result.message);

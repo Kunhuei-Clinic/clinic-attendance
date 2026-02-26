@@ -60,11 +60,9 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
         fetchRosterSettings(); // 載入職稱與組織單位設定
     }, []);
 
-    // 資料讀取
+    // 🟢 優化：集中載入當月資料（員工列表、班表、國定假日），使用 Promise.all 減少重繪
     useEffect(() => {
-        fetchStaff();
-        fetchRoster();
-        fetchHolidays();
+        loadMonthData();
     }, [currentDate]);
 
     // 🟢 功能：讀取系統設定 (營業時間)
@@ -193,12 +191,26 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
         }
     };
 
-    const fetchStaff = async () => {
+    // 🟢 優化：集中載入當月資料（員工列表、班表、國定假日），使用 Promise.all 減少重繪
+    const loadMonthData = async () => {
         try {
-            const response = await fetch('/api/staff');
-            const result = await response.json();
-            if (result.data) {
-                // 權重排序：依照職類分組排序
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth() + 1;
+            
+            const [staffRes, rosterRes, holidaysRes] = await Promise.all([
+                fetch('/api/staff'),
+                fetch(`/api/roster/staff?year=${year}&month=${month}`),
+                fetch(`/api/roster/holidays?year=${year}&month=${month}`)
+            ]);
+
+            const [staffResult, rosterResult, holidaysResult] = await Promise.all([
+                staffRes.json(),
+                rosterRes.json(),
+                holidaysRes.json()
+            ]);
+
+            // 處理員工列表（權重排序）
+            if (staffResult.data) {
                 const roleWeight: Record<string, number> = { 
                   '醫師': 1, 
                   '主管': 2, 
@@ -209,46 +221,19 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
                   '藥師': 7, 
                   '藥局助理': 8 
                 };
-                const sorted = [...result.data].sort((a, b) => {
+                const sorted = [...staffResult.data].sort((a, b) => {
                   const aWeight = roleWeight[a.role || ''] ?? 999;
                   const bWeight = roleWeight[b.role || ''] ?? 999;
                   if (aWeight !== bWeight) return aWeight - bWeight;
-                  // 同職類內按姓名排序
                   return (a.name || '').localeCompare(b.name || '');
                 });
-                // 不在此處過濾職稱，由 job_titles 設定控制是否加入排班
                 setStaffList(sorted);
             }
-        } catch (error) {
-            console.error('Fetch staff error:', error);
-        }
-    };
 
-    const fetchHolidays = async () => {
-        try {
-            const year = currentDate.getFullYear();
-            const month = currentDate.getMonth() + 1;
-            const response = await fetch(`/api/roster/holidays?year=${year}&month=${month}`);
-            const result = await response.json();
-            if (result.data) {
-                setHolidays(result.data);
-            }
-        } catch (error) {
-            console.error('Fetch holidays error:', error);
-            setHolidays([]);
-        }
-    };
-
-    const fetchRoster = async () => {
-        try {
-            const year = currentDate.getFullYear();
-            const month = currentDate.getMonth() + 1;
-            const response = await fetch(`/api/roster/staff?year=${year}&month=${month}`);
-            const result = await response.json();
-            
+            // 處理班表資料
             const map: Record<string, RosterData> = {};
-            if (result.data) {
-                result.data.forEach((r: any) => {
+            if (rosterResult.data) {
+                rosterResult.data.forEach((r: any) => {
                     let shifts: Shift[] = [];
                     if (Array.isArray(r.shifts)) shifts = r.shifts.filter((s: any) => typeof s === 'string' && ['M', 'A', 'N'].includes(s));
                     let day_type: DayType = 'normal';
@@ -260,9 +245,18 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
                 });
             }
             setRosterMap(map);
+
+            // 處理國定假日
+            if (holidaysResult.data) {
+                setHolidays(holidaysResult.data);
+            } else {
+                setHolidays([]);
+            }
         } catch (error) {
-            console.error('Fetch roster error:', error);
+            console.error('Load month data error:', error);
+            setStaffList([]);
             setRosterMap({});
+            setHolidays([]);
         }
     };
 
