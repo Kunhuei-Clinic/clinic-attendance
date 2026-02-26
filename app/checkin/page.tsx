@@ -12,7 +12,7 @@ const LIFF_ID = '2008669814-8OqQmkaL';
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-type Staff = { id: number; name: string; line_user_id: string | null; };
+type Staff = { id: string; name: string; line_user_id: string | null; }; // UUID
 type Log = { id: number; clock_in_time: string; clock_out_time: string | null; work_hours: number | null; };
 
 export default function CheckinPage() {

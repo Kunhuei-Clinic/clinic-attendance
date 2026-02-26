@@ -285,7 +285,7 @@ export default function AttendanceView() {
 
       const payload = {
         id: editingLogId || undefined,
-        staffId: Number(formData.staffId),
+        staffId: formData.staffId,
         staffName: staff.name,
         date: formData.date,
         startTime: formData.startTime,

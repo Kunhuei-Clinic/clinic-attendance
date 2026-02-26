@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (staffId) {
-      query = query.eq('staff_id', Number(staffId));
+      query = query.eq('staff_id', staffId);
     }
 
     const { data, error } = await query.order('id', { ascending: true });

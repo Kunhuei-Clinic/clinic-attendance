@@ -23,7 +23,7 @@ export default function CalculatorView({ reports, adjustments, modifyAdjustment,
         </thead>
         <tbody className="divide-y divide-slate-100 text-sm">
           {reports.map((rpt: any, idx: number) => {
-             const staffId = staffList?.find((s:any) => s.name === rpt.staff_name)?.id;
+             const staffId = rpt.staff_id || staffList?.find((s:any) => s.name === rpt.staff_name)?.id;
              const myAdjustments = adjustments?.[staffId] || [];
              const myBonuses = myAdjustments.filter((a:any) => a.type === 'bonus');
              const myDeductions = myAdjustments.filter((a:any) => a.type === 'deduction');

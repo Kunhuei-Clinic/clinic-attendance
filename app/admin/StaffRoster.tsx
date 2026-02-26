@@ -10,7 +10,7 @@ const SHIFT_MAPPING: Record<string, 'AM' | 'PM' | 'NIGHT'> = {
     'N': 'NIGHT'
 };
 
-type Staff = { id: number; name: string; role: string; display_order: number; work_rule: 'normal' | '2week' | '4week' | '8week' | 'none'; entity?: string; };
+type Staff = { id: string; name: string; role: string; display_order: number; work_rule: 'normal' | '2week' | '4week' | '8week' | 'none'; entity?: string; }; // UUID
 type Shift = 'M' | 'A' | 'N';
 type DayType = 'normal' | 'rest' | 'regular';
 // 更新 RosterData 定義，加入 shift_details

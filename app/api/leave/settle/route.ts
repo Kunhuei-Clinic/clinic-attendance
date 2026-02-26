@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
     const { data: staff, error: staffError } = await supabaseAdmin
       .from('staff')
       .select('id, name, base_salary, salary_mode')
-      .eq('id', Number(staff_id))
+      .eq('id', staff_id)
       .eq('clinic_id', clinicId) // 🟢 確保只查詢該診所的員工
       .single();
     
@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
     const { data: leaveRequests } = await supabaseAdmin
       .from('leave_requests')
       .select('staff_id, hours, start_time')
-      .eq('staff_id', Number(staff_id))
+      .eq('staff_id', staff_id)
       .eq('type', '特休')
       .eq('status', 'approved')
       .eq('clinic_id', clinicId); // 🟢 只查詢該診所的請假紀錄
@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
     const { data: settlements } = await supabaseAdmin
       .from('leave_settlements')
       .select('staff_id, days, status')
-      .eq('staff_id', Number(staff_id))
+      .eq('staff_id', staff_id)
       .eq('status', 'processed')
       .eq('clinic_id', clinicId); // 🟢 只查詢該診所的結算紀錄
     
@@ -108,7 +108,7 @@ export async function POST(request: NextRequest) {
     const { data: settlement, error: insertError } = await supabaseAdmin
       .from('leave_settlements')
       .insert([{
-        staff_id: Number(staff_id),
+        staff_id: staff_id,
         days: Number(days),
         amount,
         pay_month,
@@ -169,7 +169,7 @@ export async function GET(request: NextRequest) {
       .order('created_at', { ascending: false });
     
     if (staffId) {
-      query = query.eq('staff_id', Number(staffId));
+      query = query.eq('staff_id', staffId);
     }
     
     if (payMonth) {
@@ -229,7 +229,7 @@ export async function PATCH(request: NextRequest) {
     const { error } = await supabaseAdmin
       .from('leave_settlements')
       .update({ status })
-      .eq('id', Number(id))
+        .eq('id', id)
       .eq('clinic_id', clinicId); // 🟢 確保只更新該診所的紀錄
     
     if (error) {

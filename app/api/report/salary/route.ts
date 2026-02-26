@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
       }
 
       if (selectedStaffId !== 'all') {
-        query = query.eq('doctor_id', Number(selectedStaffId));
+        query = query.eq('doctor_id', selectedStaffId);
       }
 
       const { data: docs } = await query;
@@ -106,7 +106,7 @@ export async function GET(request: NextRequest) {
         const { data: staff } = await supabaseAdmin
           .from('staff')
           .select('name')
-          .eq('id', Number(selectedStaffId))
+          .eq('id', selectedStaffId)
           .eq('clinic_id', clinicId) // 🟢 確保只查詢該診所的員工
           .single();
         

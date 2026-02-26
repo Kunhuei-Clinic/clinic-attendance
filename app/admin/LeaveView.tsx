@@ -153,7 +153,7 @@ export default function LeaveView() {
     reason: string;
   }) => {
     try {
-      const staff = staffList.find(s => s.id === Number(formData.staff_id));
+      const staff = staffList.find(s => s.id === formData.staff_id);
       if (!staff) {
         alert('找不到員工資料');
         return;
@@ -163,7 +163,7 @@ export default function LeaveView() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          staff_id: Number(formData.staff_id),
+          staff_id: formData.staff_id,
           staff_name: staff.name,
           type: formData.type,
           date: formData.date,

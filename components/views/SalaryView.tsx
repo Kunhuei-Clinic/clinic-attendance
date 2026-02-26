@@ -86,7 +86,7 @@ export default function SalaryView() {
     try {
       const res = await fetch(`/api/salary/adjustments?year_month=${selectedMonth}`);
       const json = await res.json();
-      const map: Record<number, any[]> = {};
+      const map: Record<string, any[]> = {};
       json.data?.forEach((item: any) => {
         if (!map[item.staff_id]) map[item.staff_id] = [];
         map[item.staff_id].push(item);
@@ -137,8 +137,8 @@ export default function SalaryView() {
       const reports: any[] = [];
 
       staffList.forEach(staff => {
-        const myLogs = logs?.filter((l: any) => l.staff_name === staff.name) || [];
-        const myLeaves = leaves?.filter((l: any) => l.staff_id === staff.id) || [];
+        const myLogs = logs?.filter((l: any) => String(l.staff_id) === String(staff.id)) || [];
+        const myLeaves = leaves?.filter((l: any) => String(l.staff_id) === String(staff.id)) || [];
 
         // 執行計算引擎
         const calc = calculateStaffSalary(staff, myLogs, rosterMap, holidaySet, monthlyStandardHours, myLeaves);
@@ -235,7 +235,7 @@ export default function SalaryView() {
     try {
       const records = liveReports.map(rpt => ({
         year_month: selectedMonth,
-        staff_id: staffList.find(s => s.name === rpt.staff_name)?.id,
+        staff_id: rpt.staff_id || staffList.find(s => s.name === rpt.staff_name)?.id,
         staff_name: rpt.staff_name,
         snapshot: rpt
       }));

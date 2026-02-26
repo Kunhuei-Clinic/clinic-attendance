@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
       .eq('clinic_id', clinicId); // 只查詢該診所的醫師 PPF
 
     if (doctorId) {
-      query = query.eq('doctor_id', Number(doctorId));
+      query = query.eq('doctor_id', doctorId);
     }
 
     if (targetMonth) {
@@ -102,7 +102,7 @@ export async function POST(request: NextRequest) {
     const { data: doctor } = await supabaseAdmin
       .from('staff')
       .select('id, clinic_id')
-      .eq('id', Number(doctor_id))
+      .eq('id', doctor_id)
       .eq('clinic_id', clinicId)
       .eq('role', '醫師')
       .single();

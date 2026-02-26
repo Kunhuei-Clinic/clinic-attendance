@@ -21,7 +21,7 @@ type Props = {
 };
 
 type Staff = {
-  id: number;
+  id: string; // UUID
   name: string;
 };
 
@@ -42,7 +42,7 @@ export default function ResultTable({ records, setRecords }: Props) {
           ? json.data
           : [];
         const mapped: Staff[] = list.map((s: any) => ({
-          id: Number(s.id),
+          id: s.id,
           name: s.name || `員工#${s.id}`,
         }));
         setStaffList(mapped);
@@ -95,8 +95,7 @@ export default function ResultTable({ records, setRecords }: Props) {
       alert('請先選擇員工');
       return;
     }
-    const staffIdNum = Number(selectedStaffId);
-    const staff = staffList.find((s) => s.id === staffIdNum);
+    const staff = staffList.find((s) => s.id === selectedStaffId);
     if (!staff) {
       alert('選擇的員工不存在，請重新選擇');
       return;
@@ -123,7 +122,7 @@ export default function ResultTable({ records, setRecords }: Props) {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              staffId: staffIdNum,
+              staffId: selectedStaffId,
               staffName: staff.name,
               date: r.date,
               startTime: r.startTime,

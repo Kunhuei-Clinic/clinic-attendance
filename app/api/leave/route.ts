@@ -45,7 +45,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (selectedStaffId !== 'all') {
-      query = query.eq('staff_id', Number(selectedStaffId));
+      query = query.eq('staff_id', selectedStaffId);
     }
 
     if (statusFilter !== 'all') {
@@ -128,7 +128,7 @@ export async function POST(request: NextRequest) {
     const { data: staff } = await supabaseAdmin
       .from('staff')
       .select('id, clinic_id')
-      .eq('id', Number(staff_id))
+      .eq('id', staff_id)
       .eq('clinic_id', clinicId)
       .single();
 
@@ -146,7 +146,7 @@ export async function POST(request: NextRequest) {
     const { error } = await supabaseAdmin
       .from('leave_requests')
       .insert([{
-        staff_id: Number(staff_id),
+        staff_id: staff_id,
         staff_name,
         type,
         start_time: startFull,
@@ -213,7 +213,7 @@ export async function PATCH(request: NextRequest) {
     const { error } = await supabaseAdmin
       .from('leave_requests')
       .update({ status })
-      .eq('id', Number(id))
+      .eq('id', id)
       .eq('clinic_id', clinicId); // 🟢 確保只更新該診所的紀錄
 
     if (error) {
@@ -269,7 +269,7 @@ export async function DELETE(request: NextRequest) {
     const { error } = await supabaseAdmin
       .from('leave_requests')
       .delete()
-      .eq('id', Number(id))
+      .eq('id', id)
       .eq('clinic_id', clinicId); // 🟢 確保只刪除該診所的紀錄
 
     if (error) {

@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (staffId) {
-      query = query.eq('staff_id', Number(staffId));
+      query = query.eq('staff_id', staffId);
     }
 
     const { data, error } = await query.order('id', { ascending: true });
@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
     const { data: staff } = await supabaseAdmin
       .from('staff')
       .select('id, clinic_id')
-      .eq('id', Number(staff_id))
+      .eq('id', staff_id)
       .eq('clinic_id', clinicId)
       .single();
 
@@ -172,7 +172,7 @@ export async function DELETE(request: NextRequest) {
     const { error } = await supabaseAdmin
       .from('salary_adjustments')
       .delete()
-      .eq('id', Number(id))
+        .eq('id', id)
       .eq('clinic_id', clinicId); // 🟢 確保只刪除該診所的紀錄
 
     if (error) {

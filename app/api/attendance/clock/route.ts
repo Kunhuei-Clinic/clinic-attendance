@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
     const { data: staff, error: staffError } = await supabaseAdmin
       .from('staff')
       .select('id, name, clinic_id, is_active')
-      .eq('id', Number(staffId))
+      .eq('id', staffId)
       .single();
 
     if (staffError || !staff) {
@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
       const now = new Date().toISOString();
       // 🟢 多租戶：將 clinic_id 合併到 payload 中（不讓前端傳入）
       const payload: any = {
-        staff_id: Number(staffId),
+        staff_id: staffId,
         staff_name: staffName,
         clock_in_time: now,
         status: 'working',
@@ -125,7 +125,7 @@ export async function POST(request: NextRequest) {
         .select('clock_in_time, clinic_id, staff_id')
         .eq('id', logId)
         .eq('clinic_id', clinicId) // 🟢 確保只查詢該診所的紀錄
-        .eq('staff_id', Number(staffId)) // 🟢 確保是該員工的紀錄
+        .eq('staff_id', staffId) // 🟢 確保是該員工的紀錄
         .single();
 
       if (!existing) {

@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
 
     // 支援 doctor_id 過濾
     if (doctorId) {
-      query = query.eq('doctor_id', Number(doctorId));
+      query = query.eq('doctor_id', doctorId);
     }
 
     // 支援日期範圍查詢（用於 DoctorRosterPrint）
@@ -133,7 +133,7 @@ export async function POST(request: NextRequest) {
     const { data: doctor } = await supabaseAdmin
       .from('staff')
       .select('id, clinic_id')
-      .eq('id', Number(doctor_id))
+      .eq('id', doctor_id)
       .eq('clinic_id', clinicId)
       .eq('role', '醫師')
       .single();
@@ -147,7 +147,7 @@ export async function POST(request: NextRequest) {
 
     // 🟢 多租戶：將 clinic_id 合併到 payload 中（不讓前端傳入）
     const payload = {
-      doctor_id: Number(doctor_id),
+      doctor_id: doctor_id,
       date,
       shift_code,
       start_time,
@@ -242,7 +242,7 @@ export async function DELETE(request: NextRequest) {
       const { error: deleteError } = await supabaseAdmin
         .from('doctor_roster')
         .delete()
-        .eq('id', Number(id))
+        .eq('id', id)
         .eq('clinic_id', clinicId); // 🟢 確保只刪除該診所的紀錄
       error = deleteError;
     } else if (start && end) {

@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 
 type Staff = {
-  id: number;
+  id: string; // UUID
   name: string;
   role?: string | null;
 };

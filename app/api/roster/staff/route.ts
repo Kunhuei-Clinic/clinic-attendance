@@ -106,7 +106,7 @@ export async function POST(request: NextRequest) {
     const { data: staff } = await supabaseAdmin
       .from('staff')
       .select('id, clinic_id')
-      .eq('id', Number(staff_id))
+      .eq('id', staff_id)
       .eq('clinic_id', clinicId)
       .single();
 
@@ -133,7 +133,7 @@ export async function POST(request: NextRequest) {
 
     // 🟢 多租戶：將 clinic_id 合併到 payload 中（不讓前端傳入）
     const payload: any = {
-      staff_id: Number(staff_id),
+      staff_id: staff_id,
       date,
       shifts: shifts || [],
       day_type: day_type || 'normal',

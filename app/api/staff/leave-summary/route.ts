@@ -37,11 +37,11 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const staffIdParam = searchParams.get('staff_id');
 
-    if (!staffIdParam || isNaN(Number(staffIdParam))) {
+    if (!staffIdParam) {
       return NextResponse.json({ error: '無效的 staff_id 參數' }, { status: 400 });
     }
 
-    const staffId = Number(staffIdParam);
+    const staffId = staffIdParam;
 
     // 2. 讀取員工基本資料
     const { data: staff, error: staffError } = await supabaseAdmin

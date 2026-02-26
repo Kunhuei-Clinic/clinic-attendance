@@ -93,19 +93,11 @@ export async function GET(request: NextRequest) {
 
     // 🟢 新模式：查詢特定員工的詳細結算紀錄 / 帳本
     if (action === 'details' && staffId) {
-      const staffIdNum = Number(staffId);
-      if (isNaN(staffIdNum)) {
-        return NextResponse.json(
-          { error: '無效的員工 ID' },
-          { status: 400 }
-        );
-      }
-
       // 1. 驗證員工屬於當前診所，並取得特休歷史 JSON
       const { data: staff, error: staffError } = await supabaseAdmin
         .from('staff')
         .select('id, name, annual_leave_history')
-        .eq('id', staffIdNum)
+        .eq('id', staffId)
         .eq('clinic_id', clinicId)
         .single();
 
@@ -120,7 +112,7 @@ export async function GET(request: NextRequest) {
       const { data: leaveRequests, error: leaveError } = await supabaseAdmin
         .from('leave_requests')
         .select('hours, start_time')
-        .eq('staff_id', staffIdNum)
+        .eq('staff_id', staffId)
         .eq('type', '特休')
         .eq('status', 'approved')
         .eq('clinic_id', clinicId);
@@ -137,7 +129,7 @@ export async function GET(request: NextRequest) {
       const { data: settlements, error: settleError } = await supabaseAdmin
         .from('leave_settlements')
         .select('*')
-        .eq('staff_id', staffIdNum)
+        .eq('staff_id', staffId)
         .eq('clinic_id', clinicId)
         .order('created_at', { ascending: false }); // 由新到舊排序
 

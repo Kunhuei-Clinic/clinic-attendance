@@ -150,7 +150,7 @@ export async function POST(request: NextRequest) {
     const { data: staff } = await supabaseAdmin
       .from('staff')
       .select('id, clinic_id')
-      .eq('id', Number(staffId))
+      .eq('id', staffId)
       .eq('clinic_id', clinicId)
       .single();
 
@@ -176,7 +176,7 @@ export async function POST(request: NextRequest) {
 
     // 🟢 多租戶：將 clinic_id 合併到 payload 中（不讓前端傳入）
     const payload = {
-      staff_id: Number(staffId),
+      staff_id: staffId,
       staff_name: staffName,
       clock_in_time: startDateTime.toISOString(),
       clock_out_time: endDateTime ? endDateTime.toISOString() : null,
@@ -354,7 +354,7 @@ export async function DELETE(request: NextRequest) {
     const { error } = await supabaseAdmin
       .from('attendance_logs')
       .delete()
-      .eq('id', Number(id))
+        .eq('id', id)
       .eq('clinic_id', clinicId); // 🟢 確保只刪除該診所的紀錄
 
     if (error) {

@@ -49,7 +49,7 @@ export async function PUT(request: NextRequest) {
     const { data: staff, error: staffError } = await supabaseAdmin
       .from('staff')
       .select('id, clinic_id, is_active')
-      .eq('id', Number(staff_id))
+      .eq('id', staff_id)
       .eq('clinic_id', clinicId)
       .single();
 
@@ -98,7 +98,7 @@ export async function PUT(request: NextRequest) {
     const { error: updateError } = await supabaseAdmin
       .from('staff')
       .update(updatePayload)
-      .eq('id', Number(staff_id))
+      .eq('id', staff_id)
       .eq('clinic_id', clinicId); // 🟢 確保只更新該診所的員工
 
     if (updateError) {
@@ -154,7 +154,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const staffId = Number(staffIdParam);
+    const staffId = staffIdParam;
 
     // 🟢 多租戶：驗證該員工是否屬於當前診所
     const { data: staff, error: staffError } = await supabaseAdmin

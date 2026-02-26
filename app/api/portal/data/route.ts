@@ -27,10 +27,10 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const staffId = Number(staffIdCookie.value);
+    const staffId = staffIdCookie.value;
     const clinicId = clinicIdCookie.value;
 
-    if (isNaN(staffId) || !clinicId) {
+    if (!staffId || !clinicId) {
       return NextResponse.json(
         { success: false, error: '無效的 Session 資料' },
         { status: 401 }

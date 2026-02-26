@@ -96,7 +96,7 @@ export async function POST(request: NextRequest) {
 
     // 7. Session：建立 Cookie（與 LIFF 綁定時一模一樣）
     // 設定 staff_id cookie（用於識別當前登入的員工）
-    response.cookies.set('staff_id', String(matchedStaff.id), {
+    response.cookies.set('staff_id', matchedStaff.id, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       path: '/',

@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
 
     // 3. 設定 Session Cookie
     // 設定 staff_id cookie（用於識別當前登入的員工）
-    response.cookies.set('staff_id', String(staff.id), {
+    response.cookies.set('staff_id', staff.id, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       path: '/',

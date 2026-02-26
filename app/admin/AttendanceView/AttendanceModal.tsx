@@ -4,7 +4,7 @@ import React from 'react';
 import { X, Save, Pencil, Plus, AlertCircle } from 'lucide-react';
 
 type Staff = {
-  id: number;
+  id: string; // UUID
   name: string;
   role?: string | null;
 };

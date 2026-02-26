@@ -197,10 +197,9 @@ export default function DoctorRosterView() {
     const toggleSpecialTag = (tag: string) => { if (assignForm.specialTags.includes(tag)) setAssignForm(prev => ({ ...prev, specialTags: prev.specialTags.filter(t => t !== tag) })); else setAssignForm(prev => ({ ...prev, specialTags: [...prev.specialTags, tag] })); };
     const handleSubmitAssign = async () => {
         if (!selectedSlot || !assignForm.doctorId) return;
-        const doctorId = Number(assignForm.doctorId);
         const rosterPayload = {
             id: editingId || undefined,
-            doctor_id: doctorId,
+            doctor_id: assignForm.doctorId,
             date: selectedSlot.date,
             shift_code: selectedSlot.shiftId,
             start_time: assignForm.startTime,

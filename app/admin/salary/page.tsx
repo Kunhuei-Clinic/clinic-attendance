@@ -19,9 +19,9 @@ export default function SalaryPage() {
   const [selectedMonth, setSelectedMonth] = useState(format(new Date(), 'yyyy-MM'));
   const [staffList, setStaffList] = useState<any[]>([]);
   const [liveReports, setLiveReports] = useState<any[]>([]);
-  const [adjustments, setAdjustments] = useState<Record<number, any[]>>({});
+  const [adjustments, setAdjustments] = useState<Record<string, any[]>>({});
   const [isSaved, setIsSaved] = useState(false);
-  const [settingModalStaffId, setSettingModalStaffId] = useState<number | null>(null);
+  const [settingModalStaffId, setSettingModalStaffId] = useState<string | null>(null);
   const [printReport, setPrintReport] = useState<any | null>(null);
   const [entityList, setEntityList] = useState<Entity[]>([]);
   const [authChecked, setAuthChecked] = useState(false);
@@ -116,7 +116,7 @@ export default function SalaryPage() {
     try {
       const res = await fetch(`/api/salary/adjustments?year_month=${selectedMonth}`);
       const json = await res.json();
-      const map: Record<number, any[]> = {};
+      const map: Record<string, any[]> = {};
       json.data?.forEach((item: any) => {
         if (!map[item.staff_id]) map[item.staff_id] = [];
         map[item.staff_id].push(item);
@@ -177,7 +177,7 @@ export default function SalaryPage() {
 
       staffList.forEach(staff => {
         const myLogs = logs?.filter((l: any) => String(l.staff_id) === String(staff.id)) || [];
-        const myLeaves = leaves?.filter((l: any) => l.staff_id === staff.id) || [];
+        const myLeaves = leaves?.filter((l: any) => String(l.staff_id) === String(staff.id)) || [];
 
         // 執行計算引擎
         const calc = calculateStaffSalary(staff, myLogs, rosterMap, holidaySet, monthlyStandardHours, myLeaves);
@@ -194,6 +194,7 @@ export default function SalaryPage() {
 
         reports.push({
           ...calc,
+          staff_id: staff.id, // 新增 staff_id 欄位（UUID）
           staff_entity: staff.entity,
           staff_name: staff.name,
           salary_mode: staff.salary_mode,
@@ -218,7 +219,7 @@ export default function SalaryPage() {
   };
 
   // 手動調整增刪修
-  const modifyAdjustment = async (staffId: number, type: 'bonus' | 'deduction', action: 'add' | 'update' | 'remove', id?: number, field?: string, value?: any) => {
+  const modifyAdjustment = async (staffId: string, type: 'bonus' | 'deduction', action: 'add' | 'update' | 'remove', id?: number, field?: string, value?: any) => {
     const currentList = adjustments[staffId] || [];
     let newList = [...currentList];
     
@@ -254,7 +255,7 @@ export default function SalaryPage() {
     }
   };
   
-  const updateStaff = async (id: number, field: string, value: any) => {
+  const updateStaff = async (id: string, field: string, value: any) => {
     const newList = staffList.map(s => s.id === id ? { ...s, [field]: value } : s);
     setStaffList(newList);
     try {
@@ -274,7 +275,7 @@ export default function SalaryPage() {
     try {
       const records = liveReports.map(rpt => ({
         year_month: selectedMonth,
-        staff_id: staffList.find(s => s.name === rpt.staff_name)?.id,
+        staff_id: rpt.staff_id || staffList.find(s => s.name === rpt.staff_name)?.id,
         staff_name: rpt.staff_name,
         snapshot: rpt
       }));
@@ -392,7 +393,7 @@ export default function SalaryPage() {
         adjustments={adjustments} 
         modifyAdjustment={modifyAdjustment} 
         staffList={staffList}
-        onOpenSettings={(staffId: number) => setSettingModalStaffId(staffId)}
+        onOpenSettings={(staffId: string) => setSettingModalStaffId(staffId)}
         onPrint={(rpt: any) => setPrintReport(rpt)}
       />
 
