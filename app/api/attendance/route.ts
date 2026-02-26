@@ -38,7 +38,8 @@ export async function GET(request: NextRequest) {
       .from('staff')
       .select('id, name, role')
       .eq('clinic_id', clinicId) // 只查詢該診所的員工
-      .order('id');
+      .order('role', { ascending: true, nullsFirst: false })
+      .order('created_at', { ascending: true });
 
     // 🟢 多租戶：建立查詢，強制加上 clinic_id 過濾
     let query = supabaseAdmin

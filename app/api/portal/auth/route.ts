@@ -54,7 +54,8 @@ export async function GET(request: NextRequest) {
       .select('id, name, clinic_id')
       .is('line_user_id', null)
       .eq('is_active', true)
-      .order('name');
+      .order('role', { ascending: true, nullsFirst: false })
+      .order('created_at', { ascending: true });
 
     if (unboundError) {
       console.error('Error fetching unbound staff:', unboundError);

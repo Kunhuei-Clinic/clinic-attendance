@@ -30,7 +30,8 @@ export async function GET(request: NextRequest) {
       .from('staff')
       .select('*')
       .eq('clinic_id', clinicId) // 只查詢該診所的員工
-      .order('id');
+      .order('role', { ascending: true, nullsFirst: false })
+      .order('created_at', { ascending: true });
 
     if (role) {
       query = query.eq('role', role);

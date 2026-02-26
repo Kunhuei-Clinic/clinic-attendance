@@ -232,7 +232,8 @@ export async function GET(request: NextRequest) {
       .select('id, name, start_date, base_salary, salary_mode')
       .eq('is_active', true)
       .eq('clinic_id', clinicId) // 🟢 只查詢該診所的員工
-      .order('name');
+      .order('role', { ascending: true, nullsFirst: false })
+      .order('created_at', { ascending: true });
     
     if (staffError) {
       console.error('Fetch staff error:', staffError);

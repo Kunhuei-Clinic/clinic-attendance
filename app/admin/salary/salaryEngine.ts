@@ -182,15 +182,13 @@ export const calculateStaffSalary = (
           return;
         }
 
-        // 修正：僅在班表區間內計薪，休息時間不計入
-        const effectiveStart =
-          actualIn.getTime() > scheduleStart.getTime()
-            ? actualIn
-            : scheduleStart;
-        const effectiveEnd =
-          actualOut.getTime() < scheduleEnd.getTime()
-            ? actualOut
-            : scheduleEnd;
+        // 實際上班時間與表定上班時間，取「晚者」(避免提早到診所被溢算薪水)
+        let effectiveStart = (actualIn.getTime() > scheduleStart.getTime()) ? actualIn : scheduleStart;
+
+        // 實際下班時間與表定下班時間，取「早者」(將下班時間嚴格卡在表定時間，避免休息時間被計薪)
+        let effectiveEnd = (actualOut.getTime() < scheduleEnd.getTime()) ? actualOut : scheduleEnd;
+
+        // 完全移除原本判定 nextShift 的那段 if (nextShift) {...} 邏輯，那會造成時數錯誤延長
 
         if (effectiveEnd.getTime() > effectiveStart.getTime()) {
           const mins = differenceInMinutes(effectiveEnd, effectiveStart);
