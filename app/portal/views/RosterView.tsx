@@ -632,9 +632,7 @@ export default function RosterView({ rosterData, staffUser }: RosterViewProps) {
 
     // UI Render Helper：渲染表格
     const renderTable = (title: string, staffForTable: Staff[], colorClass: string, isDoctorTable: boolean = false) => {
-        const groupStaff = staffForTable
-            .slice()
-            .sort((a, b) => a.role.localeCompare(b.role) || a.display_order - b.display_order);
+        const groupStaff = staffForTable.slice();
 
         if (groupStaff.length === 0) return null;
 

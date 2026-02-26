@@ -515,9 +515,7 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
 
     // UI Render Helper：根據給定的員工清單渲染一張表
     const renderTable = (title: string, staffForEntity: Staff[], colorClass: string) => {
-        const groupStaff = staffForEntity
-            .slice()
-            .sort((a, b) => a.role.localeCompare(b.role) || a.display_order - b.display_order);
+        const groupStaff = staffForEntity.slice();
 
         if (groupStaff.length === 0) return null;
 

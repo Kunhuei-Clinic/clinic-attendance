@@ -301,7 +301,7 @@ export default function LeaveView({
                     </div>
                   ) : (
                     Object.entries(staffLeaveInfo.annual_leave_history)
-                      .sort(([a], [b]) => b.localeCompare(a))
+                      .sort(([a], [b]) => (b || '').localeCompare(a || ''))
                       .map(([year, days]: [string, any]) => (
                         <div
                           key={year}

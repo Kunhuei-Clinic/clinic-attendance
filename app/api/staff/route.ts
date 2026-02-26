@@ -29,9 +29,7 @@ export async function GET(request: NextRequest) {
     let query = supabaseAdmin
       .from('staff')
       .select('*')
-      .eq('clinic_id', clinicId) // 只查詢該診所的員工
-      .order('role', { ascending: true, nullsFirst: false })
-      .order('created_at', { ascending: true });
+      .eq('clinic_id', clinicId); // 只查詢該診所的員工
 
     if (role) {
       query = query.eq('role', role);

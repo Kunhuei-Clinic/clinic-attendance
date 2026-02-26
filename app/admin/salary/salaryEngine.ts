@@ -170,7 +170,7 @@ export const calculateStaffSalary = (
       const shiftDetails = rosterInfo?.shift_details || {};
       const shifts = Object.values(shiftDetails) as {start:string, end:string}[];
       
-      shifts.sort((a, b) => a.start.localeCompare(b.start));
+      shifts.sort((a, b) => (a?.start || '').localeCompare(b?.start || ''));
 
       shifts.forEach((shift) => {
         const scheduleStart = timeStringToDate(dateStr, shift.start);

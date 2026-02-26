@@ -132,9 +132,9 @@ export async function GET(request: NextRequest) {
 
     // 排序邏輯
     data.sort((a, b) =>
-      b.month.localeCompare(a.month) ||
-      a.type.localeCompare(b.type) ||
-      a.name.localeCompare(b.name)
+      (b?.month || '').localeCompare(a?.month || '') ||
+      (a?.type || '').localeCompare(b?.type || '') ||
+      (a?.name || '').localeCompare(b?.name || '')
     );
 
     return NextResponse.json({ data });

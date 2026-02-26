@@ -407,7 +407,7 @@ export default function EmployeePortal() {
       const result = await response.json();
 
       const sorted = (result.data || []).sort((a: any, b: any) => {
-        if (a.date !== b.date) return a.date.localeCompare(b.date);
+        if (a.date !== b.date) return (a?.date || '').localeCompare(b?.date || '');
         const order: Record<string, number> = { AM: 1, PM: 2, NIGHT: 3 };
         const aOrder = order[a.shift_code] || 999;
         const bOrder = order[b.shift_code] || 999;

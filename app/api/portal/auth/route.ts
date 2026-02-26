@@ -53,9 +53,7 @@ export async function GET(request: NextRequest) {
       .from('staff')
       .select('id, name, clinic_id')
       .is('line_user_id', null)
-      .eq('is_active', true)
-      .order('role', { ascending: true, nullsFirst: false })
-      .order('created_at', { ascending: true });
+      .eq('is_active', true);
 
     if (unboundError) {
       console.error('Error fetching unbound staff:', unboundError);

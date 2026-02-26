@@ -264,7 +264,7 @@ export default function DoctorRosterPrint({ onClose }: { onClose: () => void }) 
                                                     if (isClosed) return <td key={idx} className="border border-slate-400 bg-gray-100 align-middle"><div className="text-3xl font-black text-gray-300 tracking-widest rotate-[-15deg] border-4 border-gray-300 inline-block p-2 rounded-xl">休診</div></td>;
 
                                                     const workers = rosterData.filter(r => r.date === dateStr && r.shift_code === shift.id)
-                                                        .sort((a,b) => a.start_time.localeCompare(b.start_time));
+                                                        .sort((a,b) => (a?.start_time || '').localeCompare(b?.start_time || ''));
 
                                                     return (
                                                         <td key={idx} className="border border-slate-400 align-middle p-2 hover:bg-slate-50/10">

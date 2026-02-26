@@ -275,7 +275,7 @@ export default function ProfileView({
                     </div>
                   ) : (
                     Object.entries(user.annual_leave_history)
-                      .sort(([a], [b]) => b.localeCompare(a))
+                      .sort(([a], [b]) => (b || '').localeCompare(a || ''))
                       .map(([year, days]: [string, any]) => (
                         <div
                           key={year}
