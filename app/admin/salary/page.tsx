@@ -457,16 +457,16 @@ export default function SalaryPage() {
       result = result.filter((r) => r.staff_role === filterRole);
     }
 
-    // 2. 排序：依 entityList / 職類 / display_order / 姓名
-    const roleW: Record<string, number> = {
-      醫師: 1,
-      主管: 2,
-      櫃台: 3,
-      護理師: 4,
-      營養師: 5,
-      診助: 6,
-      藥師: 7,
-      藥局助理: 8,
+    // 2. 排序：依 entityList / 職類(模糊) / display_order / 姓名
+    const getRoleWeight = (role: string) => {
+      if (!role) return 99;
+      if (role.includes('醫師')) return 1;
+      if (role.includes('主管')) return 2;
+      if (role.includes('護理')) return 3;
+      if (role.includes('行政') || role.includes('櫃台')) return 4;
+      if (role.includes('藥')) return 5;
+      if (role.includes('助')) return 6;
+      return 99;
     };
 
     result.sort((a, b) => {
@@ -480,8 +480,8 @@ export default function SalaryPage() {
       const bEntityW = bEntIdx >= 0 ? bEntIdx : 99;
       if (aEntityW !== bEntityW) return aEntityW - bEntityW;
 
-      const aRoleW = roleW[a.staff_role || ''] ?? 99;
-      const bRoleW = roleW[b.staff_role || ''] ?? 99;
+      const aRoleW = getRoleWeight(a.staff_role);
+      const bRoleW = getRoleWeight(b.staff_role);
       if (aRoleW !== bRoleW) return aRoleW - bRoleW;
 
       const aStaff = staffList.find((s) => s.id === a.staff_id);

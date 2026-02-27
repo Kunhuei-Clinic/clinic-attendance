@@ -136,20 +136,15 @@ export const calculateStaffSalary = (
     const dailyLogs = logs.filter(
       (l) => toLocalDateString(l.clock_in_time) === dateStr
     );
-    let actualIn: Date | null = null;
-    let actualOut: Date | null = null;
-
-    if (dailyLogs.length > 0) {
-      // 修正：使用 getTime() 排序
-      const sortedIn = dailyLogs.map((l:any) => new Date(l.clock_in_time)).sort((a:Date, b:Date) => a.getTime() - b.getTime());
-      const sortedOut = dailyLogs
-        .map((l:any) => l.clock_out_time ? new Date(l.clock_out_time) : null)
-        .filter((d): d is Date => d !== null)
-        .sort((a, b) => b.getTime() - a.getTime());
-      
-      if (sortedIn.length > 0) actualIn = sortedIn[0];
-      if (sortedOut.length > 0) actualOut = sortedOut[0];
-    }
+    
+    // 整理畫面要顯示的多筆打卡時間 (例如: 08:00, 14:00)
+    const clockInStrs = dailyLogs
+      .map((l) => format(new Date(l.clock_in_time), 'HH:mm'))
+      .join(', ');
+    const clockOutStrs = dailyLogs
+      .filter((l) => l.clock_out_time)
+      .map((l) => format(new Date(l.clock_out_time), 'HH:mm'))
+      .join(', ');
 
     let dailyWorkMinutes = 0;
     let shiftDisplayStr = "";
@@ -159,58 +154,60 @@ export const calculateStaffSalary = (
 
     if (calcMode === 'actual') {
       shiftDisplayStr = "實支實付";
-      if (actualIn && actualOut) {
-        dailyWorkMinutes = differenceInMinutes(actualOut, actualIn);
-        if (dailyWorkMinutes < 0) dailyWorkMinutes = 0;
-      } else if (actualIn && !actualOut) {
-        note = "忘打下班卡";
-      }
-
+      dailyLogs.forEach((log: any) => {
+        if (log.clock_in_time && log.clock_out_time) {
+          dailyWorkMinutes += Math.max(
+            0,
+            differenceInMinutes(
+              new Date(log.clock_out_time),
+              new Date(log.clock_in_time)
+            )
+          );
+        } else if (log.clock_in_time && !log.clock_out_time) {
+          note += "忘打下班卡 ";
+        }
+      });
     } else {
-      // --- Schedule Mode ---
+      // 依班表模式：比對多段班表與多段打卡
       const shiftDetails = rosterInfo?.shift_details || {};
       const shifts = Object.values(shiftDetails) as { start: string; end: string }[];
-
       shifts.sort((a, b) => (a?.start || '').localeCompare(b?.start || ''));
 
       shifts.forEach((shift) => {
         const scheduleStart = timeStringToDate(dateStr, shift.start);
         const scheduleEnd = timeStringToDate(dateStr, shift.end);
-
         shiftDisplayStr += `${shift.start}-${shift.end} `;
 
-        if (!actualIn || !actualOut) {
-          return;
-        }
-
-        // 實際上班時間與表定上班時間，取「晚者」(避免提早到診所被溢算薪水)
-        let effectiveStart =
-          actualIn.getTime() > scheduleStart.getTime() ? actualIn : scheduleStart;
-
-        // 實際下班時間與表定下班時間，取「早者」(將下班時間嚴格卡在表定時間，避免休息時間被計薪)
-        let effectiveEnd =
-          actualOut.getTime() < scheduleEnd.getTime() ? actualOut : scheduleEnd;
-
-        // 完全移除原本判定 nextShift 的那段 if (nextShift) {...} 邏輯，那會造成時數錯誤延長
-
-        if (effectiveEnd.getTime() > effectiveStart.getTime()) {
-          const mins = differenceInMinutes(effectiveEnd, effectiveStart);
-          dailyWorkMinutes += mins;
-        }
-
-        if (differenceInMinutes(actualIn, scheduleStart) > 1) note += "遲到 ";
-        if (differenceInMinutes(scheduleEnd, actualOut) > 1) note += "早退 ";
+        let shiftWorkedMinutes = 0;
+        dailyLogs.forEach((log: any) => {
+          if (!log.clock_in_time || !log.clock_out_time) return;
+          const logIn = new Date(log.clock_in_time);
+          const logOut = new Date(log.clock_out_time);
+          
+          // 計算重疊的有效時間
+          const effectiveStart = logIn > scheduleStart ? logIn : scheduleStart;
+          const effectiveEnd = logOut < scheduleEnd ? logOut : scheduleEnd;
+          
+          if (effectiveEnd > effectiveStart) {
+            shiftWorkedMinutes += differenceInMinutes(effectiveEnd, effectiveStart);
+          }
+        });
+        dailyWorkMinutes += shiftWorkedMinutes;
       });
 
-      // 🟢 舊資料防呆：如果班表沒有 shift_details (舊資料)，但員工有打卡，則自動退回「實支實付」計算，避免時數歸零
       if (shifts.length === 0) {
-        if (actualIn && actualOut) {
-          dailyWorkMinutes = differenceInMinutes(actualOut, actualIn);
-          if (dailyWorkMinutes < 0) dailyWorkMinutes = 0;
-          note += "舊班表(改實算) ";
-        } else if (actualIn && !actualOut) {
-          note += "未排班且忘打下班卡 ";
-        }
+        dailyLogs.forEach((log: any) => {
+          if (log.clock_in_time && log.clock_out_time) {
+            dailyWorkMinutes += Math.max(
+              0,
+              differenceInMinutes(
+                new Date(log.clock_out_time),
+                new Date(log.clock_in_time)
+              )
+            );
+          }
+        });
+        if (dailyLogs.length > 0) note += "舊班表(改實算) ";
       }
     }
 
@@ -223,8 +220,8 @@ export const calculateStaffSalary = (
         date: dateStr,
         dayType: dayType,
         shiftInfo: shiftDisplayStr.trim(),
-        clockIn: actualIn ? format(actualIn, 'HH:mm') : '--:--',
-        clockOut: actualOut ? format(actualOut, 'HH:mm') : '--:--',
+        clockIn: clockInStrs || '--:--',      // 支援多筆上班顯示
+        clockOut: clockOutStrs || '--:--',    // 支援多筆下班顯示
         totalHours: dailyHours,
         normalHours: 0,
         ot134: 0,
