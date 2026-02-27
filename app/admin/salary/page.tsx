@@ -3,27 +3,45 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { DollarSign, Calendar, History, ChevronLeft, ChevronRight } from 'lucide-react';
+import {
+  DollarSign,
+  Calendar,
+  History,
+  ChevronLeft,
+  ChevronRight,
+} from 'lucide-react';
 import { addMonths, format, subMonths } from 'date-fns';
 
-import CalculatorView from './CalculatorView';
 import SettingsModal from './SettingsModal';
 import PayslipModal from './PayslipModal';
 import { calculateStaffSalary } from './salaryEngine';
+import SalaryTable from './SalaryTable';
+import AdjustmentModal from './AdjustmentModal';
 
 type Entity = { id: string; name: string };
 
 export default function SalaryPage() {
   const router = useRouter();
-  const [selectedMonth, setSelectedMonth] = useState(format(new Date(), 'yyyy-MM'));
+  const [selectedMonth, setSelectedMonth] = useState(
+    format(new Date(), 'yyyy-MM')
+  );
   const [staffList, setStaffList] = useState<any[]>([]);
   const [liveReports, setLiveReports] = useState<any[]>([]);
   const [adjustments, setAdjustments] = useState<Record<string, any[]>>({});
   const [lockedRecords, setLockedRecords] = useState<any[]>([]);
-  const [settingModalStaffId, setSettingModalStaffId] = useState<string | null>(null);
+  const [settingModalStaffId, setSettingModalStaffId] = useState<string | null>(
+    null
+  );
   const [printReport, setPrintReport] = useState<any | null>(null);
   const [entityList, setEntityList] = useState<Entity[]>([]);
   const [authChecked, setAuthChecked] = useState(false);
+
+  // 新增：篩選狀態
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterRole, setFilterRole] = useState<'all' | string>('all');
+
+  // 新增：獎懲調整 Modal 狀態
+  const [adjModalStaff, setAdjModalStaff] = useState<any | null>(null);
 
   // 認證檢查（雙重保護）
   useEffect(() => {
@@ -50,12 +68,12 @@ export default function SalaryPage() {
   }, [router]);
 
   // 載入系統設定與員工清單
-  useEffect(() => { 
+  useEffect(() => {
     if (!authChecked) return;
-    fetchSystemSettings(); 
+    fetchSystemSettings();
     fetchStaffSettings();
   }, [authChecked]);
-  
+
   // 每次月份變更時，載入調整與已封存紀錄
   useEffect(() => {
     if (!authChecked || !selectedMonth) return;
@@ -91,39 +109,7 @@ export default function SalaryPage() {
         json.data = json.data.filter((s: any) => s.role !== '醫師');
       }
       if (json.data) {
-        // 權重排序：entity → 職類 → display_order → 姓名
-        const roleWeight: Record<string, number> = { 
-          '醫師': 1, 
-          '主管': 2, 
-          '櫃台': 3, 
-          '護理師': 4, 
-          '營養師': 5, 
-          '診助': 6, 
-          '藥師': 7, 
-          '藥局助理': 8 
-        };
-        const entityWeight: Record<string, number> = {
-          clinic: 1,
-          pharmacy: 2,
-        };
-
-        const sorted = [...json.data].sort((a, b) => {
-          const aEntityW = entityWeight[a.entity || ''] ?? 99;
-          const bEntityW = entityWeight[b.entity || ''] ?? 99;
-          if (aEntityW !== bEntityW) return aEntityW - bEntityW;
-
-          const aRoleW = roleWeight[a.role || ''] ?? 999;
-          const bRoleW = roleWeight[b.role || ''] ?? 999;
-          if (aRoleW !== bRoleW) return aRoleW - bRoleW;
-
-          const aDisplay = typeof a.display_order === 'number' ? a.display_order : 99;
-          const bDisplay = typeof b.display_order === 'number' ? b.display_order : 99;
-          if (aDisplay !== bDisplay) return aDisplay - bDisplay;
-
-          return (a.name || '').localeCompare(b.name || '');
-        });
-
-        const formatted = sorted.map((s: any) => ({
+        const formatted = json.data.map((s: any) => ({
           ...s,
           entity: s.entity || 'clinic',
           salary_mode: s.salary_mode || 'hourly',
@@ -131,7 +117,9 @@ export default function SalaryPage() {
           work_rule: s.work_rule || 'normal',
           clock_in_calc_mode: s.clock_in_calc_mode || 'actual', // 預設實支實付
           bonuses: Array.isArray(s.bonuses) ? s.bonuses : [],
-          default_deductions: Array.isArray(s.default_deductions) ? s.default_deductions : [],
+          default_deductions: Array.isArray(s.default_deductions)
+            ? s.default_deductions
+            : [],
           insurance_labor: s.insurance_labor || 0,
           insurance_health: s.insurance_health || 0,
         }));
@@ -144,7 +132,9 @@ export default function SalaryPage() {
 
   const fetchAdjustments = async () => {
     try {
-      const res = await fetch(`/api/salary/adjustments?year_month=${selectedMonth}`);
+      const res = await fetch(
+        `/api/salary/adjustments?year_month=${selectedMonth}`
+      );
       const json = await res.json();
       const map: Record<string, any[]> = {};
       json.data?.forEach((item: any) => {
@@ -156,10 +146,12 @@ export default function SalaryPage() {
       console.error('Error fetching adjustments:', error);
     }
   };
-  
+
   const fetchLockedRecords = async () => {
     try {
-      const res = await fetch(`/api/salary/history?year_month=${selectedMonth}`);
+      const res = await fetch(
+        `/api/salary/history?year_month=${selectedMonth}`
+      );
       const json = await res.json();
       setLockedRecords(json.data || []);
     } catch (error: any) {
@@ -170,53 +162,89 @@ export default function SalaryPage() {
   // --- 核心計算流程：草稿 + 快照 Merge ---
   const performCalculation = async () => {
     if (!selectedMonth) return;
-    
+
     try {
       const res = await fetch(`/api/salary/calculate?month=${selectedMonth}`);
       const json = await res.json();
-      
+
       if (json.error) {
         console.error('Error fetching calculation data:', json.error);
         return;
       }
 
       const { logs, roster, holidays, leaves, monthlyStandardHours } = json;
-      
-      const holidaySet = new Set<string>((holidays || []).map((h: any) => String(h.date)));
-      
+
+      const holidaySet = new Set<string>(
+        (holidays || []).map((h: any) => String(h.date))
+      );
+
       const rosterMap: Record<string, any> = {};
       roster?.forEach((r: any) => {
         const cleanDate = r.date ? String(r.date).split('T')[0] : '';
         let parsedShifts = r.shift_details;
         if (typeof parsedShifts === 'string') {
-          try { 
-            parsedShifts = JSON.parse(parsedShifts); 
+          try {
+            parsedShifts = JSON.parse(parsedShifts);
           } catch {
-            parsedShifts = {}; 
+            parsedShifts = {};
           }
         }
         rosterMap[`${r.staff_id}_${cleanDate}`] = {
           day_type: r.day_type,
-          shift_details: parsedShifts
+          shift_details: parsedShifts,
         };
       });
 
       const reports: any[] = [];
 
-      staffList.forEach(staff => {
-        const myLogs = logs?.filter((l: any) => String(l.staff_id) === String(staff.id)) || [];
-        const myLeaves = leaves?.filter((l: any) => String(l.staff_id) === String(staff.id)) || [];
+      staffList.forEach((staff) => {
+        const myLogs =
+          logs?.filter(
+            (l: any) => String(l.staff_id) === String(staff.id)
+          ) || [];
+        const myLeaves =
+          leaves?.filter(
+            (l: any) => String(l.staff_id) === String(staff.id)
+          ) || [];
 
-        const calc = calculateStaffSalary(staff, myLogs, rosterMap, holidaySet, monthlyStandardHours, myLeaves);
+        const calc = calculateStaffSalary(
+          staff,
+          myLogs,
+          rosterMap,
+          holidaySet,
+          monthlyStandardHours,
+          myLeaves
+        );
 
-        const fixedBonus = staff.bonuses.reduce((sum: number, b: any) => sum + Number(b.amount), 0);
-        const fixedDeduction = staff.default_deductions.reduce((sum: number, b: any) => sum + Number(b.amount), 0);
+        const fixedBonus = staff.bonuses.reduce(
+          (sum: number, b: any) => sum + Number(b.amount),
+          0
+        );
+        const fixedDeduction = staff.default_deductions.reduce(
+          (sum: number, b: any) => sum + Number(b.amount),
+          0
+        );
         const myAdj = adjustments[staff.id] || [];
-        const tempBonus = myAdj.filter((a: any) => a.type === 'bonus').reduce((sum: number, b: any) => sum + Number(b.amount), 0);
-        const tempDeduction = myAdj.filter((a: any) => a.type === 'deduction').reduce((sum: number, b: any) => sum + Number(b.amount), 0);
+        const tempBonus = myAdj
+          .filter((a: any) => a.type === 'bonus')
+          .reduce((sum: number, b: any) => sum + Number(b.amount), 0);
+        const tempDeduction = myAdj
+          .filter((a: any) => a.type === 'deduction')
+          .reduce((sum: number, b: any) => sum + Number(b.amount), 0);
 
-        const gross = calc.base_pay + calc.ot_pay + calc.holiday_pay + fixedBonus + tempBonus + calc.leave_addition;
-        const deduction = staff.insurance_labor + staff.insurance_health + fixedDeduction + tempDeduction + calc.leave_deduction;
+        const gross =
+          calc.base_pay +
+          calc.ot_pay +
+          calc.holiday_pay +
+          fixedBonus +
+          tempBonus +
+          calc.leave_addition;
+        const deduction =
+          staff.insurance_labor +
+          staff.insurance_health +
+          fixedDeduction +
+          tempDeduction +
+          calc.leave_deduction;
 
         let mergedReport: any = {
           ...calc,
@@ -234,12 +262,18 @@ export default function SalaryPage() {
           gross_pay: gross,
           total_deduction: deduction,
           net_pay: gross - deduction,
-          bonus_details: [...staff.bonuses, ...myAdj.filter((a: any) => a.type === 'bonus')],
-          deduction_details: [...staff.default_deductions, ...myAdj.filter((a: any) => a.type === 'deduction')],
+          bonus_details: [
+            ...staff.bonuses,
+            ...myAdj.filter((a: any) => a.type === 'bonus'),
+          ],
+          deduction_details: [
+            ...staff.default_deductions,
+            ...myAdj.filter((a: any) => a.type === 'deduction'),
+          ],
         };
 
-        const locked = lockedRecords.find((rec: any) =>
-          String(rec.staff_id) === String(staff.id)
+        const locked = lockedRecords.find(
+          (rec: any) => String(rec.staff_id) === String(staff.id)
         );
 
         if (locked) {
@@ -270,48 +304,14 @@ export default function SalaryPage() {
         reports.push(mergedReport);
       });
 
-      // 最終排序：entity → 職類 → display_order → 姓名
-      reports.sort((a, b) => {
-        // 第一順位：組織單位（依 entityList 順序）
-        const aEntIdx = entityList.findIndex(e => e.id === a.staff_entity);
-        const bEntIdx = entityList.findIndex(e => e.id === b.staff_entity);
-        const aEntityW = aEntIdx >= 0 ? aEntIdx : 99;
-        const bEntityW = bEntIdx >= 0 ? bEntIdx : 99;
-        if (aEntityW !== bEntityW) return aEntityW - bEntityW;
-
-        // 第二順位：職類
-        const roleW: Record<string, number> = {
-          '醫師': 1,
-          '主管': 2,
-          '櫃台': 3,
-          '護理師': 4,
-          '營養師': 5,
-          '診助': 6,
-          '藥師': 7,
-          '藥局助理': 8,
-        };
-        const aRoleW = roleW[a.staff_role || ''] ?? 99;
-        const bRoleW = roleW[b.staff_role || ''] ?? 99;
-        if (aRoleW !== bRoleW) return aRoleW - bRoleW;
-
-        // 第三順位：自訂排序
-        const aStaff = staffList.find(s => s.id === a.staff_id);
-        const bStaff = staffList.find(s => s.id === b.staff_id);
-        const aDisp = aStaff?.display_order ?? 99;
-        const bDisp = bStaff?.display_order ?? 99;
-        if (aDisp !== bDisp) return aDisp - bDisp;
-
-        // 第四順位：姓名
-        return (a.staff_name || '').localeCompare(b.staff_name || '');
-      });
-
+      // 排序改由 derived state 處理，這裡不再強制排序
       setLiveReports(reports);
     } catch (error: any) {
       console.error('Error performing calculation:', error);
     }
   };
 
-  // 手動調整增刪修（保留給之後 Modal 使用）
+  // 手動調整增刪修（給 AdjustmentModal 使用）
   const modifyAdjustment = async (
     staffId: string,
     type: 'bonus' | 'deduction',
@@ -322,29 +322,44 @@ export default function SalaryPage() {
   ) => {
     const currentList = adjustments[staffId] || [];
     let newList = [...currentList];
-    
+
     if (action === 'add') {
-      newList.push({ id: -1, staff_id: staffId, year_month: selectedMonth, type, name: type === 'bonus' ? '本月獎金' : '本月扣款', amount: 0 });
+      newList.push({
+        id: -1,
+        staff_id: staffId,
+        year_month: selectedMonth,
+        type,
+        name: type === 'bonus' ? '本月獎金' : '本月扣款',
+        amount: 0,
+      });
     } else if (action === 'update' && id) {
-      newList = newList.map(item => item.id === id ? { ...item, [field!]: value } : item);
+      newList = newList.map((item) =>
+        item.id === id ? { ...item, [field!]: value } : item
+      );
     } else if (action === 'remove' && id) {
-      newList = newList.filter(item => item.id !== id);
+      newList = newList.filter((item) => item.id !== id);
     }
-    setAdjustments(prev => ({ ...prev, [staffId]: newList }));
+    setAdjustments((prev) => ({ ...prev, [staffId]: newList }));
 
     try {
       if (action === 'add') {
         const res = await fetch('/api/salary/adjustments', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ staff_id: staffId, year_month: selectedMonth, type, name: type === 'bonus' ? '本月獎金' : '本月扣款', amount: 0 })
+          body: JSON.stringify({
+            staff_id: staffId,
+            year_month: selectedMonth,
+            type,
+            name: type === 'bonus' ? '本月獎金' : '本月扣款',
+            amount: 0,
+          }),
         });
         if (res.ok) fetchAdjustments();
       } else if (action === 'update' && id) {
         await fetch('/api/salary/adjustments', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id, field, value })
+          body: JSON.stringify({ id, field, value }),
         });
       } else if (action === 'remove' && id) {
         await fetch(`/api/salary/adjustments?id=${id}`, { method: 'DELETE' });
@@ -354,15 +369,17 @@ export default function SalaryPage() {
       alert('操作失敗: ' + error.message);
     }
   };
-  
+
   const updateStaff = async (id: string, field: string, value: any) => {
-    const newList = staffList.map(s => s.id === id ? { ...s, [field]: value } : s);
+    const newList = staffList.map((s) =>
+      s.id === id ? { ...s, [field]: value } : s
+    );
     setStaffList(newList);
     try {
       await fetch('/api/staff', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, [field]: value })
+        body: JSON.stringify({ id, [field]: value }),
       });
     } catch (error: any) {
       console.error('Error updating staff:', error);
@@ -373,12 +390,14 @@ export default function SalaryPage() {
   // 封存單一員工（鎖定）
   const lockEmployee = async (rpt: any) => {
     try {
-      const records = [{
-        year_month: selectedMonth,
-        staff_id: rpt.staff_id,
-        staff_name: rpt.staff_name,
-        snapshot: rpt,
-      }];
+      const records = [
+        {
+          year_month: selectedMonth,
+          staff_id: rpt.staff_id,
+          staff_name: rpt.staff_name,
+          snapshot: rpt,
+        },
+      ];
 
       const res = await fetch('/api/salary/history', {
         method: 'POST',
@@ -400,7 +419,9 @@ export default function SalaryPage() {
   // 解除單一員工封存
   const unlockEmployee = async (historyId: string | number) => {
     try {
-      const res = await fetch(`/api/salary/history?id=${historyId}`, { method: 'DELETE' });
+      const res = await fetch(`/api/salary/history?id=${historyId}`, {
+        method: 'DELETE',
+      });
       const json = await res.json();
       if (json.error) {
         alert('解除封存失敗: ' + json.error);
@@ -416,9 +437,64 @@ export default function SalaryPage() {
   // 月份切換輔助
   const changeMonth = (delta: number) => {
     const current = new Date(`${selectedMonth}-01`);
-    const newDate = delta > 0 ? addMonths(current, 1) : subMonths(current, 1);
+    const newDate =
+      delta > 0 ? addMonths(current, 1) : subMonths(current, 1);
     setSelectedMonth(format(newDate, 'yyyy-MM'));
   };
+
+  // Derived State：篩選 + 排序
+  const filteredAndSortedReports = React.useMemo(() => {
+    let result = [...liveReports];
+
+    // 1. 篩選
+    if (searchTerm) {
+      const term = searchTerm.trim();
+      result = result.filter((r) =>
+        (r.staff_name || '').includes(term)
+      );
+    }
+    if (filterRole !== 'all') {
+      result = result.filter((r) => r.staff_role === filterRole);
+    }
+
+    // 2. 排序：依 entityList / 職類 / display_order / 姓名
+    const roleW: Record<string, number> = {
+      醫師: 1,
+      主管: 2,
+      櫃台: 3,
+      護理師: 4,
+      營養師: 5,
+      診助: 6,
+      藥師: 7,
+      藥局助理: 8,
+    };
+
+    result.sort((a, b) => {
+      const aEntIdx = entityList.findIndex(
+        (e) => e.id === a.staff_entity
+      );
+      const bEntIdx = entityList.findIndex(
+        (e) => e.id === b.staff_entity
+      );
+      const aEntityW = aEntIdx >= 0 ? aEntIdx : 99;
+      const bEntityW = bEntIdx >= 0 ? bEntIdx : 99;
+      if (aEntityW !== bEntityW) return aEntityW - bEntityW;
+
+      const aRoleW = roleW[a.staff_role || ''] ?? 99;
+      const bRoleW = roleW[b.staff_role || ''] ?? 99;
+      if (aRoleW !== bRoleW) return aRoleW - bRoleW;
+
+      const aStaff = staffList.find((s) => s.id === a.staff_id);
+      const bStaff = staffList.find((s) => s.id === b.staff_id);
+      const aDisp = aStaff?.display_order ?? 99;
+      const bDisp = bStaff?.display_order ?? 99;
+      if (aDisp !== bDisp) return aDisp - bDisp;
+
+      return (a.staff_name || '').localeCompare(b.staff_name || '');
+    });
+
+    return result;
+  }, [liveReports, searchTerm, filterRole, entityList, staffList]);
 
   // 未認證時不顯示內容
   if (!authChecked) {
@@ -434,18 +510,22 @@ export default function SalaryPage() {
       <div className="flex flex-col md:flex-row justify-between items-center bg-white p-5 rounded-2xl shadow-sm border border-slate-200 gap-4">
         <div className="flex items-center gap-4">
           <h2 className="text-2xl font-bold flex items-center gap-2 text-slate-800">
-            <DollarSign className="text-green-600" size={28}/> 
+            <DollarSign className="text-green-600" size={28} />
             薪資結算系統
           </h2>
         </div>
-        
-        <div className="flex items-center gap-3">
+
+        <div className="flex flex-col md:flex-row items-center gap-3">
+          {/* 月份切換器 */}
           <div className="flex items-center bg-slate-50 rounded-xl border border-slate-200 p-1">
-            <button onClick={()=>changeMonth(-1)} className="p-2 hover:bg-white hover:shadow-sm rounded-lg text-slate-500">
-              <ChevronLeft size={16}/>
+            <button
+              onClick={() => changeMonth(-1)}
+              className="p-2 hover:bg-white hover:shadow-sm rounded-lg text-slate-500"
+            >
+              <ChevronLeft size={16} />
             </button>
             <div className="flex items-center gap-2 px-2">
-              <Calendar size={16} className="text-slate-400"/>
+              <Calendar size={16} className="text-slate-400" />
               <input
                 type="month"
                 value={selectedMonth}
@@ -453,34 +533,61 @@ export default function SalaryPage() {
                 className="bg-transparent font-bold text-slate-700 outline-none w-32 text-center"
               />
             </div>
-            <button onClick={()=>changeMonth(1)} className="p-2 hover:bg-white hover:shadow-sm rounded-lg text-slate-500">
-              <ChevronRight size={16}/>
+            <button
+              onClick={() => changeMonth(1)}
+              className="p-2 hover:bg-white hover:shadow-sm rounded-lg text-slate-500"
+            >
+              <ChevronRight size={16} />
             </button>
+          </div>
+
+          {/* 搜尋與職位篩選 */}
+          <div className="flex items-center gap-2 w-full md:w-auto">
+            <input
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="搜尋姓名..."
+              className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm w-full md:w-40 focus:outline-none focus:ring-1 focus:ring-slate-300"
+            />
+            <select
+              value={filterRole}
+              onChange={(e) => setFilterRole(e.target.value)}
+              className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-slate-300"
+            >
+              <option value="all">全部職位</option>
+              <option value="醫師">醫師</option>
+              <option value="主管">主管</option>
+              <option value="櫃台">櫃台</option>
+              <option value="護理師">護理師</option>
+              <option value="營養師">營養師</option>
+              <option value="診助">診助</option>
+              <option value="藥師">藥師</option>
+              <option value="藥局助理">藥局助理</option>
+            </select>
           </div>
         </div>
       </div>
 
-      <CalculatorView 
-        reports={liveReports} 
-        adjustments={adjustments} 
-        modifyAdjustment={modifyAdjustment} 
+      <SalaryTable
+        reports={filteredAndSortedReports}
         staffList={staffList}
         lockEmployee={lockEmployee}
         unlockEmployee={unlockEmployee}
         onOpenSettings={(staffId: string) => setSettingModalStaffId(staffId)}
         onPrint={(rpt: any) => setPrintReport(rpt)}
+        setAdjModalStaff={setAdjModalStaff}
       />
 
       {liveReports.length === 0 && (
         <div className="text-center py-20 text-slate-400 bg-white rounded-2xl border border-dashed border-slate-300">
-          <History size={48} className="mx-auto mb-4 opacity-20"/>
+          <History size={48} className="mx-auto mb-4 opacity-20" />
           <p>此月份尚無資料或尚未結算</p>
         </div>
       )}
 
       {settingModalStaffId !== null && (
-        <SettingsModal 
-          staff={staffList.find(s => s.id === settingModalStaffId)}
+        <SettingsModal
+          staff={staffList.find((s) => s.id === settingModalStaffId)}
           updateStaff={updateStaff}
           entityList={entityList}
           onClose={() => setSettingModalStaffId(null)}
@@ -488,11 +595,24 @@ export default function SalaryPage() {
       )}
 
       {printReport && (
-        <PayslipModal 
-          report={printReport} 
-          yearMonth={selectedMonth} 
-          clinicName={entityList.find(e => e.id === printReport.staff_entity)?.name || '診所'}
-          onClose={() => setPrintReport(null)} 
+        <PayslipModal
+          report={printReport}
+          yearMonth={selectedMonth}
+          clinicName={
+            entityList.find((e) => e.id === printReport.staff_entity)?.name ||
+            '診所'
+          }
+          onClose={() => setPrintReport(null)}
+        />
+      )}
+
+      {adjModalStaff && (
+        <AdjustmentModal
+          staff={adjModalStaff}
+          adjustments={adjustments}
+          selectedMonth={selectedMonth}
+          modifyAdjustment={modifyAdjustment}
+          onClose={() => setAdjModalStaff(null)}
         />
       )}
     </div>
