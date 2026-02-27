@@ -270,6 +270,41 @@ export default function SalaryPage() {
         reports.push(mergedReport);
       });
 
+      // 最終排序：entity → 職類 → display_order → 姓名
+      reports.sort((a, b) => {
+        // 第一順位：組織單位（依 entityList 順序）
+        const aEntIdx = entityList.findIndex(e => e.id === a.staff_entity);
+        const bEntIdx = entityList.findIndex(e => e.id === b.staff_entity);
+        const aEntityW = aEntIdx >= 0 ? aEntIdx : 99;
+        const bEntityW = bEntIdx >= 0 ? bEntIdx : 99;
+        if (aEntityW !== bEntityW) return aEntityW - bEntityW;
+
+        // 第二順位：職類
+        const roleW: Record<string, number> = {
+          '醫師': 1,
+          '主管': 2,
+          '櫃台': 3,
+          '護理師': 4,
+          '營養師': 5,
+          '診助': 6,
+          '藥師': 7,
+          '藥局助理': 8,
+        };
+        const aRoleW = roleW[a.staff_role || ''] ?? 99;
+        const bRoleW = roleW[b.staff_role || ''] ?? 99;
+        if (aRoleW !== bRoleW) return aRoleW - bRoleW;
+
+        // 第三順位：自訂排序
+        const aStaff = staffList.find(s => s.id === a.staff_id);
+        const bStaff = staffList.find(s => s.id === b.staff_id);
+        const aDisp = aStaff?.display_order ?? 99;
+        const bDisp = bStaff?.display_order ?? 99;
+        if (aDisp !== bDisp) return aDisp - bDisp;
+
+        // 第四順位：姓名
+        return (a.staff_name || '').localeCompare(b.staff_name || '');
+      });
+
       setLiveReports(reports);
     } catch (error: any) {
       console.error('Error performing calculation:', error);
@@ -357,7 +392,6 @@ export default function SalaryPage() {
       }
 
       await fetchLockedRecords();
-      await performCalculation();
     } catch (error: any) {
       alert('封存失敗: ' + error.message);
     }
@@ -374,7 +408,6 @@ export default function SalaryPage() {
       }
 
       await fetchLockedRecords();
-      await performCalculation();
     } catch (error: any) {
       alert('解除封存失敗: ' + error.message);
     }
