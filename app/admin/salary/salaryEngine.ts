@@ -137,14 +137,17 @@ export const calculateStaffSalary = (
       (l) => toLocalDateString(l.clock_in_time) === dateStr
     );
     
-    // 整理畫面要顯示的多筆打卡時間 (例如: 08:00, 14:00)
-    const clockInStrs = dailyLogs
-      .map((l) => format(new Date(l.clock_in_time), 'HH:mm'))
-      .join(', ');
-    const clockOutStrs = dailyLogs
-      .filter((l) => l.clock_out_time)
-      .map((l) => format(new Date(l.clock_out_time), 'HH:mm'))
-      .join(', ');
+    // 將上下班時間成對組合，例如: 08:00~12:33, 15:00~21:00
+    const clockPairs = dailyLogs.map((l: any) => {
+      const inStr = l.clock_in_time
+        ? format(new Date(l.clock_in_time), 'HH:mm')
+        : '--:--';
+      const outStr = l.clock_out_time
+        ? format(new Date(l.clock_out_time), 'HH:mm')
+        : '--:--';
+      return `${inStr}~${outStr}`;
+    });
+    const combinedClockStr = clockPairs.join(', ');
 
     let dailyWorkMinutes = 0;
     let shiftDisplayStr = "";
@@ -220,13 +223,13 @@ export const calculateStaffSalary = (
         date: dateStr,
         dayType: dayType,
         shiftInfo: shiftDisplayStr.trim(),
-        clockIn: clockInStrs || '--:--',      // 支援多筆上班顯示
-        clockOut: clockOutStrs || '--:--',    // 支援多筆下班顯示
+        clockIn: combinedClockStr || '--:--',
+        clockOut: '', // 已合併進 clockIn 中
         totalHours: dailyHours,
         normalHours: 0,
         ot134: 0,
         ot167: 0,
-        note: note.trim()
+        note: note.trim(),
       };
 
       if (dayType === 'holiday') { 

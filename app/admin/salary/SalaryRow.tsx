@@ -279,7 +279,7 @@ export default function SalaryRow({
                           {d.shiftInfo || '-'}
                         </td>
                         <td className="p-2 font-mono text-slate-700">
-                          {d.clockIn} ~ {d.clockOut}
+                          {d.clockIn} {d.clockOut ? `~ ${d.clockOut}` : ''}
                         </td>
                         <td className="p-2 text-center font-bold text-slate-800">
                           {d.totalHours}
