@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { DollarSign, Calendar, Save, Archive, RefreshCw, CloudLightning, History, ChevronLeft, ChevronRight } from 'lucide-react';
+import { DollarSign, Calendar, History, ChevronLeft, ChevronRight } from 'lucide-react';
 import { addMonths, format, subMonths } from 'date-fns';
 
 import CalculatorView from './CalculatorView';
@@ -15,12 +15,11 @@ type Entity = { id: string; name: string };
 
 export default function SalaryPage() {
   const router = useRouter();
-  const [viewMode, setViewMode] = useState<'calculator' | 'history'>('calculator');
   const [selectedMonth, setSelectedMonth] = useState(format(new Date(), 'yyyy-MM'));
   const [staffList, setStaffList] = useState<any[]>([]);
   const [liveReports, setLiveReports] = useState<any[]>([]);
   const [adjustments, setAdjustments] = useState<Record<string, any[]>>({});
-  const [isSaved, setIsSaved] = useState(false);
+  const [lockedRecords, setLockedRecords] = useState<any[]>([]);
   const [settingModalStaffId, setSettingModalStaffId] = useState<string | null>(null);
   const [printReport, setPrintReport] = useState<any | null>(null);
   const [entityList, setEntityList] = useState<Entity[]>([]);
@@ -34,7 +33,6 @@ export default function SalaryPage() {
         if (response.ok) {
           const data = await response.json();
           if (!data.authenticated || data.authLevel !== 'boss') {
-            // 未登入或不是 boss 權限，重定向到登入頁
             router.push('/login?redirect=/admin/salary');
             return;
           }
@@ -51,26 +49,26 @@ export default function SalaryPage() {
     checkAuth();
   }, [router]);
 
+  // 載入系統設定與員工清單
   useEffect(() => { 
     if (!authChecked) return;
     fetchSystemSettings(); 
     fetchStaffSettings();
   }, [authChecked]);
   
+  // 每次月份變更時，載入調整與已封存紀錄
   useEffect(() => {
     if (!authChecked || !selectedMonth) return;
     fetchAdjustments();
-    checkIfArchived();
-    if (viewMode === 'calculator') performCalculation();
-    else loadHistory();
-  }, [selectedMonth, viewMode, authChecked]);
+    fetchLockedRecords();
+  }, [selectedMonth, authChecked]);
 
-  // 當員工資料變動或手動調整變動時，重新試算
+  // 當員工資料 / 調整 / 鎖定紀錄變動時，重新試算
   useEffect(() => {
-    if (viewMode === 'calculator' && staffList.length > 0 && selectedMonth) {
-      performCalculation();
-    }
-  }, [staffList, adjustments]);
+    if (!authChecked || !selectedMonth) return;
+    if (staffList.length === 0) return;
+    performCalculation();
+  }, [staffList, adjustments, lockedRecords, selectedMonth, authChecked]);
 
   const fetchSystemSettings = async () => {
     try {
@@ -93,7 +91,7 @@ export default function SalaryPage() {
         json.data = json.data.filter((s: any) => s.role !== '醫師');
       }
       if (json.data) {
-        // 權重排序：依照職類分組排序
+        // 權重排序：entity → 職類 → display_order → 姓名
         const roleWeight: Record<string, number> = { 
           '醫師': 1, 
           '主管': 2, 
@@ -104,13 +102,27 @@ export default function SalaryPage() {
           '藥師': 7, 
           '藥局助理': 8 
         };
+        const entityWeight: Record<string, number> = {
+          clinic: 1,
+          pharmacy: 2,
+        };
+
         const sorted = [...json.data].sort((a, b) => {
-          const aWeight = roleWeight[a.role || ''] ?? 999;
-          const bWeight = roleWeight[b.role || ''] ?? 999;
-          if (aWeight !== bWeight) return aWeight - bWeight;
-          // 同職類內按姓名排序
+          const aEntityW = entityWeight[a.entity || ''] ?? 99;
+          const bEntityW = entityWeight[b.entity || ''] ?? 99;
+          if (aEntityW !== bEntityW) return aEntityW - bEntityW;
+
+          const aRoleW = roleWeight[a.role || ''] ?? 999;
+          const bRoleW = roleWeight[b.role || ''] ?? 999;
+          if (aRoleW !== bRoleW) return aRoleW - bRoleW;
+
+          const aDisplay = typeof a.display_order === 'number' ? a.display_order : 99;
+          const bDisplay = typeof b.display_order === 'number' ? b.display_order : 99;
+          if (aDisplay !== bDisplay) return aDisplay - bDisplay;
+
           return (a.name || '').localeCompare(b.name || '');
         });
+
         const formatted = sorted.map((s: any) => ({
           ...s,
           entity: s.entity || 'clinic',
@@ -144,23 +156,22 @@ export default function SalaryPage() {
       console.error('Error fetching adjustments:', error);
     }
   };
-
-  const checkIfArchived = async () => {
+  
+  const fetchLockedRecords = async () => {
     try {
       const res = await fetch(`/api/salary/history?year_month=${selectedMonth}`);
       const json = await res.json();
-      setIsSaved(!!json.data && json.data.length > 0);
+      setLockedRecords(json.data || []);
     } catch (error: any) {
-      console.error('Error checking archive status:', error);
+      console.error('Error fetching locked salary records:', error);
     }
   };
 
-  // --- 核心計算流程 ---
+  // --- 核心計算流程：草稿 + 快照 Merge ---
   const performCalculation = async () => {
     if (!selectedMonth) return;
     
     try {
-      // 從 API 獲取所有計算所需的數據
       const res = await fetch(`/api/salary/calculate?month=${selectedMonth}`);
       const json = await res.json();
       
@@ -173,7 +184,6 @@ export default function SalaryPage() {
       
       const holidaySet = new Set<string>((holidays || []).map((h: any) => String(h.date)));
       
-      // 建構 Roster Map，包含班表細節（加入日期清理與 JSON 解析防呆）
       const rosterMap: Record<string, any> = {};
       roster?.forEach((r: any) => {
         const cleanDate = r.date ? String(r.date).split('T')[0] : '';
@@ -181,7 +191,7 @@ export default function SalaryPage() {
         if (typeof parsedShifts === 'string') {
           try { 
             parsedShifts = JSON.parse(parsedShifts); 
-          } catch (e) { 
+          } catch {
             parsedShifts = {}; 
           }
         }
@@ -197,10 +207,8 @@ export default function SalaryPage() {
         const myLogs = logs?.filter((l: any) => String(l.staff_id) === String(staff.id)) || [];
         const myLeaves = leaves?.filter((l: any) => String(l.staff_id) === String(staff.id)) || [];
 
-        // 執行計算引擎
         const calc = calculateStaffSalary(staff, myLogs, rosterMap, holidaySet, monthlyStandardHours, myLeaves);
 
-        // 金額彙總
         const fixedBonus = staff.bonuses.reduce((sum: number, b: any) => sum + Number(b.amount), 0);
         const fixedDeduction = staff.default_deductions.reduce((sum: number, b: any) => sum + Number(b.amount), 0);
         const myAdj = adjustments[staff.id] || [];
@@ -210,9 +218,9 @@ export default function SalaryPage() {
         const gross = calc.base_pay + calc.ot_pay + calc.holiday_pay + fixedBonus + tempBonus + calc.leave_addition;
         const deduction = staff.insurance_labor + staff.insurance_health + fixedDeduction + tempDeduction + calc.leave_deduction;
 
-        reports.push({
+        let mergedReport: any = {
           ...calc,
-          staff_id: staff.id, // 新增 staff_id 欄位（UUID）
+          staff_id: staff.id,
           staff_entity: staff.entity,
           staff_name: staff.name,
           salary_mode: staff.salary_mode,
@@ -227,17 +235,56 @@ export default function SalaryPage() {
           total_deduction: deduction,
           net_pay: gross - deduction,
           bonus_details: [...staff.bonuses, ...myAdj.filter((a: any) => a.type === 'bonus')],
-          deduction_details: [...staff.default_deductions, ...myAdj.filter((a: any) => a.type === 'deduction')]
-        });
+          deduction_details: [...staff.default_deductions, ...myAdj.filter((a: any) => a.type === 'deduction')],
+        };
+
+        const locked = lockedRecords.find((rec: any) =>
+          String(rec.staff_id) === String(staff.id)
+        );
+
+        if (locked) {
+          const snap = locked.snapshot || {};
+          const normalizedSnap = {
+            total_work_hours: 0,
+            normal_hours: 0,
+            period_ot_hours: 0,
+            dailyRecords: [],
+            bonus_details: [],
+            deduction_details: [],
+            ...snap,
+          };
+
+          mergedReport = {
+            ...mergedReport,
+            ...normalizedSnap,
+            is_locked: true,
+            history_id: locked.id,
+          };
+        } else {
+          mergedReport = {
+            ...mergedReport,
+            is_locked: false,
+          };
+        }
+
+        reports.push(mergedReport);
       });
+
       setLiveReports(reports);
     } catch (error: any) {
       console.error('Error performing calculation:', error);
     }
   };
 
-  // 手動調整增刪修
-  const modifyAdjustment = async (staffId: string, type: 'bonus' | 'deduction', action: 'add' | 'update' | 'remove', id?: number, field?: string, value?: any) => {
+  // 手動調整增刪修（保留給之後 Modal 使用）
+  const modifyAdjustment = async (
+    staffId: string,
+    type: 'bonus' | 'deduction',
+    action: 'add' | 'update' | 'remove',
+    id?: number,
+    field?: string,
+    value?: any
+  ) => {
     const currentList = adjustments[staffId] || [];
     let newList = [...currentList];
     
@@ -288,77 +335,56 @@ export default function SalaryPage() {
     }
   };
 
-  const handleArchive = async () => {
-    if (!confirm(`確定要封存 ${selectedMonth} 的薪資資料嗎？`)) return;
+  // 封存單一員工（鎖定）
+  const lockEmployee = async (rpt: any) => {
     try {
-      const records = liveReports.map(rpt => ({
+      const records = [{
         year_month: selectedMonth,
-        staff_id: rpt.staff_id || staffList.find(s => s.name === rpt.staff_name)?.id,
+        staff_id: rpt.staff_id,
         staff_name: rpt.staff_name,
-        snapshot: rpt
-      }));
+        snapshot: rpt,
+      }];
+
       const res = await fetch('/api/salary/history', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ records })
+        body: JSON.stringify({ records }),
       });
       const json = await res.json();
-      if (json.error) alert('封存失敗: ' + json.error);
-      else { alert('封存成功！'); setIsSaved(true); }
+      if (json.error) {
+        alert('封存失敗: ' + json.error);
+        return;
+      }
+
+      await fetchLockedRecords();
+      await performCalculation();
     } catch (error: any) {
       alert('封存失敗: ' + error.message);
     }
   };
 
-  const handleUnArchive = async () => {
-    if (!confirm(`⚠️ 警告：解除封存將刪除 ${selectedMonth} 的歷史紀錄。\n\n確定要繼續嗎？`)) return;
+  // 解除單一員工封存
+  const unlockEmployee = async (historyId: string | number) => {
     try {
-      const res = await fetch(`/api/salary/history?year_month=${selectedMonth}`, { method: 'DELETE' });
+      const res = await fetch(`/api/salary/history?id=${historyId}`, { method: 'DELETE' });
       const json = await res.json();
-      if (json.error) alert('解除失敗: ' + json.error);
-      else { alert('已解除封存。'); setIsSaved(false); setViewMode('calculator'); fetchAdjustments(); }
-    } catch (error: any) {
-      alert('解除失敗: ' + error.message);
-    }
-  };
-
-  const loadHistory = async () => {
-    try {
-      const res = await fetch(`/api/salary/history?year_month=${selectedMonth}`);
-      const json = await res.json();
-      if (json.data && json.data.length > 0) {
-        // 🟢 對舊版封存資料做防呆：補上缺少的欄位與預設值，避免薪資單明細按鈕觸發時當機
-        const normalized = json.data.map((d: any) => {
-          const snap = d.snapshot || {};
-          return {
-            // 先給預設值，再讓 snapshot 蓋過去（有值的話就用原本的）
-            total_work_hours: 0,
-            normal_hours: 0,
-            period_ot_hours: 0,
-            dailyRecords: [],
-            bonus_details: [],
-            deduction_details: [],
-            ...snap,
-            is_archived: true,
-            history_id: d.id,
-          };
-        });
-        setLiveReports(normalized);
-        setIsSaved(true);
-      } else {
-        setLiveReports([]);
-        setIsSaved(false);
+      if (json.error) {
+        alert('解除封存失敗: ' + json.error);
+        return;
       }
+
+      await fetchLockedRecords();
+      await performCalculation();
     } catch (error: any) {
-      console.error('Error loading history:', error);
+      alert('解除封存失敗: ' + error.message);
     }
   };
 
   // 月份切換輔助
   const changeMonth = (delta: number) => {
-      const current = new Date(`${selectedMonth}-01`);
-      const newDate = delta > 0 ? addMonths(current, 1) : subMonths(current, 1);
-      setSelectedMonth(format(newDate, 'yyyy-MM'));
+    const current = new Date(`${selectedMonth}-01`);
+    const newDate = delta > 0 ? addMonths(current, 1) : subMonths(current, 1);
+    setSelectedMonth(format(newDate, 'yyyy-MM'));
   };
 
   // 未認證時不顯示內容
@@ -376,66 +402,47 @@ export default function SalaryPage() {
         <div className="flex items-center gap-4">
           <h2 className="text-2xl font-bold flex items-center gap-2 text-slate-800">
             <DollarSign className="text-green-600" size={28}/> 
-            {viewMode === 'calculator' ? '薪資結算系統' : '歷史薪資查詢'}
+            薪資結算系統
           </h2>
-          <div className="flex bg-slate-100 p-1.5 rounded-xl">
-            <button onClick={() => setViewMode('calculator')} className={`px-4 py-1.5 text-sm font-bold rounded-lg transition ${viewMode==='calculator'?'bg-white shadow text-blue-600':'text-slate-500 hover:text-slate-700'}`}>本月試算</button>
-            <button onClick={() => setViewMode('history')} className={`px-4 py-1.5 text-sm font-bold rounded-lg transition ${viewMode==='history'?'bg-white shadow text-purple-600':'text-slate-500 hover:text-slate-700'}`}>歷史紀錄</button>
-          </div>
         </div>
         
         <div className="flex items-center gap-3">
-          {viewMode === 'calculator' && (
-             <div className="flex items-center gap-1 text-xs text-slate-400 mr-2 animate-pulse">
-                <CloudLightning size={12}/> 自動存檔中
-             </div>
-          )}
-          
-          {/* 月份選擇器 */}
           <div className="flex items-center bg-slate-50 rounded-xl border border-slate-200 p-1">
-            <button onClick={()=>changeMonth(-1)} className="p-2 hover:bg-white hover:shadow-sm rounded-lg text-slate-500"><ChevronLeft size={16}/></button>
+            <button onClick={()=>changeMonth(-1)} className="p-2 hover:bg-white hover:shadow-sm rounded-lg text-slate-500">
+              <ChevronLeft size={16}/>
+            </button>
             <div className="flex items-center gap-2 px-2">
-                <Calendar size={16} className="text-slate-400"/>
-                <input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="bg-transparent font-bold text-slate-700 outline-none w-32 text-center"/>
+              <Calendar size={16} className="text-slate-400"/>
+              <input
+                type="month"
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(e.target.value)}
+                className="bg-transparent font-bold text-slate-700 outline-none w-32 text-center"
+              />
             </div>
-            <button onClick={()=>changeMonth(1)} className="p-2 hover:bg-white hover:shadow-sm rounded-lg text-slate-500"><ChevronRight size={16}/></button>
+            <button onClick={()=>changeMonth(1)} className="p-2 hover:bg-white hover:shadow-sm rounded-lg text-slate-500">
+              <ChevronRight size={16}/>
+            </button>
           </div>
-          
-          {viewMode === 'calculator' && !isSaved && (
-             <button onClick={handleArchive} className="flex items-center gap-2 bg-slate-800 text-white px-5 py-2.5 rounded-xl font-bold hover:bg-black transition shadow-lg hover:shadow-xl active:scale-95">
-               <Save size={18}/> 結算並封存
-             </button>
-          )}
-          {isSaved && (
-            <div className="flex gap-2">
-                 <div className="flex items-center gap-2 bg-green-50 text-green-700 px-4 py-2 rounded-xl font-bold border border-green-200">
-                   <Archive size={16}/> {viewMode==='calculator'?'本月已封存':'已調閱封存檔'}
-                 </div>
-                 {viewMode === 'history' && (
-                    <button onClick={handleUnArchive} className="flex items-center gap-2 bg-red-50 text-red-600 px-4 py-2 rounded-xl font-bold hover:bg-red-100 transition border border-red-100">
-                    <RefreshCw size={16}/> 解除封存
-                    </button>
-                 )}
-            </div>
-          )}
         </div>
       </div>
 
       <CalculatorView 
         reports={liveReports} 
-        isArchived={viewMode === 'history' || isSaved} 
         adjustments={adjustments} 
         modifyAdjustment={modifyAdjustment} 
         staffList={staffList}
+        lockEmployee={lockEmployee}
+        unlockEmployee={unlockEmployee}
         onOpenSettings={(staffId: string) => setSettingModalStaffId(staffId)}
         onPrint={(rpt: any) => setPrintReport(rpt)}
       />
 
       {liveReports.length === 0 && (
-         <div className="text-center py-20 text-slate-400 bg-white rounded-2xl border border-dashed border-slate-300">
-           <History size={48} className="mx-auto mb-4 opacity-20"/>
-           <p>此月份尚無資料或尚未結算</p>
-         </div>
+        <div className="text-center py-20 text-slate-400 bg-white rounded-2xl border border-dashed border-slate-300">
+          <History size={48} className="mx-auto mb-4 opacity-20"/>
+          <p>此月份尚無資料或尚未結算</p>
+        </div>
       )}
 
       {settingModalStaffId !== null && (

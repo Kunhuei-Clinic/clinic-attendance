@@ -142,9 +142,10 @@ export const calculateStaffSalary = (
     if (dailyLogs.length > 0) {
       // 修正：使用 getTime() 排序
       const sortedIn = dailyLogs.map((l:any) => new Date(l.clock_in_time)).sort((a:Date, b:Date) => a.getTime() - b.getTime());
-      const sortedOut = dailyLogs.map((l:any) => l.clock_out_time ? new Date(l.clock_out_time) : null)
-        .filter((d:any) => d !== null)
-        .sort((a:Date, b:Date) => b.getTime() - a.getTime());
+      const sortedOut = dailyLogs
+        .map((l:any) => l.clock_out_time ? new Date(l.clock_out_time) : null)
+        .filter((d): d is Date => d !== null)
+        .sort((a, b) => b.getTime() - a.getTime());
       
       if (sortedIn.length > 0) actualIn = sortedIn[0];
       if (sortedOut.length > 0) actualOut = sortedOut[0];
