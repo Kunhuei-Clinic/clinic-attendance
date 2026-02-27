@@ -4,10 +4,10 @@ import React, { useState, useEffect } from 'react';
 import { DollarSign, Calendar, Save, Archive, RefreshCw, CloudLightning, History, ChevronLeft, ChevronRight } from 'lucide-react';
 import { addMonths, format, subMonths } from 'date-fns';
 
-import CalculatorView from '@/app/admin/salary/CalculatorView';
 import SettingsModal from '@/app/admin/salary/SettingsModal';
 import PayslipModal from '@/app/admin/salary/PayslipModal';
 import { calculateStaffSalary } from '@/app/admin/salary/salaryEngine';
+import SalaryTable from '@/app/admin/salary/SalaryTable';
 
 type Entity = { id: string; name: string };
 
@@ -338,14 +338,15 @@ export default function SalaryView() {
         </div>
       </div>
 
-      <CalculatorView 
-        reports={liveReports} 
-        isArchived={viewMode === 'history' || isSaved} 
-        adjustments={adjustments} 
-        modifyAdjustment={modifyAdjustment} 
+      <SalaryTable
+        reports={liveReports}
         staffList={staffList}
-        onOpenSettings={(staffId: number) => setSettingModalStaffId(staffId)}
+        // 此 View 僅做試算與查詢，不在這裡操作單筆封存，因此傳入空函式滿足型別
+        lockEmployee={() => {}}
+        unlockEmployee={() => {}}
+        onOpenSettings={(staffId: string) => setSettingModalStaffId(Number(staffId))}
         onPrint={(rpt: any) => setPrintReport(rpt)}
+        setAdjModalStaff={() => {}}
       />
 
       {liveReports.length === 0 && (

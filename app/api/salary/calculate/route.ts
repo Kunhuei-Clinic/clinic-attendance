@@ -20,9 +20,15 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Missing month parameter' }, { status: 400 });
     }
 
-    const startDate = `${month}-01T00:00:00`;
     const [y, m] = month.split('-').map(Number);
-    const nextMonth = new Date(y, m, 1).toISOString();
+    
+    // 強制加上台灣時區 (+08:00)，避免資料庫預設為 UTC 導致吃掉早上 8 點前的打卡
+    const startDate = `${month}-01T00:00:00+08:00`;
+    
+    // 精準計算下個月的年份與月份
+    const nextY = m === 12 ? y + 1 : y;
+    const nextM = m === 12 ? 1 : m + 1;
+    const nextMonth = `${nextY}-${String(nextM).padStart(2, '0')}-01T00:00:00+08:00`;
 
     // 1. 撈取考勤 Log（加上 clinic_id 過濾）
     const { data: logs, error: logsError } = await supabaseAdmin

@@ -169,14 +169,14 @@ export const calculateStaffSalary = (
     } else {
       // --- Schedule Mode ---
       const shiftDetails = rosterInfo?.shift_details || {};
-      const shifts = Object.values(shiftDetails) as {start:string, end:string}[];
-      
+      const shifts = Object.values(shiftDetails) as { start: string; end: string }[];
+
       shifts.sort((a, b) => (a?.start || '').localeCompare(b?.start || ''));
 
       shifts.forEach((shift) => {
         const scheduleStart = timeStringToDate(dateStr, shift.start);
         const scheduleEnd = timeStringToDate(dateStr, shift.end);
-        
+
         shiftDisplayStr += `${shift.start}-${shift.end} `;
 
         if (!actualIn || !actualOut) {
@@ -184,10 +184,12 @@ export const calculateStaffSalary = (
         }
 
         // 實際上班時間與表定上班時間，取「晚者」(避免提早到診所被溢算薪水)
-        let effectiveStart = (actualIn.getTime() > scheduleStart.getTime()) ? actualIn : scheduleStart;
+        let effectiveStart =
+          actualIn.getTime() > scheduleStart.getTime() ? actualIn : scheduleStart;
 
         // 實際下班時間與表定下班時間，取「早者」(將下班時間嚴格卡在表定時間，避免休息時間被計薪)
-        let effectiveEnd = (actualOut.getTime() < scheduleEnd.getTime()) ? actualOut : scheduleEnd;
+        let effectiveEnd =
+          actualOut.getTime() < scheduleEnd.getTime() ? actualOut : scheduleEnd;
 
         // 完全移除原本判定 nextShift 的那段 if (nextShift) {...} 邏輯，那會造成時數錯誤延長
 
@@ -200,8 +202,15 @@ export const calculateStaffSalary = (
         if (differenceInMinutes(scheduleEnd, actualOut) > 1) note += "早退 ";
       });
 
-      if (shifts.length === 0 && actualIn && actualOut) {
-        note += "未排班出勤 ";
+      // 🟢 舊資料防呆：如果班表沒有 shift_details (舊資料)，但員工有打卡，則自動退回「實支實付」計算，避免時數歸零
+      if (shifts.length === 0) {
+        if (actualIn && actualOut) {
+          dailyWorkMinutes = differenceInMinutes(actualOut, actualIn);
+          if (dailyWorkMinutes < 0) dailyWorkMinutes = 0;
+          note += "舊班表(改實算) ";
+        } else if (actualIn && !actualOut) {
+          note += "未排班且忘打下班卡 ";
+        }
       }
     }
 
