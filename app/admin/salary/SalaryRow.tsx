@@ -31,6 +31,24 @@ export default function SalaryRow({
   setAdjModalStaff,
 }: SalaryRowProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  const handleLock = async () => {
+    setIsProcessing(true);
+    try {
+      await lockEmployee(rpt);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+  const handleUnlock = async () => {
+    setIsProcessing(true);
+    try {
+      await unlockEmployee(rpt.history_id);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
   const staffId =
     rpt.staff_id ||
@@ -170,18 +188,20 @@ export default function SalaryRow({
             {/* 鎖定 / 解除封存 */}
             {isLocked ? (
               <button
-                onClick={() => unlockEmployee(rpt.history_id)}
-                className="w-full py-1.5 px-3 rounded-lg border border-red-200 text-red-600 bg-red-50 hover:bg-red-100 text-xs font-bold transition"
+                onClick={handleUnlock}
+                disabled={isProcessing}
+                className="w-full py-1.5 px-3 rounded-lg border border-red-200 text-red-600 bg-red-50 hover:bg-red-100 text-xs font-bold transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                🔓 解除封存
+                {isProcessing ? '處理中...' : '🔓 解除封存'}
               </button>
             ) : (
               <>
                 <button
-                  onClick={() => lockEmployee(rpt)}
-                  className="w-full py-1.5 px-3 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 text-xs font-bold shadow-sm transition"
+                  onClick={handleLock}
+                  disabled={isProcessing}
+                  className="w-full py-1.5 px-3 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 text-xs font-bold shadow-sm transition disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  🔒 封存此筆
+                  {isProcessing ? '處理中...' : '🔒 封存此筆'}
                 </button>
                 <button
                   onClick={() => setAdjModalStaff(rpt)}
@@ -307,7 +327,7 @@ export default function SalaryRow({
                         <span className="font-mono font-bold">${rpt.base_pay}</span>
                       </li>
                       <li className="flex justify-between">
-                        <span>加班加成 (1.34/1.67):</span>
+                        <span>加班加成 ({(rpt.normal_ot_hours ?? 0) + (rpt.rest_work_hours ?? 0)}hr):</span>
                         <span className="font-mono">${rpt.ot_pay}</span>
                       </li>
                       {rpt.holiday_pay > 0 && (
@@ -324,7 +344,7 @@ export default function SalaryRow({
                         <span className="font-mono font-bold">${rpt.base_pay}</span>
                       </li>
                       <li className="flex justify-between">
-                        <span>加班費 (平日/休息日):</span>
+                        <span>加班費 ({(rpt.normal_ot_hours ?? 0) + (rpt.rest_work_hours ?? 0)}hr):</span>
                         <span className="font-mono">${rpt.ot_pay}</span>
                       </li>
                       {rpt.holiday_pay > 0 && (

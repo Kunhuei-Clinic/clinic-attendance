@@ -144,7 +144,8 @@ export const calculateStaffSalary = (
     const dailyLogs = logs.filter(
       (l) => toLocalDateString(l.clock_in_time) === dateStr
     );
-    
+    dailyLogs.sort((a, b) => new Date(a.clock_in_time).getTime() - new Date(b.clock_in_time).getTime());
+
     // 將上下班時間成對組合，例如: 08:00~12:33, 15:00~21:00
     const clockPairs = dailyLogs.map((l: any) => {
       const inStr = l.clock_in_time
@@ -288,6 +289,13 @@ export const calculateStaffSalary = (
     result.ot_pay += staff.salary_mode === 'hourly' ? calculateTieredOtPremium(periodExcess, hourlyRate) : calculateTieredOt(periodExcess, hourlyRate);
     result.warnings.push(`週期總量超標 ${periodExcess.toFixed(1)}hr`);
   }
+
+  result.total_work_hours = Math.round(result.total_work_hours * 100) / 100;
+  result.normal_hours = Math.round(result.normal_hours * 100) / 100;
+  result.period_ot_hours = Math.round(result.period_ot_hours * 100) / 100;
+  result.normal_ot_hours = Math.round(result.normal_ot_hours * 100) / 100;
+  result.rest_work_hours = Math.round(result.rest_work_hours * 100) / 100;
+  result.holiday_work_hours = Math.round(result.holiday_work_hours * 100) / 100;
 
   if (staff.salary_mode === 'hourly') {
     result.base_pay = Math.round(result.total_work_hours * hourlyRate);

@@ -74,8 +74,9 @@ export default function SalaryPage() {
     fetchStaffSettings();
   }, [authChecked]);
 
-  // 每次月份變更時，載入調整與已封存紀錄
+  // 每次月份變更時，載入調整與已封存紀錄（換月時立刻清空舊有報表，避免畫面殘影與誤操作）
   useEffect(() => {
+    setLiveReports([]);
     if (!authChecked || !selectedMonth) return;
     fetchAdjustments();
     fetchLockedRecords();
