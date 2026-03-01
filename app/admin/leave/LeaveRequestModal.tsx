@@ -65,11 +65,21 @@ export default function LeaveRequestModal({
     }
   }, [isOpen]);
 
+  // 🟢 UUID 防呆：確保預設有合法的 UUID，否則後端會報錯
+  useEffect(() => {
+    if (isOpen && staffList && staffList.length > 0) {
+      setFormData((prev) => ({
+        ...prev,
+        staff_id: prev.staff_id || staffList[0].id,
+      }));
+    }
+  }, [isOpen, staffList]);
+
   if (!isOpen) return null;
 
   const handleSubmitClick = async () => {
     if (!formData.staff_id) {
-      alert('請選擇員工');
+      alert('請選擇員工！');
       return;
     }
     await onSubmit(formData);

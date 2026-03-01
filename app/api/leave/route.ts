@@ -82,7 +82,7 @@ export async function GET(request: NextRequest) {
  * 
  * Request Body:
  *   {
- *     staff_id: number,
+ *     staff_id: string (UUID),
  *     staff_name: string,
  *     type: string,
  *     date: string (YYYY-MM-DD),
@@ -124,11 +124,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 🟢 多租戶：驗證該員工是否屬於當前診所
+    // 🟢 多租戶：驗證該員工是否屬於當前診所；staff_id 保持 string (UUID)
     const { data: staff } = await supabaseAdmin
       .from('staff')
       .select('id, clinic_id')
-      .eq('id', staff_id)
+      .eq('id', String(staff_id))
       .eq('clinic_id', clinicId)
       .single();
 
@@ -142,11 +142,11 @@ export async function POST(request: NextRequest) {
     const startFull = `${date}T${start_time}:00`;
     const endFull = `${date}T${end_time}:00`;
 
-    // 🟢 多租戶：將 clinic_id 合併到 payload 中（不讓前端傳入）
+    // 🟢 多租戶：將 clinic_id 合併到 payload 中；staff_id 保持 string (UUID)，不轉數字
     const { error } = await supabaseAdmin
       .from('leave_requests')
       .insert([{
-        staff_id: staff_id,
+        staff_id: String(staff_id),
         staff_name,
         type,
         start_time: startFull,
@@ -184,7 +184,7 @@ export async function POST(request: NextRequest) {
  * 
  * Request Body:
  *   {
- *     id: number,
+ *     id: string (UUID),
  *     status: 'pending' | 'approved' | 'rejected'
  *   }
  */
@@ -209,11 +209,11 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    // 🟢 多租戶：更新時也要驗證該紀錄屬於當前診所
+    // 🟢 多租戶：更新時也要驗證該紀錄屬於當前診所；id 保持 string (UUID)
     const { error } = await supabaseAdmin
       .from('leave_requests')
       .update({ status })
-      .eq('id', id)
+      .eq('id', String(id))
       .eq('clinic_id', clinicId); // 🟢 確保只更新該診所的紀錄
 
     if (error) {
@@ -242,7 +242,7 @@ export async function PATCH(request: NextRequest) {
  * 刪除請假紀錄
  * 
  * Query Parameters:
- *   - id: number (required)
+ *   - id: string (UUID, required)
  */
 export async function DELETE(request: NextRequest) {
   try {
@@ -265,11 +265,11 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    // 🟢 多租戶：刪除時也要驗證該紀錄屬於當前診所
+    // 🟢 多租戶：刪除時也要驗證該紀錄屬於當前診所；id 保持 string (UUID)
     const { error } = await supabaseAdmin
       .from('leave_requests')
       .delete()
-      .eq('id', id)
+      .eq('id', String(id))
       .eq('clinic_id', clinicId); // 🟢 確保只刪除該診所的紀錄
 
     if (error) {

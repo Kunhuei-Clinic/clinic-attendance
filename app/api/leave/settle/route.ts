@@ -8,7 +8,7 @@ import { getClinicIdFromRequest } from '@/lib/clinicHelper';
  * 
  * Request Body:
  *   {
- *     staff_id: number,
+ *     staff_id: string (UUID),
  *     days: number,
  *     pay_month: string (YYYY-MM),
  *     notes?: string
@@ -50,11 +50,11 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // 🟢 多租戶：取得該診所的員工資料
+    // 🟢 多租戶：取得該診所的員工資料；staff_id 保持 string (UUID)
     const { data: staff, error: staffError } = await supabaseAdmin
       .from('staff')
       .select('id, name, base_salary, salary_mode')
-      .eq('id', staff_id)
+      .eq('id', String(staff_id))
       .eq('clinic_id', clinicId) // 🟢 確保只查詢該診所的員工
       .single();
     
@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
     const { data: leaveRequests } = await supabaseAdmin
       .from('leave_requests')
       .select('staff_id, hours, start_time')
-      .eq('staff_id', staff_id)
+      .eq('staff_id', String(staff_id))
       .eq('type', '特休')
       .eq('status', 'approved')
       .eq('clinic_id', clinicId); // 🟢 只查詢該診所的請假紀錄
@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
     const { data: settlements } = await supabaseAdmin
       .from('leave_settlements')
       .select('staff_id, days, status')
-      .eq('staff_id', staff_id)
+      .eq('staff_id', String(staff_id))
       .eq('status', 'processed')
       .eq('clinic_id', clinicId); // 🟢 只查詢該診所的結算紀錄
     
@@ -104,11 +104,11 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // 🟢 多租戶：建立結算紀錄時自動填入 clinic_id
+    // 🟢 多租戶：建立結算紀錄時自動填入 clinic_id；staff_id、pay_month 保持 string
     const { data: settlement, error: insertError } = await supabaseAdmin
       .from('leave_settlements')
       .insert([{
-        staff_id: staff_id,
+        staff_id: String(staff_id),
         days: Number(days),
         amount,
         pay_month,
@@ -169,11 +169,11 @@ export async function GET(request: NextRequest) {
       .order('created_at', { ascending: false });
     
     if (staffId) {
-      query = query.eq('staff_id', staffId);
+      query = query.eq('staff_id', String(staffId));
     }
     
     if (payMonth) {
-      query = query.eq('pay_month', payMonth);
+      query = query.eq('pay_month', String(payMonth));
     }
     
     if (status) {
@@ -225,11 +225,11 @@ export async function PATCH(request: NextRequest) {
       );
     }
     
-    // 🟢 多租戶：更新時也要驗證該紀錄屬於當前診所
+    // 🟢 多租戶：更新時也要驗證該紀錄屬於當前診所；id 保持 string (UUID)
     const { error } = await supabaseAdmin
       .from('leave_settlements')
       .update({ status })
-        .eq('id', id)
+      .eq('id', String(id))
       .eq('clinic_id', clinicId); // 🟢 確保只更新該診所的紀錄
     
     if (error) {

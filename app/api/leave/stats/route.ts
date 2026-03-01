@@ -74,7 +74,7 @@ function calculateCalendarLeave(startDate: Date, year: number): number {
  * 
  * Query Parameters:
  *   - action: 'details' (可選) - 如果為 'details'，則回傳特定員工的詳細資料
- *   - staff_id: number (可選) - 當 action=details 時必需，指定要查詢的員工 ID
+ *   - staff_id: string (UUID, 可選) - 當 action=details 時必需，指定要查詢的員工 ID
  */
 export async function GET(request: NextRequest) {
   try {

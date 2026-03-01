@@ -26,7 +26,7 @@ type YearSummary = {
 // API 回傳的完整資料結構
 type LeaveSummaryResponse = {
   staff: {
-    id: number;
+    id: string; // 🟢 修正為 UUID (string)
     name: string;
     role: string | null;
     start_date: string | null;
