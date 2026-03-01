@@ -1,9 +1,12 @@
 // SettingsModal.tsx
 'use client';
-import React from 'react';
+import React, { useState } from 'react';
 import { Settings, X, Building2, Calendar, Stethoscope, Clock, ShieldCheck } from 'lucide-react';
 
 export default function SettingsModal({ staff, updateStaff, entityList, onClose }: any) {
+  const [localBonuses, setLocalBonuses] = useState<any[]>(staff?.bonuses || []);
+  const [localDeductions, setLocalDeductions] = useState<any[]>(staff?.default_deductions || []);
+
   if (!staff) return null;
 
   // 年資與特休計算
@@ -163,6 +166,39 @@ export default function SettingsModal({ staff, updateStaff, entityList, onClose 
             </div>
           )}
 
+          {/* 固定津貼與扣款設定 */}
+          <div className="grid grid-cols-2 gap-4">
+            {/* 固定津貼 */}
+            <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
+              <label className="text-sm font-bold text-blue-800 mb-3 block">➕ 每月固定津貼/獎金</label>
+              <div className="space-y-2 mb-3">
+                {localBonuses.map((b: any, i: number) => (
+                  <div key={i} className="flex gap-2">
+                    <input value={b.name} onChange={(e) => setLocalBonuses(prev => prev.map((item, idx) => idx === i ? {...item, name: e.target.value} : item))} className="w-1/2 p-1.5 text-xs rounded border" placeholder="項目"/>
+                    <input type="number" value={b.amount} onChange={(e) => setLocalBonuses(prev => prev.map((item, idx) => idx === i ? {...item, amount: Number(e.target.value)} : item))} className="w-1/3 p-1.5 text-xs rounded border text-right" placeholder="金額"/>
+                    <button onClick={() => setLocalBonuses(prev => prev.filter((_, idx) => idx !== i))} className="text-red-400 hover:text-red-600"><X size={14}/></button>
+                  </div>
+                ))}
+              </div>
+              <button onClick={() => setLocalBonuses(prev => [...prev, {name:'', amount:0}])} className="text-xs bg-white border border-blue-200 text-blue-600 px-3 py-1 rounded w-full hover:bg-blue-100">+ 新增津貼</button>
+            </div>
+
+            {/* 固定扣款 */}
+            <div className="bg-red-50 p-4 rounded-xl border border-red-100">
+              <label className="text-sm font-bold text-red-800 mb-3 block">➖ 每月固定扣除額</label>
+              <div className="space-y-2 mb-3">
+                {localDeductions.map((d: any, i: number) => (
+                  <div key={i} className="flex gap-2">
+                    <input value={d.name} onChange={(e) => setLocalDeductions(prev => prev.map((item, idx) => idx === i ? {...item, name: e.target.value} : item))} className="w-1/2 p-1.5 text-xs rounded border" placeholder="項目"/>
+                    <input type="number" value={d.amount} onChange={(e) => setLocalDeductions(prev => prev.map((item, idx) => idx === i ? {...item, amount: Number(e.target.value)} : item))} className="w-1/3 p-1.5 text-xs rounded border text-right" placeholder="金額"/>
+                    <button onClick={() => setLocalDeductions(prev => prev.filter((_, idx) => idx !== i))} className="text-red-400 hover:text-red-600"><X size={14}/></button>
+                  </div>
+                ))}
+              </div>
+              <button onClick={() => setLocalDeductions(prev => [...prev, {name:'', amount:0}])} className="text-xs bg-white border border-red-200 text-red-600 px-3 py-1 rounded w-full hover:bg-red-100">+ 新增扣款</button>
+            </div>
+          </div>
+
           {/* 勞健保設定 */}
           <div className="bg-orange-50 p-4 rounded-xl border border-orange-100">
              <label className="text-sm font-bold text-orange-800 flex items-center gap-2 mb-3">
@@ -181,7 +217,14 @@ export default function SettingsModal({ staff, updateStaff, entityList, onClose 
           </div>
           
           <div className="pt-4 border-t flex justify-end">
-             <button onClick={onClose} className="bg-slate-900 text-white px-8 py-2.5 rounded-xl font-bold hover:bg-black shadow-lg hover:shadow-xl transition transform active:scale-95">
+             <button
+               onClick={async () => {
+                 await updateStaff(staff.id, 'bonuses', localBonuses);
+                 await updateStaff(staff.id, 'default_deductions', localDeductions);
+                 onClose();
+               }}
+               className="bg-slate-900 text-white px-8 py-2.5 rounded-xl font-bold hover:bg-black shadow-lg hover:shadow-xl transition transform active:scale-95"
+             >
                完成設定
              </button>
           </div>

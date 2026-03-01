@@ -264,21 +264,22 @@ export const calculateStaffSalary = (
 
     const dailyHours = Math.round((dailyWorkMinutes / 60) * 100) / 100;
 
+    // 🟢 無條件建立每日紀錄 (勞檢防禦：即使工時為0也要記錄當天屬性)
+    const dailyRecord: DailyRecord = {
+      date: dateStr,
+      dayType: dayType,
+      shiftInfo: shiftDisplayStr.trim(),
+      clockIn: combinedClockStr || '--:--',
+      clockOut: '',
+      totalHours: dailyHours,
+      normalHours: 0,
+      ot134: 0,
+      ot167: 0,
+      note: note.trim(),
+    };
+
     if (dailyHours > 0) {
       result.total_work_hours += dailyHours;
-      
-      const dailyRecord: DailyRecord = {
-        date: dateStr,
-        dayType: dayType,
-        shiftInfo: shiftDisplayStr.trim(),
-        clockIn: combinedClockStr || '--:--',
-        clockOut: '', // 已合併進 clockIn 中
-        totalHours: dailyHours,
-        normalHours: 0,
-        ot134: 0,
-        ot167: 0,
-        note: note.trim(),
-      };
 
       if (dayType === 'holiday') { 
         result.holiday_work_hours += dailyHours;
@@ -318,8 +319,13 @@ export const calculateStaffSalary = (
           dailyRecord.ot167 = ot167;
         }
       }
-      result.dailyRecords.push(dailyRecord);
+    } else {
+      if (dayType === 'holiday') dailyRecord.note = (dailyRecord.note || "") + " 國定假日";
+      if (dayType === 'regular') dailyRecord.note = (dailyRecord.note || "") + " 例假日";
+      if (dayType === 'rest') dailyRecord.note = (dailyRecord.note || "") + " 休息日";
     }
+    
+    result.dailyRecords.push(dailyRecord);
   });
 
   if (accumulatedNormalHours > monthlyStandardHours) {
