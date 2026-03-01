@@ -612,7 +612,10 @@ export default function SalaryPage() {
           staff={adjModalStaff}
           adjustments={adjustments}
           selectedMonth={selectedMonth}
-          modifyAdjustment={modifyAdjustment}
+          onSaveComplete={() => {
+            fetchAdjustments();
+            setAdjModalStaff(null);
+          }}
           onClose={() => setAdjModalStaff(null)}
         />
       )}

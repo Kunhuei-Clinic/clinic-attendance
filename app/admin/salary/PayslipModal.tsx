@@ -12,6 +12,14 @@ export default function PayslipModal({ report, yearMonth, clinicName, onClose }:
     return () => { document.body.style.overflow = 'unset'; };
   }, []);
 
+  useEffect(() => {
+    if (!report || !yearMonth || !clinicName) return;
+    const originalTitle = document.title;
+    const safeName = (report.staff_name || '').replace(/\s+/g, '_');
+    document.title = `${clinicName}_${safeName}_${yearMonth}_薪資單`;
+    return () => { document.title = originalTitle; };
+  }, [clinicName, report, yearMonth]);
+
   const handlePrint = () => window.print();
 
   if (!mounted) return null;
@@ -60,6 +68,32 @@ export default function PayslipModal({ report, yearMonth, clinicName, onClose }:
 function PrintContent({ report, yearMonth, clinicName }: any) {
   const [year, month] = yearMonth.split('-');
   const fmt = (n: number) => Math.round(n).toLocaleString();
+
+  // 🟢 計算加班時數分佈
+  const total134 = report.dailyRecords?.reduce((sum: number, r: any) => sum + (r.ot134 || 0), 0) || 0;
+  const total167 = report.dailyRecords?.reduce((sum: number, r: any) => sum + (r.ot167 || 0), 0) || 0;
+
+  // 🟢 計算國定假日細節
+  const holidayRecords = report.dailyRecords?.filter((r: any) => r.dayType === 'holiday' || r.dayType === 'regular') || [];
+  const holidayDates = holidayRecords.map((r: any) => r.date.slice(5)).join(', ');
+  const holidayHours = holidayRecords.reduce((sum: number, r: any) => sum + (r.totalHours || 0), 0);
+
+  // 🟢 產生「當月每一天」的完整陣列 (勞檢防禦)
+  const daysInMonth = new Date(Number(year), Number(month), 0).getDate();
+  const fullMonthRecords = Array.from({ length: daysInMonth }, (_, i) => {
+    const dayStr = String(i + 1).padStart(2, '0');
+    const dateStr = `${yearMonth}-${dayStr}`;
+    const existing = report.dailyRecords?.find((r: any) => r.date === dateStr);
+    return existing || {
+      date: dateStr,
+      dayType: 'empty',
+      totalHours: 0,
+      normalHours: 0,
+      ot134: 0,
+      ot167: 0,
+      note: ''
+    };
+  });
 
   const getDayTypeLabel = (type: string) => {
     switch(type) {
@@ -111,8 +145,8 @@ function PrintContent({ report, yearMonth, clinicName }: any) {
                   {report.salary_mode === 'hourly' ? (
                     <>
                       <Row label="總計工時本薪" amount={report.base_pay} sub={`${report.total_work_hours ?? 0}hr`} />
-                      {(report.ot_pay > 0) && <Row label="加班費加成" amount={report.ot_pay} sub={`1.34/1.67 (${(report.normal_ot_hours ?? 0) + (report.rest_work_hours ?? 0)}hr)`} />}
-                      {(report.holiday_pay > 0) && <Row label="國定假日加成" amount={report.holiday_pay} />}
+                      {(report.ot_pay > 0) && <Row label="加班費加成" amount={report.ot_pay} sub={`1.34 (${total134}hr) / 1.67 (${total167}hr)`} />}
+                      {(report.holiday_pay > 0) && <Row label="國定假日加成" amount={report.holiday_pay} sub={`${holidayDates} (共 ${holidayHours}hr)`} />}
                     </>
                   ) : (
                     <>
@@ -200,11 +234,11 @@ function PrintContent({ report, yearMonth, clinicName }: any) {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200">
-            {report.dailyRecords?.map((rec: any, idx: number) => (
-              <tr key={idx} className="print:break-inside-avoid">
-                <td className="p-1.5 font-mono">{rec.date.slice(5)}</td>
-                <td className="p-1.5 text-center">{getDayTypeLabel(rec.dayType)}</td>
-                <td className="p-1.5 text-center font-bold">{rec.totalHours}</td>
+            {fullMonthRecords.map((rec: any, idx: number) => (
+              <tr key={idx} className="print:break-inside-avoid text-slate-600">
+                <td className="p-1.5 font-mono text-slate-800">{rec.date.slice(5)}</td>
+                <td className="p-1.5 text-center">{rec.dayType === 'empty' ? '-' : getDayTypeLabel(rec.dayType)}</td>
+                <td className="p-1.5 text-center font-bold text-slate-800">{rec.totalHours > 0 ? rec.totalHours : '-'}</td>
                 <td className="p-1.5 text-center text-slate-400">{rec.normalHours > 0 ? rec.normalHours : '-'}</td>
                 <td className="p-1.5 text-center font-mono text-orange-600 print:text-black">{rec.ot134 > 0 ? rec.ot134.toFixed(1) : '-'}</td>
                 <td className="p-1.5 text-center font-mono text-orange-600 print:text-black">{rec.ot167 > 0 ? rec.ot167.toFixed(1) : '-'}</td>
