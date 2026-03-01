@@ -61,6 +61,14 @@ const splitOtHours = (hours: number) => {
   return { ot134: 2, ot167: hours - 2 };
 };
 
+// 時薪制用：僅計算加班「加成」部分 (前2hr *0.34, 之後 *0.67)，本薪已含在 total_work_hours 內
+const calculateTieredOtPremium = (hours: number, hourlyRate: number): number => {
+  if (hours <= 0) return 0;
+  const ot134 = Math.min(hours, 2);
+  const ot167 = Math.max(0, hours - 2);
+  return Math.round(ot134 * hourlyRate * 0.34 + ot167 * hourlyRate * 0.67);
+};
+
 const calculateTieredOt = (hours: number, hourlyRate: number): number => {
   const { ot134, ot167 } = splitOtHours(hours);
   return Math.round((ot134 * hourlyRate * 1.34) + (ot167 * hourlyRate * 1.67));
@@ -234,7 +242,7 @@ export const calculateStaffSalary = (
 
       if (dayType === 'holiday') { 
         result.holiday_work_hours += dailyHours;
-        const multiplier = staff.salary_mode === 'monthly' ? 1 : 2;
+        const multiplier = staff.salary_mode === 'hourly' ? 1 : (staff.salary_mode === 'monthly' ? 1 : 2);
         result.holiday_pay += Math.round(dailyHours * hourlyRate * multiplier);
         dailyRecord.note = (dailyRecord.note || "") + " 國定假日";
 
@@ -246,7 +254,7 @@ export const calculateStaffSalary = (
 
       } else if (dayType === 'rest') { 
         result.rest_work_hours += dailyHours;
-        result.ot_pay += calculateTieredOt(dailyHours, hourlyRate);
+        result.ot_pay += staff.salary_mode === 'hourly' ? calculateTieredOtPremium(dailyHours, hourlyRate) : calculateTieredOt(dailyHours, hourlyRate);
         const { ot134, ot167 } = splitOtHours(dailyHours);
         dailyRecord.ot134 = ot134;
         dailyRecord.ot167 = ot167;
@@ -263,7 +271,7 @@ export const calculateStaffSalary = (
           
           const ot = dailyHours - dailyNormalLimit;
           result.normal_ot_hours += ot;
-          result.ot_pay += calculateTieredOt(ot, hourlyRate);
+          result.ot_pay += staff.salary_mode === 'hourly' ? calculateTieredOtPremium(ot, hourlyRate) : calculateTieredOt(ot, hourlyRate);
           
           const { ot134, ot167 } = splitOtHours(ot);
           dailyRecord.ot134 = ot134;
@@ -277,13 +285,12 @@ export const calculateStaffSalary = (
   if (accumulatedNormalHours > monthlyStandardHours) {
     const periodExcess = accumulatedNormalHours - monthlyStandardHours;
     result.period_ot_hours = periodExcess;
-    result.ot_pay += calculateTieredOt(periodExcess, hourlyRate);
+    result.ot_pay += staff.salary_mode === 'hourly' ? calculateTieredOtPremium(periodExcess, hourlyRate) : calculateTieredOt(periodExcess, hourlyRate);
     result.warnings.push(`週期總量超標 ${periodExcess.toFixed(1)}hr`);
   }
 
   if (staff.salary_mode === 'hourly') {
-    const effectiveBaseHours = result.normal_hours - result.period_ot_hours;
-    result.base_pay = Math.round(effectiveBaseHours * staff.base_salary);
+    result.base_pay = Math.round(result.total_work_hours * hourlyRate);
   } else {
     result.base_pay = staff.base_salary;
   }

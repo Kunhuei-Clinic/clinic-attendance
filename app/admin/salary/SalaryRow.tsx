@@ -11,14 +11,6 @@ import {
   AlertCircle,
 } from 'lucide-react';
 
-// 與 salaryEngine 相同邏輯的本地加班費計算，用於顯示
-const calculateTieredOt = (hours: number, hourlyRate: number): number => {
-  if (hours <= 0) return 0;
-  const ot134 = Math.min(hours, 2);
-  const ot167 = Math.max(0, hours - 2);
-  return Math.round(ot134 * hourlyRate * 1.34 + ot167 * hourlyRate * 1.67);
-};
-
 type SalaryRowProps = {
   rpt: any;
   staffList: any[];
@@ -308,36 +300,41 @@ export default function SalaryRow({
                   <AlertCircle size={14} /> 應發明細彙總 (+)
                 </strong>
                 <ul className="space-y-2 text-sm text-slate-600">
-                  <li className="flex justify-between">
-                    <span>
-                      本薪 ({rpt.normal_hours}
-                      hr):
-                    </span>
-                    <span className="font-mono font-bold">${rpt.base_pay}</span>
-                  </li>
-                  <li className="flex justify-between">
-                    <span>
-                      平日加班 ({rpt.normal_ot_hours}
-                      hr):
-                    </span>
-                    <span className="font-mono">
-                      $
-                      {calculateTieredOt(
-                        rpt.normal_ot_hours,
-                        Math.round(rpt.base_pay / 240)
+                  {rpt.salary_mode === 'hourly' ? (
+                    <>
+                      <li className="flex justify-between">
+                        <span>總計工時 ({rpt.total_work_hours}hr):</span>
+                        <span className="font-mono font-bold">${rpt.base_pay}</span>
+                      </li>
+                      <li className="flex justify-between">
+                        <span>加班加成 (1.34/1.67):</span>
+                        <span className="font-mono">${rpt.ot_pay}</span>
+                      </li>
+                      {rpt.holiday_pay > 0 && (
+                        <li className="flex justify-between text-blue-600">
+                          <span>國定假日加成:</span>
+                          <span className="font-mono">${rpt.holiday_pay}</span>
+                        </li>
                       )}
-                    </span>
-                  </li>
-                  <li className="flex justify-between">
-                    <span>
-                      休息日/國定 (
-                      {rpt.rest_work_hours + rpt.holiday_work_hours}
-                      hr):
-                    </span>
-                    <span className="font-mono">
-                      ${rpt.ot_pay + rpt.holiday_pay}
-                    </span>
-                  </li>
+                    </>
+                  ) : (
+                    <>
+                      <li className="flex justify-between">
+                        <span>本薪 (月薪):</span>
+                        <span className="font-mono font-bold">${rpt.base_pay}</span>
+                      </li>
+                      <li className="flex justify-between">
+                        <span>加班費 (平日/休息日):</span>
+                        <span className="font-mono">${rpt.ot_pay}</span>
+                      </li>
+                      {rpt.holiday_pay > 0 && (
+                        <li className="flex justify-between text-blue-600">
+                          <span>國定假日出勤:</span>
+                          <span className="font-mono">${rpt.holiday_pay}</span>
+                        </li>
+                      )}
+                    </>
+                  )}
                   {rpt.period_ot_hours > 0 && (
                     <li className="flex justify-between text-orange-600 font-bold">
                       <span>
