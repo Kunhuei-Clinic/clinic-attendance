@@ -12,7 +12,7 @@ const SHIFT_MAPPING: Record<string, 'AM' | 'PM' | 'NIGHT'> = {
 
 type Staff = { id: string; name: string; role: string; display_order: number; work_rule: 'normal' | '2week' | '4week' | '8week' | 'none'; entity?: string; }; // UUID
 type Shift = 'M' | 'A' | 'N';
-type DayType = 'normal' | 'rest' | 'regular';
+type DayType = 'normal' | 'rest' | 'regular' | 'holiday' | 'shifted';
 // 更新 RosterData 定義，加入 shift_details
 type RosterData = { shifts: Shift[]; day_type: DayType; shift_details?: Record<string, { start: string, end: string }> };
 
@@ -47,6 +47,7 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
     });
     // 🆕 一鍵排整天模式：勾選後，點「早班」可視為排整天 (早/午/晚)
     const [fullDayFromMorning, setFullDayFromMorning] = useState(false);
+    const [activeStamp, setActiveStamp] = useState<DayType>('rest');
 
     // 初始化
     useEffect(() => {
@@ -239,6 +240,8 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
                     let day_type: DayType = 'normal';
                     if (r.day_type === 'rest') day_type = 'rest';
                     if (r.day_type === 'regular') day_type = 'regular';
+                    if (r.day_type === 'holiday') day_type = 'holiday';
+                    if (r.day_type === 'shifted') day_type = 'shifted';
                     
                     const shift_details = r.shift_details || {};
                     map[`${r.staff_id}_${r.date}`] = { shifts, day_type, shift_details };
@@ -352,13 +355,11 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
         }
     };
 
-    const cycleDayType = async (staffId: string, dateStr: string) => {
+    const applyDayTypeStamp = async (staffId: string, dateStr: string) => {
         const key = `${staffId}_${dateStr}`;
         const currentData = rosterMap[key] || { shifts: [], day_type: 'normal' };
-        let nextType: DayType = 'normal';
-        if (currentData.day_type === 'normal') nextType = 'rest';
-        else if (currentData.day_type === 'rest') nextType = 'regular';
-        else nextType = 'normal';
+
+        const nextType = currentData.day_type === activeStamp ? 'normal' : activeStamp;
         const nextShifts = (nextType === 'regular') ? [] : currentData.shifts;
         updateRoster(staffId, dateStr, nextShifts, nextType, currentData.shift_details);
     };
@@ -557,11 +558,20 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
                                             let cellBg = isToday ? 'bg-yellow-50' : '';
                                             if (data.day_type === 'rest') cellBg = 'bg-emerald-50';
                                             else if (data.day_type === 'regular') cellBg = "bg-red-50 bg-[linear-gradient(45deg,transparent_25%,rgba(255,0,0,0.05)_50%,transparent_75%,transparent_100%)] bg-[length:10px_10px]";
+                                            else if (data.day_type === 'holiday') cellBg = 'bg-pink-50';
+                                            else if (data.day_type === 'shifted') cellBg = 'bg-slate-100';
+
+                                            let btnClass = 'text-transparent hover:text-slate-300';
+                                            let btnText = '•';
+                                            if (data.day_type === 'rest') { btnClass = 'bg-emerald-200 text-emerald-800'; btnText = '休'; }
+                                            else if (data.day_type === 'regular') { btnClass = 'bg-red-200 text-red-800'; btnText = '例'; }
+                                            else if (data.day_type === 'holiday') { btnClass = 'bg-pink-300 text-pink-900'; btnText = '國'; }
+                                            else if (data.day_type === 'shifted') { btnClass = 'bg-slate-300 text-slate-700'; btnText = '調'; }
 
                                             return (
                                                 <td key={d.dateStr} className={`border p-0.5 text-center align-top h-16 relative min-w-[45px] ${cellBg}`}>
-                                                    <button onClick={() => cycleDayType(staff.id, d.dateStr)} className={`w-full h-5 rounded-sm text-[10px] font-bold mb-1 ${data.day_type === 'rest' ? 'bg-emerald-200 text-emerald-800' : data.day_type === 'regular' ? 'bg-red-200 text-red-800' : 'text-transparent hover:text-slate-300'}`}>
-                                                        {data.day_type === 'rest' ? "休" : data.day_type === 'regular' ? "例" : "•"}
+                                                    <button onClick={() => applyDayTypeStamp(staff.id, d.dateStr)} className={`w-full h-5 rounded-sm text-[10px] font-bold mb-1 transition-colors ${btnClass}`}>
+                                                        {btnText}
                                                     </button>
                                                     {data.day_type !== 'regular' && (
                                                         <div className="flex flex-col gap-[2px]">
@@ -617,6 +627,29 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
                         <Settings size={14} />
                         一鍵排整天 (早班)
                     </button>
+
+                    {/* 🆕 假別印章工具列 */}
+                    <div className="flex items-center gap-1 bg-white p-1 rounded-lg border border-slate-300 shadow-sm text-xs">
+                        <span className="text-slate-500 font-bold px-2">假別印章:</span>
+                        {(['normal', 'rest', 'regular', 'holiday', 'shifted'] as DayType[]).map(type => {
+                            let label = '平日'; let color = 'text-slate-400 bg-slate-100 hover:bg-slate-200';
+                            if (type === 'rest') { label = '休(休息日)'; color = 'text-emerald-800 bg-emerald-100 hover:bg-emerald-200'; }
+                            if (type === 'regular') { label = '例(例假日)'; color = 'text-red-800 bg-red-100 hover:bg-red-200'; }
+                            if (type === 'holiday') { label = '國(排國定假)'; color = 'text-pink-900 bg-pink-200 hover:bg-pink-300'; }
+                            if (type === 'shifted') { label = '調(調移作平日)'; color = 'text-slate-700 bg-slate-300 hover:bg-slate-400'; }
+
+                            const isActive = activeStamp === type;
+                            return (
+                                <button
+                                    key={type}
+                                    onClick={() => setActiveStamp(type)}
+                                    className={`px-3 py-1.5 rounded-md font-bold transition ${isActive ? 'ring-2 ring-blue-500 shadow-md ' + color : color + ' opacity-60'}`}
+                                >
+                                    {label}
+                                </button>
+                            );
+                        })}
+                    </div>
 
                     {/* 🟢 營業時間設定按鈕 */}
                     <button onClick={() => setShowTimeModal(true)} className="flex items-center gap-2 bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-bold shadow hover:bg-black transition">

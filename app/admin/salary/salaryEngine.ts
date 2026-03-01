@@ -135,15 +135,25 @@ export const calculateStaffSalary = (
     const rosterKey = `${staff.id}_${dateStr}`;
     const rosterInfo = rosterMap[rosterKey];
     const isHoliday = holidaySet.has(dateStr);
-    
-    let dayType = 'normal'; 
-    if (isHoliday) dayType = 'holiday';
-    else if (rosterInfo) dayType = rosterInfo.day_type;
+
+    let dayType = 'normal';
+    if (rosterInfo && rosterInfo.day_type) {
+      if (rosterInfo.day_type === 'shifted') {
+        dayType = 'normal';
+      } else if (rosterInfo.day_type !== 'normal') {
+        dayType = rosterInfo.day_type;
+      } else {
+        dayType = isHoliday ? 'holiday' : 'normal';
+      }
+    } else {
+      dayType = isHoliday ? 'holiday' : 'normal';
+    }
 
     // 取得當日打卡紀錄（以本地日期比對）
     const dailyLogs = logs.filter(
       (l) => toLocalDateString(l.clock_in_time) === dateStr
     );
+    // 🟢 確保同日打卡照時間順序排列 (早班在前，晚班在後)
     dailyLogs.sort((a, b) => new Date(a.clock_in_time).getTime() - new Date(b.clock_in_time).getTime());
 
     // 將上下班時間成對組合，例如: 08:00~12:33, 15:00~21:00
@@ -185,28 +195,57 @@ export const calculateStaffSalary = (
       const shifts = Object.values(shiftDetails) as { start: string; end: string }[];
       shifts.sort((a, b) => (a?.start || '').localeCompare(b?.start || ''));
 
+      // 🟢 1. 合併連續班表 (例如 15:00-18:00 與 18:00-21:00 無縫接軌，合併為 15:00-21:00)
+      const mergedShifts: { start: Date; end: Date; label: string }[] = [];
       shifts.forEach((shift) => {
-        const scheduleStart = timeStringToDate(dateStr, shift.start);
-        const scheduleEnd = timeStringToDate(dateStr, shift.end);
-        shiftDisplayStr += `${shift.start}-${shift.end} `;
+        const sStart = timeStringToDate(dateStr, shift.start);
+        const sEnd = timeStringToDate(dateStr, shift.end);
+        if (mergedShifts.length === 0) {
+          mergedShifts.push({ start: sStart, end: sEnd, label: `${shift.start}-${shift.end}` });
+        } else {
+          const last = mergedShifts[mergedShifts.length - 1];
+          if (sStart <= last.end) {
+            if (sEnd > last.end) {
+              last.end = sEnd;
+              last.label = `${format(last.start, 'HH:mm')}-${format(last.end, 'HH:mm')}`;
+            }
+          } else {
+            mergedShifts.push({ start: sStart, end: sEnd, label: `${shift.start}-${shift.end}` });
+          }
+        }
+      });
 
-        let shiftWorkedMinutes = 0;
+      shiftDisplayStr = mergedShifts.map(ms => ms.label).join(' ');
+
+      // 🟢 2. 計算工時 (上班依班表，下班依打卡)
+      let shiftWorkedMinutes = 0;
+      mergedShifts.forEach((mShift, index) => {
+        let blockMinutes = 0;
         dailyLogs.forEach((log: any) => {
           if (!log.clock_in_time || !log.clock_out_time) return;
           const logIn = new Date(log.clock_in_time);
           const logOut = new Date(log.clock_out_time);
-          
-          // 計算重疊的有效時間
-          const effectiveStart = logIn > scheduleStart ? logIn : scheduleStart;
-          const effectiveEnd = logOut < scheduleEnd ? logOut : scheduleEnd;
-          
-          if (effectiveEnd > effectiveStart) {
-            shiftWorkedMinutes += differenceInMinutes(effectiveEnd, effectiveStart);
+
+          if (logOut > mShift.start && logIn < mShift.end) {
+            const effectiveStart = logIn > mShift.start ? logIn : mShift.start;
+            let effectiveEnd = logOut;
+
+            const nextShift = mergedShifts[index + 1];
+            if (nextShift && effectiveEnd > nextShift.start) {
+              effectiveEnd = nextShift.start;
+            }
+
+            if (effectiveEnd > effectiveStart) {
+              blockMinutes += differenceInMinutes(effectiveEnd, effectiveStart);
+            }
           }
         });
-        dailyWorkMinutes += shiftWorkedMinutes;
+        shiftWorkedMinutes += blockMinutes;
       });
 
+      dailyWorkMinutes += shiftWorkedMinutes;
+
+      // 舊資料防呆 (保持原樣)
       if (shifts.length === 0) {
         dailyLogs.forEach((log: any) => {
           if (log.clock_in_time && log.clock_out_time) {
