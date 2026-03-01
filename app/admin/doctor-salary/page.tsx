@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { Stethoscope, Settings, Printer, Save, X, Trash2, Lock, Unlock, FileEdit, Landmark, PenLine, Sparkles, ShieldAlert, ChevronLeft, ChevronRight } from 'lucide-react';
 import PayslipModal from './PayslipModal';
 
-type Item = { id: number; name: string; amount: number; rate?: number };
+type Item = { id: string | number; name: string; amount: number; rate?: number };
 
 const DEFAULT_BASE_PAY = {
     mode: 'guarantee', licenseFee: 0, guarantee: 0, hourlyRate: 0,
@@ -71,7 +71,7 @@ export default function DoctorSalaryPage() {
     const [currentMonth, setCurrentMonth] = useState(new Date().toISOString().slice(0, 7));
     const [ppfTargetMonth, setPpfTargetMonth] = useState('');
     const [doctors, setDoctors] = useState<any[]>([]);
-    const [selectedDoctorId, setSelectedDoctorId] = useState<number | null>(null);
+    const [selectedDoctorId, setSelectedDoctorId] = useState<string | null>(null);
     const [rosterList, setRosterList] = useState<any[]>([]);
     const [basePayData, setBasePayData] = useState<any>(DEFAULT_BASE_PAY);
     
@@ -158,8 +158,8 @@ export default function DoctorSalaryPage() {
                     return;
                 }
 
-                const ensureId = (arr: any[], base: number) =>
-                    (Array.isArray(arr) ? arr : []).map((x: any, i: number) => ({ ...x, id: x?.id ?? base + i + Math.random() }));
+                const ensureId = (arr: any[]) =>
+                    (Array.isArray(arr) ? arr : []).map((x: any) => ({ ...x, id: x?.id ?? crypto.randomUUID() }));
                 if (rec) {
                     setPpfData({
                         patient_count: Number(rec.patient_count) || 0,
@@ -167,16 +167,16 @@ export default function DoctorSalaryPage() {
                         reg_fee_deduction: Number(rec.reg_fee_deduction) || 0,
                         clinic_days: Number(rec.clinic_days) || 0,
                         transfer_amount: Number(rec.transfer_amount) || 0,
-                        self_pay_items: ensureId(rec.self_pay_items || [], Date.now()),
-                        extra_items: ensureId(rec.extra_items || [], Date.now() + 1e6),
+                        self_pay_items: ensureId(rec.self_pay_items || []),
+                        extra_items: ensureId(rec.extra_items || []),
                         past_base_salary: rec.base_salary_at_time != null ? Number(rec.base_salary_at_time) : historicalBasePay,
                         status: (rec.status as 'draft' | 'locked') || 'draft'
                     });
                 } else {
                     let templateItems: Item[] = [];
                     if (doctor?.doctor_self_pay_template && Array.isArray(doctor.doctor_self_pay_template)) {
-                        templateItems = doctor.doctor_self_pay_template.map((t: any, idx: number) => ({
-                            id: Date.now() + idx + Math.random(),
+                        templateItems = doctor.doctor_self_pay_template.map((t: any) => ({
+                            id: crypto.randomUUID(),
                             name: t.name || '自費',
                             amount: 0,
                             rate: t.rate ?? 30
@@ -252,7 +252,7 @@ export default function DoctorSalaryPage() {
             const json = await res.json();
             if (json.data) {
                 setDoctors(json.data);
-                if (json.data.length > 0) setSelectedDoctorId((prev: number | null) => prev ?? json.data[0].id);
+                if (json.data.length > 0) setSelectedDoctorId((prev: string | null) => prev ?? json.data[0].id);
             }
         } catch (error: any) {
             console.error('Error fetching doctors:', error);
@@ -261,7 +261,7 @@ export default function DoctorSalaryPage() {
 
     const updateItem = (listName: 'self_pay_items'|'extra_items', i: number, f: string, v: any) => { const n = [...ppfData[listName]] as any[]; n[i] = { ...n[i], [f]: v }; setPpfData(p => ({ ...p, [listName]: n })); };
     const removeItem = (listName: 'self_pay_items'|'extra_items', i: number) => { setPpfData(p => ({ ...p, [listName]: p[listName].filter((_, x) => x !== i) })); };
-    const addItem = (listName: 'self_pay_items'|'extra_items') => { setPpfData(p => ({ ...p, [listName]: [...p[listName], { id: Date.now(), name: listName==='extra_items'?'項目':'自費', amount: 0, rate: listName==='self_pay_items'?30:undefined }] })); };
+    const addItem = (listName: 'self_pay_items'|'extra_items') => { setPpfData(p => ({ ...p, [listName]: [...p[listName], { id: crypto.randomUUID(), name: listName==='extra_items'?'項目':'自費', amount: 0, rate: listName==='self_pay_items'?30:undefined }] })); };
 
     // 切換月份函數
     const changeMonth = (direction: 'prev' | 'next') => {
