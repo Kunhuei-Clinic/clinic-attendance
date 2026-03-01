@@ -20,6 +20,20 @@ import AdjustmentModal from './AdjustmentModal';
 
 type Entity = { id: string; name: string };
 
+const calculateAnnualLeave = (startDateStr: string) => {
+  if (!startDateStr) return 0;
+  const start = new Date(startDateStr);
+  const diffTime = Math.abs(new Date().getTime() - start.getTime());
+  const years = diffTime / (1000 * 60 * 60 * 24 * 365);
+  if (years < 0.5) return 0;
+  if (years < 1) return 3;
+  if (years < 2) return 7;
+  if (years < 3) return 10;
+  if (years < 5) return 14;
+  if (years < 10) return 15;
+  return 15 + Math.floor(years - 10);
+};
+
 export default function SalaryPage() {
   const router = useRouter();
   const [selectedMonth, setSelectedMonth] = useState(
@@ -214,14 +228,15 @@ export default function SalaryPage() {
           rosterMap,
           holidaySet,
           monthlyStandardHours,
-          myLeaves
+          myLeaves,
+          selectedMonth
         );
 
-        const fixedBonus = staff.bonuses.reduce(
+        const fixedBonus = (staff.bonuses || []).reduce(
           (sum: number, b: any) => sum + Number(b.amount),
           0
         );
-        const fixedDeduction = staff.default_deductions.reduce(
+        const fixedDeduction = (staff.default_deductions || []).reduce(
           (sum: number, b: any) => sum + Number(b.amount),
           0
         );
@@ -254,6 +269,8 @@ export default function SalaryPage() {
           staff_name: staff.name,
           salary_mode: staff.salary_mode,
           work_rule: staff.work_rule,
+          hire_date: staff.start_date,
+          annual_leave_days: calculateAnnualLeave(staff.start_date),
           fixed_bonus_pay: fixedBonus,
           temp_bonus_pay: tempBonus,
           insurance_labor: staff.insurance_labor,
@@ -263,14 +280,10 @@ export default function SalaryPage() {
           gross_pay: gross,
           total_deduction: deduction,
           net_pay: gross - deduction,
-          bonus_details: [
-            ...staff.bonuses,
-            ...myAdj.filter((a: any) => a.type === 'bonus'),
-          ],
-          deduction_details: [
-            ...staff.default_deductions,
-            ...myAdj.filter((a: any) => a.type === 'deduction'),
-          ],
+          fixed_bonus_details: staff.bonuses || [],
+          temp_bonus_details: myAdj.filter((a: any) => a.type === 'bonus'),
+          fixed_deduction_details: staff.default_deductions || [],
+          temp_deduction_details: myAdj.filter((a: any) => a.type === 'deduction'),
         };
 
         const locked = lockedRecords.find(
@@ -284,8 +297,10 @@ export default function SalaryPage() {
             normal_hours: 0,
             period_ot_hours: 0,
             dailyRecords: [],
-            bonus_details: [],
-            deduction_details: [],
+            fixed_bonus_details: [],
+            temp_bonus_details: [],
+            fixed_deduction_details: [],
+            temp_deduction_details: [],
             ...snap,
           };
 

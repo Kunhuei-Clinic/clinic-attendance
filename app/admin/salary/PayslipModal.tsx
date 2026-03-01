@@ -73,28 +73,10 @@ function PrintContent({ report, yearMonth, clinicName }: any) {
   const total134 = Number((report.dailyRecords?.reduce((sum: number, r: any) => sum + (r.ot134 || 0), 0) || 0).toFixed(2));
   const total167 = Number((report.dailyRecords?.reduce((sum: number, r: any) => sum + (r.ot167 || 0), 0) || 0).toFixed(2));
 
-  // 🟢 計算國定假日細節
-  const holidayRecords = report.dailyRecords?.filter((r: any) => r.dayType === 'holiday' || r.dayType === 'regular') || [];
+  // 🟢 計算國定假日細節 (僅計有出勤的國定/例假)
+  const holidayRecords = report.dailyRecords?.filter((r: any) => (r.dayType === 'holiday' || r.dayType === 'regular') && r.totalHours > 0) || [];
   const holidayDates = holidayRecords.map((r: any) => r.date.slice(5)).join(', ');
-  const holidayHours = Number((report.dailyRecords?.filter((r: any) => r.dayType === 'holiday' || r.dayType === 'regular').reduce((sum: number, r: any) => sum + (r.totalHours || 0), 0) || 0).toFixed(2));
-
-  // 🟢 產生「當月每一天」的完整陣列 (勞檢防禦)
-  const daysInMonth = new Date(Number(year), Number(month), 0).getDate();
-  const fullMonthRecords = Array.from({ length: daysInMonth }, (_, i) => {
-    const dayStr = String(i + 1).padStart(2, '0');
-    const dateStr = `${yearMonth}-${dayStr}`;
-    const existing = report.dailyRecords?.find((r: any) => r.date === dateStr);
-    return existing || {
-      date: dateStr,
-      dayType: 'empty',
-      totalHours: 0,
-      normalHours: 0,
-      ot134: 0,
-      ot167: 0,
-      note: '',
-      clockIn: '--:--'
-    };
-  });
+  const holidayHours = Number((holidayRecords.reduce((sum: number, r: any) => sum + (r.totalHours || 0), 0) || 0).toFixed(2));
 
   const getDayTypeLabel = (type: string) => {
     switch(type) {
@@ -130,9 +112,10 @@ function PrintContent({ report, yearMonth, clinicName }: any) {
             <div className="text-right">
               <div className="text-2xl font-bold text-blue-900">{year} 年 {month} 月</div>
               <div className="text-base font-bold mt-1">{report.staff_role}：{report.staff_name}</div>
-              <div className="text-xs text-slate-500 mt-1 bg-slate-100 px-2 py-0.5 rounded inline-block">
-                工時制: {getWorkRuleLabel(report.work_rule)}
-              </div>
+              <div className="text-xs text-slate-500 mt-1 flex flex-col items-end gap-0.5">
+              <span className="bg-slate-100 px-2 py-0.5 rounded">工時制: {getWorkRuleLabel(report.work_rule)}</span>
+              <span className="text-slate-400">到職日: {report.hire_date || '未設定'} | 享有特休: {report.annual_leave_days ?? 0} 天</span>
+            </div>
             </div>
           </div>
 
@@ -157,14 +140,16 @@ function PrintContent({ report, yearMonth, clinicName }: any) {
                     </>
                   )}
                   <Row label="固定津貼" amount={report.fixed_bonus_pay} />
-                  <Row label="變動獎金" amount={report.temp_bonus_pay} highlight />
+                {report.fixed_bonus_details?.map((item: any, i: number) => (
+                  <tr key={`fb-${i}`} className="text-xs text-slate-500"><td className="pl-2 py-0.5">• {item.name}</td><td className="text-right py-0.5">${fmt(item.amount)}</td></tr>
+                ))}
+                <Row label="變動獎金" amount={report.temp_bonus_pay} highlight />
+                {report.temp_bonus_details?.map((item: any, i: number) => (
+                  <tr key={`tb-${i}`} className="text-xs text-blue-600"><td className="pl-2 py-0.5">↳ {item.name}</td><td className="text-right py-0.5">${fmt(item.amount)}</td></tr>
+                ))}
                   
                   {/* 🟢 新增：請假給薪 (Leave Addition) */}
                   <Row label="請假給薪" amount={report.leave_addition} sub="特休/公假/喪假" />
-
-                  {report.bonus_details?.map((item: any, i: number) => (
-                    <tr key={`b-${i}`} className="text-xs text-slate-500"><td className="pl-2 py-0.5">• {item.name}</td><td className="text-right py-0.5">${fmt(item.amount)}</td></tr>
-                  ))}
                 </tbody>
                 <tfoot>
                   <tr className="border-t border-slate-300"><td className="py-2 font-bold">應發總計</td><td className="py-2 font-bold text-right">${fmt(report.gross_pay)}</td></tr>
@@ -181,14 +166,17 @@ function PrintContent({ report, yearMonth, clinicName }: any) {
                   <Row label="勞保自付" amount={report.insurance_labor} />
                   <Row label="健保自付" amount={report.insurance_health} />
                   <Row label="固定扣項" amount={report.fixed_deduction_pay} />
+                {report.fixed_deduction_details?.map((item: any, i: number) => (
+                  <tr key={`fd-${i}`} className="text-xs text-slate-500"><td className="pl-2 py-0.5">• {item.name}</td><td className="text-right py-0.5 text-red-400">-${fmt(item.amount)}</td></tr>
+                ))}
                   
                   {/* 🟢 新增：請假扣款 (Leave Deduction) */}
                   <Row label="請假扣款" amount={report.leave_deduction} sub="事假/病假" isDeduction />
 
                   <Row label="變動扣款" amount={report.temp_deduction_pay} isDeduction />
-                  {report.deduction_details?.map((item: any, i: number) => (
-                    <tr key={`d-${i}`} className="text-xs text-slate-500"><td className="pl-2 py-0.5">• {item.name}</td><td className="text-right py-0.5 text-red-400">-${fmt(item.amount)}</td></tr>
-                  ))}
+                {report.temp_deduction_details?.map((item: any, i: number) => (
+                  <tr key={`td-${i}`} className="text-xs text-red-600"><td className="pl-2 py-0.5">↳ {item.name}</td><td className="text-right py-0.5 text-red-400">-${fmt(item.amount)}</td></tr>
+                ))}
                 </tbody>
                 <tfoot>
                   <tr className="border-t border-slate-300"><td className="py-2 font-bold">應扣總計</td><td className="py-2 font-bold text-right text-red-600">-${fmt(report.total_deduction)}</td></tr>
@@ -236,11 +224,11 @@ function PrintContent({ report, yearMonth, clinicName }: any) {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200">
-            {fullMonthRecords.map((rec: any, idx: number) => (
+            {(report.dailyRecords || []).map((rec: any, idx: number) => (
               <tr key={idx} className="print:break-inside-avoid text-slate-600">
-                <td className="p-1 font-mono text-slate-800">{rec.date.slice(5)}</td>
+                <td className="p-1 font-mono text-slate-800">{rec.date?.slice(5)}</td>
                 <td className="p-1 text-center">{rec.dayType === 'empty' ? '-' : getDayTypeLabel(rec.dayType)}</td>
-                <td className="p-1 font-mono text-[10px] text-slate-500 whitespace-nowrap">{rec.clockIn === '--:--' ? '-' : rec.clockIn}</td>
+                <td className="p-1 font-mono text-[10px] text-slate-500 whitespace-nowrap">{rec.clockIn === '--:--' ? '-' : (rec.clockIn || '-')}</td>
                 <td className="p-1 text-center font-bold text-slate-800">{rec.totalHours > 0 ? rec.totalHours : '-'}</td>
                 <td className="p-1 text-center text-slate-400">{rec.normalHours > 0 ? rec.normalHours : '-'}</td>
                 <td className="p-1 text-center font-mono text-orange-600 print:text-black">{rec.ot134 > 0 ? rec.ot134.toFixed(1) : '-'}</td>
@@ -254,8 +242,8 @@ function PrintContent({ report, yearMonth, clinicName }: any) {
               <td colSpan={3} className="p-1 text-right">總計:</td>
               <td className="p-1 text-center">{report.total_work_hours.toFixed(1)}</td>
               <td className="p-1 text-center">{report.normal_hours.toFixed(1)}</td>
-              <td className="p-1 text-center">-</td>
-              <td className="p-1 text-center">-</td>
+              <td className="p-1 text-center text-orange-600">{total134 > 0 ? total134.toFixed(1) : '-'}</td>
+              <td className="p-1 text-center text-orange-600">{total167 > 0 ? total167.toFixed(1) : '-'}</td>
               <td className="p-1 text-[10px] font-normal opacity-70 print:opacity-100 print:text-slate-600">
                 * 超時: {report.period_ot_hours.toFixed(1)} hr
               </td>

@@ -363,14 +363,11 @@ export default function SalaryRow({
                       <span>(已計入加班)</span>
                     </li>
                   )}
-                  {(rpt.bonus_details || []).map((b: any, i: number) => (
-                    <li
-                      key={i}
-                      className="flex justify-between text-green-700"
-                    >
-                      <span>[津貼] {b.name}:</span>
-                      <span className="font-mono">${b.amount}</span>
-                    </li>
+                  {(rpt.fixed_bonus_details || []).map((b: any, i: number) => (
+                    <li key={`f-${i}`} className="flex justify-between text-slate-600"><span>[固定] {b.name}:</span> <span className="font-mono">${b.amount}</span></li>
+                  ))}
+                  {(rpt.temp_bonus_details || []).map((b: any, i: number) => (
+                    <li key={`t-${i}`} className="flex justify-between text-green-700"><span>[變動] {b.name}:</span> <span className="font-mono">${b.amount}</span></li>
                   ))}
                 </ul>
               </div>
@@ -394,14 +391,11 @@ export default function SalaryRow({
                       ${rpt.fixed_deduction_pay}
                     </span>
                   </li>
-                  {(rpt.deduction_details || []).map((b: any, i: number) => (
-                    <li
-                      key={i}
-                      className="flex justify-between text-red-600"
-                    >
-                      <span>[扣款] {b.name}:</span>
-                      <span className="font-mono">${b.amount}</span>
-                    </li>
+                  {(rpt.fixed_deduction_details || []).map((b: any, i: number) => (
+                    <li key={`fd-${i}`} className="flex justify-between text-slate-600"><span>[固定] {b.name}:</span> <span className="font-mono">${b.amount}</span></li>
+                  ))}
+                  {(rpt.temp_deduction_details || []).map((b: any, i: number) => (
+                    <li key={`td-${i}`} className="flex justify-between text-red-600"><span>[變動] {b.name}:</span> <span className="font-mono">${b.amount}</span></li>
                   ))}
                 </ul>
               </div>

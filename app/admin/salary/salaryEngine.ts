@@ -80,7 +80,8 @@ export const calculateStaffSalary = (
   rosterMap: Record<string, any>, // key: staffId_date, value: { day_type, shift_details }
   holidaySet: Set<string>,
   monthlyStandardHours: number,
-  leaves: any[]
+  leaves: any[],
+  targetMonth: string // 🟢 新增參數 (格式: 'YYYY-MM')
 ): SalaryResult => {
   
   const result: SalaryResult = {
@@ -123,12 +124,12 @@ export const calculateStaffSalary = (
   if (staff.work_rule === '2week' || staff.work_rule === '4week') dailyNormalLimit = 10;
   let accumulatedNormalHours = 0;
 
-  // 整理所有涉及的日期（使用本地日期避免 UTC 跨日偏移）
-  const logDates = logs
-    .map((l) => toLocalDateString(l.clock_in_time))
-    .filter(Boolean);
-  const rosterDates = Object.keys(rosterMap).map((k) => k.split('_')[1]);
-  const allDates = Array.from(new Set([...logDates, ...rosterDates])).sort();
+  // 🟢 強制生成當月 1 號到月底的所有日期，確保例休假不會漏掉
+  const [yearStr, monthStr] = targetMonth.split('-');
+  const daysInMonth = new Date(Number(yearStr), Number(monthStr), 0).getDate();
+  const allDates = Array.from({ length: daysInMonth }, (_, i) => {
+    return `${targetMonth}-${String(i + 1).padStart(2, '0')}`;
+  });
 
   allDates.forEach((dateStr) => {
     // 取得當日基本資料
@@ -320,9 +321,7 @@ export const calculateStaffSalary = (
         }
       }
     } else {
-      if (dayType === 'holiday') dailyRecord.note = (dailyRecord.note || "") + " 國定假日";
-      if (dayType === 'regular') dailyRecord.note = (dailyRecord.note || "") + " 例假日";
-      if (dayType === 'rest') dailyRecord.note = (dailyRecord.note || "") + " 休息日";
+      // 沒上班日不寫入多餘備註，僅保留上方有出勤時的「例假違規」等
     }
     
     result.dailyRecords.push(dailyRecord);
