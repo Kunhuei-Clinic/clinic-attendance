@@ -3,18 +3,11 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, ShieldAlert, Lock, Clock, Settings, Save, X } from 'lucide-react';
 
-// 定義班別代號映射 (SettingsView 用 AM/PM/NIGHT，這裡用 M/A/N)
-const SHIFT_MAPPING: Record<string, 'AM' | 'PM' | 'NIGHT'> = {
-    'M': 'AM',
-    'A': 'PM',
-    'N': 'NIGHT'
-};
-
 type Staff = { id: string; name: string; role: string; display_order: number; work_rule: 'normal' | '2week' | '4week' | '8week' | 'none'; entity?: string; }; // UUID
-type Shift = 'M' | 'A' | 'N';
 type DayType = 'normal' | 'rest' | 'regular' | 'holiday' | 'shifted';
-// 更新 RosterData 定義，加入 shift_details
-type RosterData = { shifts: Shift[]; day_type: DayType; shift_details?: Record<string, { start: string, end: string }> };
+type ShiftConfig = { id: string; code: string; name: string; start: string; end: string; };
+// 更新 RosterData 定義，將 shifts 改為字串陣列，並保留 shift_details
+type RosterData = { shifts: string[]; day_type: DayType; shift_details?: Record<string, { start: string, end: string }> };
 
 type Entity = { id: string; name: string };
 type JobTitleConfig = { name: string; in_roster: boolean };
@@ -34,16 +27,13 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
     const [complianceErrors, setComplianceErrors] = useState<Record<string, string[]>>({});
     const [entities, setEntities] = useState<Entity[]>([]);
     const [jobTitleConfigs, setJobTitleConfigs] = useState<JobTitleConfig[]>([]);
+    const [shiftsConfig, setShiftsConfig] = useState<ShiftConfig[]>([]);
 
     // --- 🕒 營業時間設定相關 State ---
     const [showTimeModal, setShowTimeModal] = useState(false);
     const [businessHours, setBusinessHours] = useState({
         openDays: [1, 2, 3, 4, 5, 6],
-        shifts: {
-            AM: { start: '08:00', end: '12:30' },
-            PM: { start: '14:00', end: '17:30' },
-            NIGHT: { start: '18:00', end: '21:30' }
-        }
+        shifts: [] as ShiftConfig[]
     });
     // 🆕 一鍵排整天模式：勾選後，點「早班」可視為排整天 (早/午/晚)
     const [fullDayFromMorning, setFullDayFromMorning] = useState(false);
@@ -74,7 +64,40 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
             if (result.data && result.data.length > 0 && result.data[0].value) {
                 try {
                     const settings = JSON.parse(result.data[0].value);
-                    setBusinessHours(settings);
+                    // 動態班別陣列轉換
+                    if (settings?.shifts) {
+                        const rawShifts = settings.shifts;
+                        let parsedShifts: ShiftConfig[] = [];
+                        if (Array.isArray(rawShifts)) {
+                            parsedShifts = rawShifts;
+                        } else {
+                            // 舊版 Object 格式相容轉換
+                            parsedShifts = Object.entries(rawShifts).map(([key, val]: any, idx) => ({
+                                id: String(idx),
+                                code: key === 'AM' ? 'M' : (key === 'PM' ? 'A' : 'N'),
+                                name: key === 'AM' ? '早診' : (key === 'PM' ? '午診' : '晚診'),
+                                start: val.start,
+                                end: val.end
+                            }));
+                        }
+                        setShiftsConfig(parsedShifts);
+                        setBusinessHours({
+                            openDays: Array.isArray(settings.openDays) ? settings.openDays : [1, 2, 3, 4, 5, 6],
+                            shifts: parsedShifts
+                        });
+                    } else {
+                        // 預設防呆
+                        const fallbackShifts: ShiftConfig[] = [
+                            { id: '1', code: 'M', name: '早診', start: '08:00', end: '12:00' },
+                            { id: '2', code: 'A', name: '午診', start: '14:00', end: '18:00' },
+                            { id: '3', code: 'N', name: '晚診', start: '18:30', end: '21:30' }
+                        ];
+                        setShiftsConfig(fallbackShifts);
+                        setBusinessHours({
+                            openDays: [1, 2, 3, 4, 5, 6],
+                            shifts: fallbackShifts
+                        });
+                    }
                 } catch (e) {
                     console.error("解析營業時間失敗", e);
                 }
@@ -235,8 +258,8 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
             const map: Record<string, RosterData> = {};
             if (rosterResult.data) {
                 rosterResult.data.forEach((r: any) => {
-                    let shifts: Shift[] = [];
-                    if (Array.isArray(r.shifts)) shifts = r.shifts.filter((s: any) => typeof s === 'string' && ['M', 'A', 'N'].includes(s));
+                    let shifts: string[] = [];
+                    if (Array.isArray(r.shifts)) shifts = r.shifts.filter((s: any) => typeof s === 'string');
                     let day_type: DayType = 'normal';
                     if (r.day_type === 'rest') day_type = 'rest';
                     if (r.day_type === 'regular') day_type = 'regular';
@@ -364,74 +387,56 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
         updateRoster(staffId, dateStr, nextShifts, nextType, currentData.shift_details);
     };
 
-    const toggleShift = async (staffId: string, dateStr: string, shift: Shift) => {
+    const toggleShift = async (staffId: string, dateStr: string, shiftConfig: ShiftConfig) => {
         const key = `${staffId}_${dateStr}`;
         const currentData = rosterMap[key] || { shifts: [], day_type: 'normal', shift_details: {} };
 
-        if (currentData.day_type === 'regular') {
-            alert('「例假日」不可排班！');
-            return;
-        }
+        // 如果是例假日或休息日，禁止排班
+        if (currentData.day_type === 'regular' || currentData.day_type === 'rest') return;
 
-        const isActive = currentData.shifts.includes(shift);
-        let newShifts: Shift[] = [];
-        let newDetails = { ...currentData.shift_details };
+        let nextShifts = [...currentData.shifts];
+        let nextDetails: Record<string, { start: string; end: string }> = { ...(currentData.shift_details || {}) };
 
-        // 🆕 一鍵排整天：啟用時，點「早班」即代表整天 (早/午/晚) 全排或全清
-        if (fullDayFromMorning && shift === 'M') {
-            const allShifts: Shift[] = ['M', 'A', 'N'];
-            const isFullDayActive = allShifts.every(s => currentData.shifts.includes(s));
+        const isActive = nextShifts.includes(shiftConfig.code);
+
+        // 🆕 一鍵排整天：啟用時，點第一個班別視為整天
+        const isFirstShift = shiftsConfig.length > 0 && shiftConfig.code === shiftsConfig[0].code;
+
+        if (fullDayFromMorning && isFirstShift) {
+            const allCodes = shiftsConfig.map(s => s.code);
+            const isFullDayActive = allCodes.every(c => nextShifts.includes(c));
 
             if (isFullDayActive) {
                 // 已是整天班，再點一次則全部清空
-                newShifts = [];
-                newDetails = {};
+                nextShifts = [];
+                nextDetails = {};
             } else {
-                // 將當天三個時段都排上
-                newShifts = allShifts;
-                newDetails = { ...newDetails };
-                allShifts.forEach(s => {
-                    const settingKey = SHIFT_MAPPING[s];
-                    const timeSetting = businessHours.shifts[settingKey];
-                    newDetails[s] = { start: timeSetting.start, end: timeSetting.end };
+                // 將當天所有班別都排上
+                nextShifts = [...allCodes];
+                nextDetails = {};
+                shiftsConfig.forEach(s => {
+                    nextDetails[s.code] = { start: s.start, end: s.end };
                 });
             }
         } else {
-            // 原本的單一班別切換邏輯
             if (isActive) {
                 // 移除班別
-                newShifts = currentData.shifts.filter(s => s !== shift);
-                delete newDetails[shift];
+                nextShifts = nextShifts.filter(s => s !== shiftConfig.code);
+                delete nextDetails[shiftConfig.code];
             } else {
                 // 新增班別：Snapshot 當下的時間設定 📸
-                newShifts = [...currentData.shifts, shift];
-                const settingKey = SHIFT_MAPPING[shift]; // M -> AM
-                const timeSetting = businessHours.shifts[settingKey];
-                newDetails[shift] = { start: timeSetting.start, end: timeSetting.end };
+                nextShifts.push(shiftConfig.code);
+                nextDetails[shiftConfig.code] = { start: shiftConfig.start, end: shiftConfig.end };
             }
         }
 
-        updateRoster(staffId, dateStr, newShifts, currentData.day_type, newDetails);
+        updateRoster(staffId, dateStr, nextShifts, currentData.day_type, nextDetails);
     };
 
-    // 🟢 核心功能更新：將 shift_details 寫入資料庫
-    const updateRoster = async (staffId: string, dateStr: string, shifts: Shift[], dayType: DayType, details: any = {}) => {
+    // 🟢 核心功能更新：將 shift_details 寫入資料庫（支援動態班別代號）
+    const updateRoster = async (staffId: string, dateStr: string, shifts: string[], dayType: DayType, details: any = {}) => {
         const key = `${staffId}_${dateStr}`;
         
-        // 計算當日整體的 Start/End (取最小值與最大值，供列表顯示或簡易計算用)
-        let minStart: string | null = "23:59";
-        let maxEnd: string | null = "00:00";
-        
-        if (shifts.length > 0) {
-             Object.values(details).forEach((d: any) => {
-                 if (d.start && d.start < minStart!) minStart = d.start;
-                 if (d.end && d.end > maxEnd!) maxEnd = d.end;
-             });
-        } else {
-            minStart = null;
-            maxEnd = null;
-        }
-
         setRosterMap(prev => ({ ...prev, [key]: { shifts, day_type: dayType, shift_details: details } }));
         
         try {
@@ -474,18 +479,20 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
                         if (detail) {
                             totalHours += calculateHours(detail.start, detail.end);
                         } else {
-                            // 若無 snapshot (舊資料)，回退到預設值
-                            const settingKey = SHIFT_MAPPING[s];
-                            const def = businessHours.shifts[settingKey];
-                            totalHours += calculateHours(def.start, def.end);
+                            // 若無 snapshot (舊資料)，回退到當前班別設定
+                            const conf = shiftsConfig.find(sc => sc.code === s);
+                            if (conf) {
+                                totalHours += calculateHours(conf.start, conf.end);
+                            }
                         }
                     });
                 } else {
                     // 舊資料完全無 details 的情況
                     data.shifts.forEach(s => {
-                         const settingKey = SHIFT_MAPPING[s];
-                         const def = businessHours.shifts[settingKey];
-                         totalHours += calculateHours(def.start, def.end);
+                        const conf = shiftsConfig.find(sc => sc.code === s);
+                        if (conf) {
+                            totalHours += calculateHours(conf.start, conf.end);
+                        }
                     });
                 }
             }
@@ -495,12 +502,6 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
 
     const days = getDaysInMonth();
     const weekDays = ['日', '一', '二', '三', '四', '五', '六'];
-
-    // 取得當前設定的顯示字串
-    const getTimeDisplay = (shiftKey: 'AM'|'PM'|'NIGHT') => {
-        const s = businessHours.shifts[shiftKey];
-        return `${s.start}-${s.end}`;
-    };
 
     // 依 job_titles 設定取得允許排班的職稱
     const configuredRoleSet = new Set(jobTitleConfigs.map(j => j.name));
@@ -574,14 +575,23 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
                                                         {btnText}
                                                     </button>
                                                     {data.day_type !== 'regular' && (
-                                                        <div className="flex flex-col gap-[2px]">
-                                                            {(['M', 'A', 'N'] as Shift[]).map(s => {
-                                                                const isActive = data.shifts.includes(s);
-                                                                const colorClass = s === 'M' ? 'bg-orange-400' : s === 'A' ? 'bg-blue-400' : 'bg-purple-400';
-                                                                
-                                                                // 若有 snapshot 時間，可以顯示 tooltip 或特殊標記，這裡先維持簡潔
+                                                        <div className="flex h-full divide-x divide-slate-100">
+                                                            {shiftsConfig.map(shift => {
+                                                                const isSelected = data.shifts.includes(shift.code);
                                                                 return (
-                                                                    <button key={s} onClick={() => toggleShift(staff.id, d.dateStr, s)} className={`h-2.5 w-full rounded-[2px] transition ${isActive ? colorClass : 'bg-slate-200/50 hover:bg-slate-300'}`} title={isActive ? `${s}班 (${data.shift_details?.[s]?.start}-${data.shift_details?.[s]?.end})` : `排${s}班`} />
+                                                                    <button
+                                                                        key={shift.id}
+                                                                        disabled={data.day_type === 'regular' || data.day_type === 'rest'}
+                                                                        onClick={() => toggleShift(staff.id, d.dateStr, shift)}
+                                                                        className={`flex-1 flex flex-col items-center justify-center transition-all ${
+                                                                            isSelected 
+                                                                                ? 'bg-blue-500 text-white shadow-inner font-bold' 
+                                                                                : 'bg-transparent text-slate-300 hover:bg-slate-100 disabled:opacity-0 disabled:cursor-not-allowed'
+                                                                        }`}
+                                                                        title={`${shift.name} (${shift.start}-${shift.end})`}
+                                                                    >
+                                                                        {isSelected ? shift.code : ''}
+                                                                    </button>
                                                                 );
                                                             })}
                                                         </div>
@@ -698,19 +708,35 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
                             <div className="bg-blue-50 p-3 rounded-lg text-xs text-blue-800 mb-4">
                                 💡 修改此處會更新系統預設值。點擊排班格子時，將寫入當下設定的時間 (Snapshot)，避免日後修改設定影響舊班表。
                             </div>
-                            {(['AM', 'PM', 'NIGHT'] as const).map(shift => (
-                                <div key={shift} className="flex items-center gap-4">
-                                    <div className={`w-12 text-center text-xs font-bold py-1 rounded text-white ${shift === 'AM' ? 'bg-orange-400' : shift === 'PM' ? 'bg-blue-400' : 'bg-purple-400'}`}>
-                                        {shift === 'AM' ? '早班' : shift === 'PM' ? '午班' : '晚班'}
+                            {businessHours.shifts.map((shift, index) => (
+                                <div key={shift.id} className="flex items-center gap-4">
+                                    <div className="w-16 text-center text-xs font-bold py-1 rounded text-white bg-slate-500">
+                                        {shift.name} ({shift.code})
                                     </div>
                                     <div className="flex items-center gap-2 flex-1">
-                                        <input type="time" value={businessHours.shifts[shift].start} 
-                                            onChange={e => setBusinessHours({...businessHours, shifts: {...businessHours.shifts, [shift]: {...businessHours.shifts[shift], start: e.target.value}}})}
+                                        <input
+                                            type="time"
+                                            value={shift.start}
+                                            onChange={e => {
+                                                const newShifts = businessHours.shifts.map((s, i) =>
+                                                    i === index ? { ...s, start: e.target.value } : s
+                                                );
+                                                setBusinessHours({ ...businessHours, shifts: newShifts });
+                                                setShiftsConfig(newShifts);
+                                            }}
                                             className="border rounded p-2 text-sm font-mono flex-1 text-center bg-slate-50 focus:bg-white transition outline-none focus:ring-2 focus:ring-blue-200"
                                         />
                                         <span className="text-slate-400">-</span>
-                                        <input type="time" value={businessHours.shifts[shift].end} 
-                                            onChange={e => setBusinessHours({...businessHours, shifts: {...businessHours.shifts, [shift]: {...businessHours.shifts[shift], end: e.target.value}}})}
+                                        <input
+                                            type="time"
+                                            value={shift.end}
+                                            onChange={e => {
+                                                const newShifts = businessHours.shifts.map((s, i) =>
+                                                    i === index ? { ...s, end: e.target.value } : s
+                                                );
+                                                setBusinessHours({ ...businessHours, shifts: newShifts });
+                                                setShiftsConfig(newShifts);
+                                            }}
                                             className="border rounded p-2 text-sm font-mono flex-1 text-center bg-slate-50 focus:bg-white transition outline-none focus:ring-2 focus:ring-blue-200"
                                         />
                                     </div>
