@@ -384,16 +384,18 @@ export default function SystemConfiguration() {
               <LayoutGrid size={16} /> 歸屬單位設定 (Entities)
             </label>
             <div className="flex items-center gap-3">
-              <button 
-                onClick={(e) => {
-                  e.stopPropagation();
-                  const name = prompt('請輸入新單位名稱 (例如：分院名稱)');
-                  if (name) setEntities([...entities, { id: Date.now().toString(), name }]);
-                }}
-                className="text-xs bg-white border border-blue-200 text-blue-600 px-3 py-1.5 rounded-lg hover:bg-blue-50 font-bold flex items-center gap-1"
-              >
-                <Plus size={14} /> 新增單位
-              </button>
+              {expanded.entities && (
+                <button 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const name = prompt('請輸入新單位名稱 (例如：分院名稱)');
+                    if (name) setEntities([...entities, { id: Date.now().toString(), name }]);
+                  }}
+                  className="text-xs bg-white border border-blue-200 text-blue-600 px-3 py-1.5 rounded-lg hover:bg-blue-50 font-bold flex items-center gap-1 animate-fade-in"
+                >
+                  <Plus size={14} /> 新增單位
+                </button>
+              )}
               {expanded.entities ? <ChevronUp size={20} className="text-slate-400"/> : <ChevronDown size={20} className="text-slate-400"/>}
             </div>
           </div>
@@ -434,16 +436,18 @@ export default function SystemConfiguration() {
               <User size={16} /> 職稱與排班權限
             </label>
             <div className="flex items-center gap-3">
-              <button 
-                onClick={(e) => {
-                  e.stopPropagation();
-                  const name = prompt('請輸入新職稱');
-                  if (name) setJobTitles([...jobTitles, { name, in_roster: true }]);
-                }}
-                className="text-xs bg-white border border-blue-200 text-blue-600 px-3 py-1.5 rounded-lg hover:bg-blue-50 font-bold flex items-center gap-1"
-              >
-                <Plus size={14} /> 新增職稱
-              </button>
+              {expanded.roles && (
+                <button 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const name = prompt('請輸入新職稱');
+                    if (name) setJobTitles([...jobTitles, { name, in_roster: true }]);
+                  }}
+                  className="text-xs bg-white border border-blue-200 text-blue-600 px-3 py-1.5 rounded-lg hover:bg-blue-50 font-bold flex items-center gap-1 animate-fade-in"
+                >
+                  <Plus size={14} /> 新職稱
+                </button>
+              )}
               {expanded.roles ? <ChevronUp size={20} className="text-slate-400"/> : <ChevronDown size={20} className="text-slate-400"/>}
             </div>
           </div>
@@ -511,21 +515,23 @@ export default function SystemConfiguration() {
               <Clock size={16} /> 診所班別與時間設定 (支援多班制)
             </label>
             <div className="flex items-center gap-3">
-              <button 
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setBusinessHours(prev => ({
-                    ...prev, 
-                    shifts: [
-                      ...prev.shifts, 
-                      { id: Date.now().toString(), code: 'NEW', name: '新班別', start: '00:00', end: '00:00' }
-                    ]
-                  }));
-                }}
-                className="text-xs bg-white border border-blue-200 text-blue-600 px-3 py-1.5 rounded-lg hover:bg-blue-50 font-bold flex items-center gap-1"
-              >
-                <Plus size={14} /> 新增班別
-              </button>
+              {expanded.shifts && (
+                <button 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setBusinessHours(prev => ({
+                      ...prev, 
+                      shifts: [
+                        ...prev.shifts, 
+                        { id: Date.now().toString(), code: 'NEW', name: '新班別', start: '00:00', end: '00:00' }
+                      ]
+                    }));
+                  }}
+                  className="text-xs bg-white border border-blue-200 text-blue-600 px-3 py-1.5 rounded-lg hover:bg-blue-50 font-bold flex items-center gap-1 animate-fade-in"
+                >
+                  <Plus size={14} /> 新增班別
+                </button>
+              )}
               {expanded.shifts ? <ChevronUp size={20} className="text-slate-400"/> : <ChevronDown size={20} className="text-slate-400"/>}
             </div>
           </div>
