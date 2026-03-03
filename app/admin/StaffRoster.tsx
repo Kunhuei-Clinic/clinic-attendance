@@ -525,16 +525,21 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
                                 <th className="p-2 border bg-slate-50 sticky left-0 z-30 min-w-[150px] text-left shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">員工</th>
                                 {days.map(d => {
                                     const isToday = d.dateStr === todayStr;
-                                    const isHoliday = holidays.includes(d.dateStr);
-                                    let headerBg = 'bg-slate-50';
-                                    let textColor = 'text-slate-800';
-                                    if (isHoliday) { headerBg = 'bg-red-100'; textColor = 'text-red-700'; }
-                                    else if (isToday) headerBg = 'bg-yellow-100';
-                                    else if (d.dayOfWeek === 0 || d.dayOfWeek === 6) { headerBg = 'bg-red-50'; textColor = 'text-red-600'; }
+                                    const isWeekend = d.dayOfWeek === 0 || d.dayOfWeek === 6;
                                     return (
-                                        <th key={d.dateStr} onClick={() => toggleGlobalHoliday(d.dateStr)} className={`p-1 border text-center min-w-[40px] h-10 ${headerBg} ${textColor} ${isToday ? 'border-b-4 border-b-yellow-400' : ''} cursor-default select-none`}>
-                                            <div className="text-xs font-bold">{d.dateObj.getDate()}</div>
-                                            <div className="text-[10px] flex items-center justify-center gap-0.5">{isHoliday && <Lock size={8} />} {isHoliday ? '國定' : weekDays[d.dayOfWeek]}</div>
+                                        <th
+                                            key={d.dateStr}
+                                            onClick={() => toggleGlobalHoliday(d.dateStr)}
+                                            className={`border p-1 text-center min-w-[45px] h-10 cursor-default select-none ${
+                                                isToday ? 'bg-yellow-100 text-yellow-800' : isWeekend ? 'text-red-500' : ''
+                                            }`}
+                                        >
+                                            <div className="text-[10px] leading-tight opacity-60">
+                                                {weekDays[d.dayOfWeek]}
+                                            </div>
+                                            <div className="text-sm">
+                                                {d.dateStr.slice(8)}
+                                            </div>
                                         </th>
                                     );
                                 })}
@@ -575,7 +580,7 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
                                                         {btnText}
                                                     </button>
                                                     {data.day_type !== 'regular' && (
-                                                        <div className="flex h-full divide-x divide-slate-100">
+                                                        <div className="flex flex-col h-full w-full divide-y divide-slate-100 mt-0.5">
                                                             {shiftsConfig.map(shift => {
                                                                 const isSelected = data.shifts.includes(shift.code);
                                                                 return (
@@ -583,7 +588,7 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
                                                                         key={shift.id}
                                                                         disabled={data.day_type === 'regular' || data.day_type === 'rest'}
                                                                         onClick={() => toggleShift(staff.id, d.dateStr, shift)}
-                                                                        className={`flex-1 flex flex-col items-center justify-center transition-all ${
+                                                                        className={`flex-1 w-full flex items-center justify-center transition-all min-h-[16px] text-[11px] leading-none ${
                                                                             isSelected 
                                                                                 ? 'bg-blue-500 text-white shadow-inner font-bold' 
                                                                                 : 'bg-transparent text-slate-300 hover:bg-slate-100 disabled:opacity-0 disabled:cursor-not-allowed'

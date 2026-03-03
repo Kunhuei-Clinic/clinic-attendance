@@ -4,13 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, Calendar, Lock, User, Stethoscope } from 'lucide-react';
 import PortalTopHeader from './PortalTopHeader';
 
-// 定義班別代號映射 (SettingsView 用 AM/PM/NIGHT，這裡用 M/A/N)
-const SHIFT_MAPPING: Record<string, 'AM' | 'PM' | 'NIGHT'> = {
-    'M': 'AM',
-    'A': 'PM',
-    'N': 'NIGHT'
-};
-
+// Portal 端仍使用 M/A/N 表示班別代號；底層時間改由動態設定提供
 type Staff = { id: string; name: string; role: string; display_order: number; entity?: string; }; // UUID
 type Shift = 'M' | 'A' | 'N';
 type DayType = 'normal' | 'rest' | 'regular';
@@ -18,6 +12,7 @@ type RosterData = { shifts: Shift[]; day_type: DayType; shift_details?: Record<s
 
 type Entity = { id: string; name: string };
 type JobTitleConfig = { name: string; in_roster: boolean };
+type ShiftConfig = { id: string; code: string; name: string; start: string; end: string; };
 
 const FALLBACK_ENTITIES: Entity[] = [
     { id: 'clinic', name: '診所' },
@@ -42,11 +37,12 @@ export default function RosterView({ rosterData, staffUser }: RosterViewProps) {
     const [businessHours, setBusinessHours] = useState({
         openDays: [1, 2, 3, 4, 5, 6],
         shifts: {
-            AM: { start: '08:00', end: '12:30' },
-            PM: { start: '14:00', end: '17:30' },
-            NIGHT: { start: '18:00', end: '21:30' }
+            AM: { start: '08:00', end: '12:00' },
+            PM: { start: '14:00', end: '18:00' },
+            NIGHT: { start: '18:30', end: '21:30' }
         }
     });
+    const [shiftsConfig, setShiftsConfig] = useState<ShiftConfig[]>([]);
     
     // 🟢 新增 state 存員工清單 (分流後)
     const [doctorStaff, setDoctorStaff] = useState<any[]>([]);
@@ -272,7 +268,68 @@ export default function RosterView({ rosterData, staffUser }: RosterViewProps) {
             if (result.data && result.data.length > 0 && result.data[0].value) {
                 try {
                     const settings = JSON.parse(result.data[0].value);
-                    setBusinessHours(settings);
+
+                    // 🟢 動態班別解析：支援陣列與舊版 Object
+                    if (settings?.shifts) {
+                        const rawShifts = settings.shifts;
+                        let parsedShifts: ShiftConfig[] = [];
+
+                        if (Array.isArray(rawShifts)) {
+                            parsedShifts = rawShifts;
+                        } else if (rawShifts && typeof rawShifts === 'object') {
+                            parsedShifts = Object.entries(rawShifts).map(([k, v]: any, idx) => ({
+                                id: String(idx),
+                                code: k === 'AM' ? 'M' : (k === 'PM' ? 'A' : 'N'),
+                                name: k === 'AM' ? '早診' : (k === 'PM' ? '午診' : '晚診'),
+                                start: v.start || '00:00',
+                                end: v.end || '00:00'
+                            }));
+                        }
+
+                        if (parsedShifts.length === 0) {
+                            parsedShifts = [
+                                { id: '1', code: 'M', name: '早診', start: '08:00', end: '12:00' },
+                                { id: '2', code: 'A', name: '午診', start: '14:00', end: '18:00' },
+                                { id: '3', code: 'N', name: '晚診', start: '18:30', end: '21:30' }
+                            ];
+                        }
+
+                        setShiftsConfig(parsedShifts);
+
+                        // Doctor/Portal 仍使用 AM/PM/NIGHT 結構，從動態班別中找對應 M/A/N
+                        const findByCode = (code: string, fallback: { start: string; end: string }) => {
+                            const found = parsedShifts.find(s => s.code === code);
+                            return found ? { start: found.start, end: found.end } : fallback;
+                        };
+
+                        const am = findByCode('M', { start: '08:00', end: '12:00' });
+                        const pm = findByCode('A', { start: '14:00', end: '18:00' });
+                        const night = findByCode('N', { start: '18:30', end: '21:30' });
+
+                        setBusinessHours({
+                            openDays: Array.isArray(settings.openDays) ? settings.openDays : [1, 2, 3, 4, 5, 6],
+                            shifts: {
+                                AM: am,
+                                PM: pm,
+                                NIGHT: night
+                            }
+                        });
+                    } else {
+                        // 無 shifts 設定時使用預設值
+                        setShiftsConfig([
+                            { id: '1', code: 'M', name: '早診', start: '08:00', end: '12:00' },
+                            { id: '2', code: 'A', name: '午診', start: '14:00', end: '18:00' },
+                            { id: '3', code: 'N', name: '晚診', start: '18:30', end: '21:30' }
+                        ]);
+                        setBusinessHours({
+                            openDays: [1, 2, 3, 4, 5, 6],
+                            shifts: {
+                                AM: { start: '08:00', end: '12:00' },
+                                PM: { start: '14:00', end: '18:00' },
+                                NIGHT: { start: '18:30', end: '21:30' }
+                            }
+                        });
+                    }
                 } catch (e) {
                     console.error('[RosterView] 解析營業時間失敗', e);
                 }
@@ -587,13 +644,13 @@ export default function RosterView({ rosterData, staffUser }: RosterViewProps) {
 
     // 🟢 資料分流邏輯已移至 useEffect，使用 state 儲存分流後的員工
 
-    // 取得班別時間顯示
+    // 取得班別時間顯示：優先使用 snapshot，否則使用系統班別設定 (M/A/N)
     const getShiftTimeDisplay = (shift: Shift, shiftDetails?: Record<string, { start: string, end: string }>) => {
         if (shiftDetails && shiftDetails[shift]) {
             return `${shiftDetails[shift].start}-${shiftDetails[shift].end}`;
         }
-        const settingKey = SHIFT_MAPPING[shift];
-        const timeSetting = businessHours.shifts[settingKey];
+        const key = shift === 'M' ? 'AM' : shift === 'A' ? 'PM' : 'NIGHT';
+        const timeSetting = businessHours.shifts[key];
         return `${timeSetting.start}-${timeSetting.end}`;
     };
 

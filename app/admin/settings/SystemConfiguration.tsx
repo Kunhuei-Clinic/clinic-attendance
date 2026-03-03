@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Save, Clock, CalendarDays, LayoutGrid, Stethoscope, Trash2, Plus, User, QrCode, Copy, Check } from 'lucide-react';
+import { Save, Clock, CalendarDays, LayoutGrid, Stethoscope, Trash2, Plus, User, QrCode, Copy, Check, ChevronDown, ChevronUp } from 'lucide-react';
 
 type Entity = { id: string; name: string };
 
@@ -109,6 +109,17 @@ export default function SystemConfiguration() {
   const [systemMessage, setSystemMessage] = useState('');
   const [overtimeThreshold, setOvertimeThreshold] = useState(9);
   const [overtimeApprovalRequired, setOvertimeApprovalRequired] = useState(true);
+  const [clinicData, setClinicData] = useState<any | null>(null);
+  const [expanded, setExpanded] = useState({
+    entities: true,
+    roles: false,
+    shifts: false,
+    overtime: false,
+  });
+
+  const toggleSection = (section: keyof typeof expanded) => {
+    setExpanded(prev => ({ ...prev, [section]: !prev[section] }));
+  };
   
   // 🟢 員工綁定連結相關
   const [clinicId, setClinicId] = useState<string>('');
@@ -118,6 +129,7 @@ export default function SystemConfiguration() {
   useEffect(() => {
     fetchSystemSettings();
     fetchClinicId();
+    fetchClinicData();
   }, []);
 
   // 🟢 取得診所 ID 並組合綁定連結
@@ -152,6 +164,47 @@ export default function SystemConfiguration() {
     } catch (error) {
       console.error('Copy link error:', error);
       alert('複製失敗，請手動複製連結');
+    }
+  };
+
+  // 🟢 讀取診所資料（JSONB settings.business_hours）
+  const fetchClinicData = async () => {
+    try {
+      const response = await fetch('/api/clinics', {
+        credentials: 'include',
+      });
+      const result = await response.json();
+
+      const data = Array.isArray(result.data) ? result.data[0] : result.data;
+      if (!data) return;
+
+      setClinicData(data);
+
+      if (data.settings?.business_hours) {
+        const bh = data.settings.business_hours;
+        let parsedShifts = DEFAULT_SHIFTS;
+
+        if (Array.isArray(bh.shifts)) {
+          // 如果已經是新版陣列，直接使用
+          parsedShifts = bh.shifts;
+        } else if (bh.shifts && typeof bh.shifts === 'object') {
+          // 如果是舊版 Object (AM, PM, NIGHT)，自動轉為陣列
+          parsedShifts = Object.entries(bh.shifts).map(([k, v]: any, idx) => ({
+            id: String(Date.now() + idx),
+            code: k === 'AM' ? 'M' : (k === 'PM' ? 'A' : 'N'),
+            name: k === 'AM' ? '早診' : (k === 'PM' ? '午診' : '晚診'),
+            start: v.start || '00:00',
+            end: v.end || '00:00'
+          }));
+        }
+
+        setBusinessHours({
+          openDays: bh.openDays || [1, 2, 3, 4, 5, 6],
+          shifts: parsedShifts
+        });
+      }
+    } catch (error) {
+      console.error('Fetch clinic data error:', error);
     }
   };
 
@@ -266,12 +319,31 @@ export default function SystemConfiguration() {
         })
       });
       const clinicResult = await clinicResponse.json();
+
+      // 儲存診所 JSONB 設定（business_hours）
+      let clinicsResult: any = { success: true };
+      if (clinicData) {
+        const payload = {
+          ...clinicData,
+          settings: {
+            ...(clinicData.settings || {}),
+            business_hours: businessHours // 🟢 直接寫入包含新陣列的 state
+          }
+        };
+
+        const clinicsResponse = await fetch('/api/clinics', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        clinicsResult = await clinicsResponse.json();
+      }
       
-      if (result.success && clinicResult.success) {
+      if (result.success && clinicResult.success && clinicsResult.success !== false) {
         setSystemMessage('✅ 設定已更新，排班表將套用新時間');
         setTimeout(() => setSystemMessage(''), 3000);
       } else {
-        setSystemMessage('❌ 儲存失敗: ' + (result.message || clinicResult.message));
+        setSystemMessage('❌ 儲存失敗: ' + (result.message || clinicResult.message || clinicsResult.message));
       }
     } catch (error) {
       console.error('Save system settings error:', error);
@@ -324,155 +396,185 @@ export default function SystemConfiguration() {
   return (
     <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 animate-fade-in">
       <div className="space-y-10">
-        {/* 組織單位 */}
-        <div>
-          <h3 className="text-lg font-bold text-slate-700 border-b pb-2 mb-4 flex items-center gap-2">
-            <LayoutGrid size={20}/> 組織單位管理
-          </h3>
-          <div className="space-y-3">
-            {entities.map((ent, idx) => (
-              <div key={ent.id} className="flex gap-3 items-center">
-                <div className="bg-slate-100 px-3 py-2 rounded text-xs font-mono text-slate-400 w-24 text-center">
-                  ID: {ent.id}
-                </div>
-                <input 
-                  type="text" 
-                  value={ent.name} 
-                  onChange={(e) => updateEntityName(idx, e.target.value)} 
-                  className="flex-1 p-3 border rounded-lg text-lg font-bold outline-none focus:ring-2 focus:ring-blue-200" 
-                  placeholder="單位名稱"
-                />
-                <button 
-                  onClick={() => removeEntity(idx)} 
-                  className="p-3 text-red-400 hover:bg-red-50 rounded-lg"
-                >
-                  <Trash2 size={20}/>
-                </button>
-              </div>
-            ))}
-            <button 
-              onClick={addEntity} 
-              className="w-full py-3 border-2 border-dashed border-slate-300 text-slate-500 rounded-xl hover:bg-blue-50 font-bold flex items-center justify-center gap-2"
-            >
-              <Plus size={20}/> 新增單位
-            </button>
+        {/* 歸屬單位設定 (Entities) */}
+        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 transition-all">
+          <div 
+            className="flex justify-between items-center cursor-pointer select-none"
+            onClick={() => toggleSection('entities')}
+          >
+            <label className="text-sm font-bold text-slate-700 flex items-center gap-2">
+              <LayoutGrid size={16} /> 歸屬單位設定 (Entities)
+            </label>
+            <div className="flex items-center gap-3">
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const name = prompt('請輸入新單位名稱 (例如：分院名稱)');
+                  if (name) setEntities([...entities, { id: Date.now().toString(), name }]);
+                }}
+                className="text-xs bg-white border border-blue-200 text-blue-600 px-3 py-1.5 rounded-lg hover:bg-blue-50 font-bold flex items-center gap-1"
+              >
+                <Plus size={14} /> 新增單位
+              </button>
+              {expanded.entities ? <ChevronUp size={20} className="text-slate-400"/> : <ChevronDown size={20} className="text-slate-400"/>}
+            </div>
           </div>
-        </div>
 
-        {/* 🟢 新增：人員職類設定 */}
-        <div>
-          <h3 className="text-lg font-bold text-slate-700 border-b pb-2 mb-4 flex items-center gap-2">
-            <User size={20}/> 人員職類設定 (Job Titles)
-          </h3>
-          <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 mb-4 space-y-1">
-            <p className="text-sm text-blue-800">
-              設定系統中可用的職稱選項。這些職稱將出現在員工資料編輯表單的下拉選單中。
-            </p>
-            <p className="text-xs text-blue-700">
-              勾選「加入排班表」的職稱，會出現在員工排班畫面中；例如「醫師」通常使用獨立醫師班表，因此預設不加入一般員工排班。
-            </p>
-          </div>
-          <div className="space-y-3">
-            {jobTitles.map((title, idx) => (
-              <div key={idx} className="flex flex-col md:flex-row md:items-center gap-3 bg-slate-50 p-3 rounded-lg border border-slate-200">
-                <div className="flex-1 flex items-center gap-2">
-                  <span className="text-xs text-slate-400 px-2 py-1 bg-white rounded border">
-                    #{idx + 1}
-                  </span>
+          {expanded.entities && (
+            <div className="mt-4 pt-4 border-t border-slate-200 space-y-3 animate-fade-in">
+              {entities.map((ent, idx) => (
+                <div key={ent.id} className="flex gap-3 items-center">
+                  <div className="bg-slate-100 px-3 py-2 rounded text-xs font-mono text-slate-400 w-24 text-center">
+                    ID: {ent.id}
+                  </div>
                   <input 
                     type="text" 
-                    value={title.name} 
-                    onChange={(e) => updateJobTitleName(idx, e.target.value)} 
-                    className="flex-1 p-2 border rounded-lg font-bold outline-none focus:ring-2 focus:ring-blue-200" 
-                    placeholder="職稱名稱，例如：護理師"
+                    value={ent.name} 
+                    onChange={(e) => updateEntityName(idx, e.target.value)} 
+                    className="flex-1 p-3 border rounded-lg text-lg font-bold outline-none focus:ring-2 focus:ring-blue-200" 
+                    placeholder="單位名稱"
                   />
-                </div>
-                <div className="flex items-center gap-2">
-                  <input
-                    id={`job-title-roster-${idx}`}
-                    type="checkbox"
-                    checked={title.in_roster}
-                    onChange={(e) => updateJobTitleInRoster(idx, e.target.checked)}
-                    className="w-4 h-4"
-                  />
-                  <label
-                    htmlFor={`job-title-roster-${idx}`}
-                    className="text-xs md:text-sm text-slate-700 select-none"
-                  >
-                    加入排班表
-                  </label>
                   <button 
-                    onClick={() => removeJobTitle(idx)} 
-                    className="ml-2 p-2 text-red-400 hover:bg-red-50 rounded-lg"
+                    onClick={() => removeEntity(idx)} 
+                    className="p-3 text-red-400 hover:bg-red-50 rounded-lg"
                   >
-                    <Trash2 size={18}/>
+                    <Trash2 size={20}/>
                   </button>
                 </div>
-              </div>
-            ))}
-            <button 
-              onClick={addJobTitle} 
-              className="w-full py-2 border-2 border-dashed border-slate-300 text-slate-500 rounded-xl hover:bg-blue-50 font-bold flex items-center justify-center gap-2"
-            >
-              <Plus size={18}/> 新增職稱
-            </button>
-          </div>
+              ))}
+            </div>
+          )}
         </div>
 
-        {/* 診所營業時間 */}
-        <div>
-          <h3 className="text-lg font-bold text-slate-700 border-b pb-2 mb-4 flex items-center gap-2">
-            <Clock size={20}/> 診所營業時間設定 (全域預設值)
-          </h3>
-          <div className="bg-yellow-50 p-4 mb-4 rounded-lg text-sm text-yellow-800 border border-yellow-200">
-            ⚠️ 注意：修改此處僅會影響「未來」排入的班表。已經排好的班表不會自動更新時間，以保障歷史工時計算的正確性。
+        {/* 職稱與排班權限 (Roles) */}
+        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 transition-all">
+          <div 
+            className="flex justify-between items-center cursor-pointer select-none"
+            onClick={() => toggleSection('roles')}
+          >
+            <label className="text-sm font-bold text-slate-700 flex items-center gap-2">
+              <User size={16} /> 職稱與排班權限
+            </label>
+            <div className="flex items-center gap-3">
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const name = prompt('請輸入新職稱');
+                  if (name) setJobTitles([...jobTitles, { name, in_roster: true }]);
+                }}
+                className="text-xs bg-white border border-blue-200 text-blue-600 px-3 py-1.5 rounded-lg hover:bg-blue-50 font-bold flex items-center gap-1"
+              >
+                <Plus size={14} /> 新增職稱
+              </button>
+              {expanded.roles ? <ChevronUp size={20} className="text-slate-400"/> : <ChevronDown size={20} className="text-slate-400"/>}
+            </div>
           </div>
-          <div className="space-y-6">
-            <div>
-              <label className="block text-sm font-bold text-slate-500 mb-2 flex items-center gap-2">
-                <CalendarDays size={16}/> 每週營業日
-              </label>
-              <div className="flex gap-2">
-                {WEEKDAYS.map((day, idx) => (
-                  <button 
-                    key={idx} 
-                    onClick={() => toggleDay(idx)} 
-                    className={`w-10 h-10 rounded-full font-bold transition ${
-                      businessHours.openDays.includes(idx) 
-                        ? 'bg-blue-600 text-white shadow-md' 
-                        : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
-                    }`}
-                  >
-                    {day}
-                  </button>
+
+          {expanded.roles && (
+            <div className="mt-4 pt-4 border-t border-slate-200 space-y-3 animate-fade-in">
+              <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 mb-2 space-y-1">
+                <p className="text-sm text-blue-800">
+                  設定系統中可用的職稱選項。這些職稱將出現在員工資料編輯表單的下拉選單中。
+                </p>
+                <p className="text-xs text-blue-700">
+                  勾選「加入排班表」的職稱，會出現在員工排班畫面中；例如「醫師」通常使用獨立醫師班表，因此預設不加入一般員工排班。
+                </p>
+              </div>
+              <div className="space-y-3">
+                {jobTitles.map((title, idx) => (
+                  <div key={idx} className="flex flex-col md:flex-row md:items-center gap-3 bg-slate-50 p-3 rounded-lg border border-slate-200">
+                    <div className="flex-1 flex items-center gap-2">
+                      <span className="text-xs text-slate-400 px-2 py-1 bg-white rounded border">
+                        #{idx + 1}
+                      </span>
+                      <input 
+                        type="text" 
+                        value={title.name} 
+                        onChange={(e) => updateJobTitleName(idx, e.target.value)} 
+                        className="flex-1 p-2 border rounded-lg font-bold outline-none focus:ring-2 focus:ring-blue-200" 
+                        placeholder="職稱名稱，例如：護理師"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        id={`job-title-roster-${idx}`}
+                        type="checkbox"
+                        checked={title.in_roster}
+                        onChange={(e) => updateJobTitleInRoster(idx, e.target.checked)}
+                        className="w-4 h-4"
+                      />
+                      <label
+                        htmlFor={`job-title-roster-${idx}`}
+                        className="text-xs md:text-sm text-slate-700 select-none"
+                      >
+                        加入排班表
+                      </label>
+                      <button 
+                        onClick={() => removeJobTitle(idx)} 
+                        className="ml-2 p-2 text-red-400 hover:bg-red-50 rounded-lg"
+                      >
+                        <Trash2 size={18}/>
+                      </button>
+                    </div>
+                  </div>
                 ))}
               </div>
             </div>
-            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-              <div className="flex justify-between items-center mb-4">
-                <label className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                  <Clock size={16} /> 診所班別與時間設定 (支援多班制)
-                </label>
-                <button 
-                  onClick={() => setBusinessHours(prev => ({
+          )}
+        </div>
+
+        {/* 班別與時間設定 (Shifts) */}
+        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 transition-all">
+          <div 
+            className="flex justify-between items-center cursor-pointer select-none"
+            onClick={() => toggleSection('shifts')}
+          >
+            <label className="text-sm font-bold text-slate-700 flex items-center gap-2">
+              <Clock size={16} /> 診所班別與時間設定 (支援多班制)
+            </label>
+            <div className="flex items-center gap-3">
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setBusinessHours(prev => ({
                     ...prev, 
                     shifts: [
                       ...prev.shifts, 
-                      { 
-                        id: Date.now().toString(), 
-                        code: 'NEW', 
-                        name: '新班別', 
-                        start: '00:00', 
-                        end: '00:00' 
-                      }
+                      { id: Date.now().toString(), code: 'NEW', name: '新班別', start: '00:00', end: '00:00' }
                     ]
-                  }))}
-                  className="text-xs bg-white border border-blue-200 text-blue-600 px-3 py-1.5 rounded-lg hover:bg-blue-50 font-bold flex items-center gap-1"
-                >
-                  <Plus size={14} /> 新增班別
-                </button>
+                  }));
+                }}
+                className="text-xs bg-white border border-blue-200 text-blue-600 px-3 py-1.5 rounded-lg hover:bg-blue-50 font-bold flex items-center gap-1"
+              >
+                <Plus size={14} /> 新增班別
+              </button>
+              {expanded.shifts ? <ChevronUp size={20} className="text-slate-400"/> : <ChevronDown size={20} className="text-slate-400"/>}
+            </div>
+          </div>
+
+          {expanded.shifts && (
+            <div className="mt-4 pt-4 border-t border-slate-200 space-y-6 animate-fade-in">
+              <div>
+                <label className="block text-sm font-bold text-slate-500 mb-2 flex items-center gap-2">
+                  <CalendarDays size={16}/> 每週營業日
+                </label>
+                <div className="flex gap-2">
+                  {WEEKDAYS.map((day, idx) => (
+                    <button 
+                      key={idx} 
+                      onClick={() => toggleDay(idx)} 
+                      className={`w-10 h-10 rounded-full font-bold transition ${
+                        businessHours.openDays.includes(idx) 
+                          ? 'bg-blue-600 text-white shadow-md' 
+                          : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
+                      }`}
+                    >
+                      {day}
+                    </button>
+                  ))}
+                </div>
               </div>
-              
+
               <div className="space-y-3">
                 {businessHours.shifts.map((shift, index) => (
                   <div key={shift.id} className="flex items-center gap-3 bg-white p-3 rounded-lg border border-slate-200 shadow-sm">
@@ -545,7 +647,7 @@ export default function SystemConfiguration() {
                 💡 提示：代號 (如 M, A, N) 會顯示在排班表的小格子上。刪除或更改班別「不會」影響過去已經結算的薪資與排班紀錄。
               </p>
             </div>
-          </div>
+          )}
         </div>
 
         {/* 特殊門診類型 */}
