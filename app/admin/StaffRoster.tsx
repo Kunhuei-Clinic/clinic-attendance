@@ -307,7 +307,7 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
 
     const validateCompliance = () => {
         // ... (保持原有的勞基法檢查邏輯，暫略以節省篇幅) ...
-         const errors: Record<number, string[]> = {};
+        const errors: Record<string, string[]> = {};
         const days = getDaysInMonth();
         staffList.forEach(staff => {
             const staffErrors: string[] = [];
@@ -575,12 +575,15 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
                                             else if (data.day_type === 'shifted') { btnClass = 'bg-slate-300 text-slate-700'; btnText = '調'; }
 
                                             return (
-                                                <td key={d.dateStr} className={`border p-0.5 text-center align-top h-16 relative min-w-[45px] ${cellBg}`}>
-                                                    <button onClick={() => applyDayTypeStamp(staff.id, d.dateStr)} className={`w-full h-5 rounded-sm text-[10px] font-bold mb-1 transition-colors ${btnClass}`}>
+                                                <td key={d.dateStr} className={`border p-0.5 text-center align-top h-[76px] relative min-w-[45px] ${cellBg}`}>
+                                                    <button
+                                                        onClick={() => applyDayTypeStamp(staff.id, d.dateStr)}
+                                                        className={`w-full h-5 shrink-0 rounded-sm text-[10px] font-bold mb-0.5 transition-colors ${btnClass}`}
+                                                    >
                                                         {btnText}
                                                     </button>
-                                                    {data.day_type !== 'regular' && (
-                                                        <div className="flex flex-col h-full w-full divide-y divide-slate-100 mt-0.5">
+                                                    {data.day_type !== 'regular' && data.day_type !== 'rest' && (
+                                                        <div className="flex flex-col h-[calc(100%-22px)] w-full divide-y divide-slate-100 overflow-hidden">
                                                             {shiftsConfig.map(shift => {
                                                                 const isSelected = data.shifts.includes(shift.code);
                                                                 return (
@@ -588,7 +591,7 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
                                                                         key={shift.id}
                                                                         disabled={data.day_type === 'regular' || data.day_type === 'rest'}
                                                                         onClick={() => toggleShift(staff.id, d.dateStr, shift)}
-                                                                        className={`flex-1 w-full flex items-center justify-center transition-all min-h-[16px] text-[11px] leading-none ${
+                                                                        className={`flex-1 w-full flex items-center justify-center transition-all min-h-[14px] text-[10px] leading-none ${
                                                                             isSelected 
                                                                                 ? 'bg-blue-500 text-white shadow-inner font-bold' 
                                                                                 : 'bg-transparent text-slate-300 hover:bg-slate-100 disabled:opacity-0 disabled:cursor-not-allowed'

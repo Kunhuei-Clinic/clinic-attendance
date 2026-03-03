@@ -111,9 +111,12 @@ export default function SystemConfiguration() {
   const [overtimeApprovalRequired, setOvertimeApprovalRequired] = useState(true);
   const [clinicData, setClinicData] = useState<any | null>(null);
   const [expanded, setExpanded] = useState({
-    entities: true,
+    entities: false,
     roles: false,
     shifts: false,
+    special: false,
+    leave: false,
+    bind: false,
     overtime: false,
   });
 
@@ -179,30 +182,6 @@ export default function SystemConfiguration() {
       if (!data) return;
 
       setClinicData(data);
-
-      if (data.settings?.business_hours) {
-        const bh = data.settings.business_hours;
-        let parsedShifts = DEFAULT_SHIFTS;
-
-        if (Array.isArray(bh.shifts)) {
-          // 如果已經是新版陣列，直接使用
-          parsedShifts = bh.shifts;
-        } else if (bh.shifts && typeof bh.shifts === 'object') {
-          // 如果是舊版 Object (AM, PM, NIGHT)，自動轉為陣列
-          parsedShifts = Object.entries(bh.shifts).map(([k, v]: any, idx) => ({
-            id: String(Date.now() + idx),
-            code: k === 'AM' ? 'M' : (k === 'PM' ? 'A' : 'N'),
-            name: k === 'AM' ? '早診' : (k === 'PM' ? '午診' : '晚診'),
-            start: v.start || '00:00',
-            end: v.end || '00:00'
-          }));
-        }
-
-        setBusinessHours({
-          openDays: bh.openDays || [1, 2, 3, 4, 5, 6],
-          shifts: parsedShifts
-        });
-      }
     } catch (error) {
       console.error('Fetch clinic data error:', error);
     }
@@ -320,14 +299,13 @@ export default function SystemConfiguration() {
       });
       const clinicResult = await clinicResponse.json();
 
-      // 儲存診所 JSONB 設定（business_hours）
+      // 儲存診所 JSONB 設定（目前僅保留其他 settings，business_hours 由 /api/settings 管理）
       let clinicsResult: any = { success: true };
       if (clinicData) {
         const payload = {
           ...clinicData,
           settings: {
-            ...(clinicData.settings || {}),
-            business_hours: businessHours // 🟢 直接寫入包含新陣列的 state
+            ...(clinicData.settings || {})
           }
         };
 
@@ -651,176 +629,168 @@ export default function SystemConfiguration() {
         </div>
 
         {/* 特殊門診類型 */}
-        <div>
-          <h3 className="text-lg font-bold text-slate-700 border-b pb-2 mb-4 flex items-center gap-2">
-            <Stethoscope size={20}/> 特殊門診類型
-          </h3>
-          <div className="grid grid-cols-2 gap-4">
-            {specialClinics.map((name, idx) => (
-              <div key={idx} className="flex gap-2 items-center">
-                <input 
-                  type="text" 
-                  value={name} 
-                  onChange={(e) => updateSpecial(idx, e.target.value)} 
-                  className="flex-1 p-2 border rounded-lg font-bold outline-none focus:ring-2 focus:ring-purple-200" 
-                  placeholder="門診名稱"
-                />
-                <button 
-                  onClick={() => removeSpecial(idx)} 
-                  className="p-2 text-red-400 hover:bg-red-50 rounded-lg"
-                >
-                  <Trash2 size={18}/>
-                </button>
-              </div>
-            ))}
-            <button 
-              onClick={addSpecial} 
-              className="py-2 border-2 border-dashed border-slate-300 text-slate-500 rounded-xl hover:bg-purple-50 font-bold flex items-center justify-center gap-2"
-            >
-              <Plus size={18}/> 新增類型
-            </button>
+        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 transition-all">
+          <div className="flex justify-between items-center cursor-pointer select-none" onClick={() => toggleSection('special')}>
+            <label className="text-sm font-bold text-slate-700 flex items-center gap-2"><Stethoscope size={16}/> 特殊門診類型</label>
+            {expanded.special ? <ChevronUp size={20} className="text-slate-400"/> : <ChevronDown size={20} className="text-slate-400"/>}
           </div>
+          {expanded.special && (
+            <div className="mt-4 pt-4 border-t border-slate-200 grid grid-cols-2 gap-4 animate-fade-in">
+              {specialClinics.map((name, idx) => (
+                <div key={idx} className="flex gap-2 items-center">
+                  <input 
+                    type="text" 
+                    value={name} 
+                    onChange={(e) => updateSpecial(idx, e.target.value)} 
+                    className="flex-1 p-2 border rounded-lg font-bold outline-none focus:ring-2 focus:ring-purple-200" 
+                    placeholder="門診名稱"
+                  />
+                  <button 
+                    onClick={() => removeSpecial(idx)} 
+                    className="p-2 text-red-400 hover:bg-red-50 rounded-lg"
+                  >
+                    <Trash2 size={18}/>
+                  </button>
+                </div>
+              ))}
+              <button 
+                onClick={(e) => { e.stopPropagation(); addSpecial(); }} 
+                className="py-2 border-2 border-dashed border-slate-300 text-slate-500 rounded-xl hover:bg-purple-50 font-bold flex items-center justify-center gap-2"
+              >
+                <Plus size={18}/> 新增類型
+              </button>
+            </div>
+          )}
         </div>
 
         {/* 特休計算制 */}
-        <div>
-          <h3 className="text-lg font-bold text-slate-700 border-b pb-2 mb-4 flex items-center gap-2">
-            <CalendarDays size={20}/> 特休計算制 (Annual Leave Calculation System)
-          </h3>
-          <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 mb-4">
-            <p className="text-sm text-blue-800 mb-2">
-              <strong>週年制 (Anniversary)</strong>：以員工到職日為基準，每年週年日重新計算特休天數。
-            </p>
-            <p className="text-sm text-blue-800">
-              <strong>曆年制 (Calendar)</strong>：以日曆年度為基準，每年1月1日重新計算特休天數，按比例分配。
-            </p>
+        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 transition-all">
+          <div className="flex justify-between items-center cursor-pointer select-none" onClick={() => toggleSection('leave')}>
+            <label className="text-sm font-bold text-slate-700 flex items-center gap-2"><CalendarDays size={16}/> 特休計算制</label>
+            {expanded.leave ? <ChevronUp size={20} className="text-slate-400"/> : <ChevronDown size={20} className="text-slate-400"/>}
           </div>
-          <div className="flex gap-4">
-            <button 
-              onClick={() => setLeaveCalculationSystem('anniversary')} 
-              className={`flex-1 p-4 rounded-xl border-2 transition ${
-                leaveCalculationSystem === 'anniversary' 
-                  ? 'bg-blue-50 border-blue-500 text-blue-700 font-bold' 
-                  : 'bg-white border-slate-200 text-slate-600 hover:border-blue-300'
-              }`}
-            >
-              <div className="text-lg font-bold mb-1">週年制</div>
-              <div className="text-xs opacity-80">Anniversary System</div>
-            </button>
-            <button 
-              onClick={() => setLeaveCalculationSystem('calendar')} 
-              className={`flex-1 p-4 rounded-xl border-2 transition ${
-                leaveCalculationSystem === 'calendar' 
-                  ? 'bg-blue-50 border-blue-500 text-blue-700 font-bold' 
-                  : 'bg-white border-slate-200 text-slate-600 hover:border-blue-300'
-              }`}
-            >
-              <div className="text-lg font-bold mb-1">曆年制</div>
-              <div className="text-xs opacity-80">Calendar System</div>
-            </button>
-          </div>
-        </div>
-
-        {/* 🟢 員工綁定連結 */}
-        <div>
-          <h3 className="text-lg font-bold text-slate-700 border-b pb-2 mb-4 flex items-center gap-2">
-            <QrCode size={20}/> 員工綁定連結 (QR Code)
-          </h3>
-          <div className="bg-teal-50 p-4 rounded-lg border border-teal-100 mb-4">
-            <p className="text-sm text-teal-800 mb-2">
-              請將此連結轉為 QR Code 供員工掃描，或直接傳送至員工群組。
-            </p>
-            <p className="text-xs text-teal-700">
-              員工首次進入需輸入手機與密碼進行綁定。
-            </p>
-          </div>
-          {bindLink ? (
-            <div className="space-y-3">
-              <div className="flex gap-2 items-center">
-                <input
-                  type="text"
-                  value={bindLink}
-                  readOnly
-                  className="flex-1 p-3 border rounded-lg bg-slate-50 font-mono text-sm"
-                />
-                <button
-                  onClick={handleCopyLink}
-                  className={`flex items-center gap-2 px-4 py-3 rounded-lg font-bold transition ${
-                    copied
-                      ? 'bg-green-100 text-green-700 border border-green-300'
-                      : 'bg-teal-600 text-white hover:bg-teal-700'
+          {expanded.leave && (
+            <div className="mt-4 pt-4 border-t border-slate-200 animate-fade-in">
+              <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 mb-4">
+                <p className="text-sm text-blue-800 mb-2"><strong>週年制</strong>：以員工到職日為基準，每年週年日重新計算。</p>
+                <p className="text-sm text-blue-800"><strong>曆年制</strong>：以日曆年度為基準，每年1月1日重新計算特休天數。</p>
+              </div>
+              <div className="flex gap-4">
+                <button 
+                  onClick={() => setLeaveCalculationSystem('anniversary')} 
+                  className={`flex-1 p-4 rounded-xl border-2 transition ${
+                    leaveCalculationSystem === 'anniversary' 
+                      ? 'bg-blue-50 border-blue-500 text-blue-700 font-bold' 
+                      : 'bg-white border-slate-200 text-slate-600 hover:border-blue-300'
                   }`}
                 >
-                  {copied ? (
-                    <>
-                      <Check size={18} />
-                      已複製
-                    </>
-                  ) : (
-                    <>
-                      <Copy size={18} />
-                      複製連結
-                    </>
-                  )}
+                  <div className="text-lg font-bold mb-1">週年制</div>
+                  <div className="text-xs opacity-80">Anniversary System</div>
+                </button>
+                <button 
+                  onClick={() => setLeaveCalculationSystem('calendar')} 
+                  className={`flex-1 p-4 rounded-xl border-2 transition ${
+                    leaveCalculationSystem === 'calendar' 
+                      ? 'bg-blue-50 border-blue-500 text-blue-700 font-bold' 
+                      : 'bg-white border-slate-200 text-slate-600 hover:border-blue-300'
+                  }`}
+                >
+                  <div className="text-lg font-bold mb-1">曆年制</div>
+                  <div className="text-xs opacity-80">Calendar System</div>
                 </button>
               </div>
-              <div className="text-xs text-slate-400">
-                診所 ID: <span className="font-mono">{clinicId}</span>
-              </div>
             </div>
-          ) : (
-            <div className="p-4 bg-slate-50 rounded-lg border border-slate-200 text-sm text-slate-500">
-              載入中...
+          )}
+        </div>
+
+        {/* 員工綁定連結 */}
+        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 transition-all">
+          <div className="flex justify-between items-center cursor-pointer select-none" onClick={() => toggleSection('bind')}>
+            <label className="text-sm font-bold text-slate-700 flex items-center gap-2"><QrCode size={16}/> 員工綁定連結 (QR Code)</label>
+            {expanded.bind ? <ChevronUp size={20} className="text-slate-400"/> : <ChevronDown size={20} className="text-slate-400"/>}
+          </div>
+          {expanded.bind && (
+            <div className="mt-4 pt-4 border-t border-slate-200 animate-fade-in">
+              <div className="bg-teal-50 p-4 rounded-lg border border-teal-100 mb-4">
+                <p className="text-sm text-teal-800 mb-2">請將此連結轉為 QR Code 供員工掃描，或直接傳送至員工群組。</p>
+                <p className="text-xs text-teal-700">員工首次進入需輸入手機與密碼進行綁定。</p>
+              </div>
+              {bindLink ? (
+                <div className="space-y-3">
+                  <div className="flex gap-2 items-center">
+                    <input
+                      type="text"
+                      value={bindLink}
+                      readOnly
+                      className="flex-1 p-3 border rounded-lg bg-white font-mono text-sm"
+                    />
+                    <button
+                      onClick={handleCopyLink}
+                      className={`flex items-center gap-2 px-4 py-3 rounded-lg font-bold transition ${
+                        copied
+                          ? 'bg-green-100 text-green-700 border border-green-300'
+                          : 'bg-teal-600 text-white hover:bg-teal-700'
+                      }`}
+                    >
+                      {copied ? (
+                        <>
+                          <Check size={18} />
+                          已複製
+                        </>
+                      ) : (
+                        <>
+                          <Copy size={18} />
+                          複製連結
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  <div className="text-xs text-slate-400">
+                    診所 ID: <span className="font-mono">{clinicId}</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-4 bg-white rounded-lg border border-slate-200 text-sm text-slate-500">
+                  載入中...
+                </div>
+              )}
             </div>
           )}
         </div>
 
         {/* 加班設定 */}
-        <div>
-          <h3 className="text-lg font-bold text-slate-700 border-b pb-2 mb-4 flex items-center gap-2">
-            <Clock size={20}/> 加班設定 (Overtime Settings)
-          </h3>
-          <div className="bg-orange-50 p-4 rounded-lg border border-orange-100 mb-4">
-            <p className="text-sm text-orange-800">
-              當員工每日工時超過設定門檻時，系統會自動提示員工確認是否申請加班。
-            </p>
+        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 transition-all">
+          <div className="flex justify-between items-center cursor-pointer select-none" onClick={() => toggleSection('overtime')}>
+            <label className="text-sm font-bold text-slate-700 flex items-center gap-2"><Clock size={16}/> 加班規則設定</label>
+            {expanded.overtime ? <ChevronUp size={20} className="text-slate-400"/> : <ChevronDown size={20} className="text-slate-400"/>}
           </div>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-bold text-slate-700 mb-2">
-                加班門檻 (小時)
-              </label>
-              <input
-                type="number"
-                min="1"
-                max="24"
-                step="0.5"
-                value={overtimeThreshold}
-                onChange={(e) => setOvertimeThreshold(Number(e.target.value))}
-                className="w-full border p-3 rounded-lg bg-white text-lg font-bold"
-              />
-              <p className="text-xs text-slate-400 mt-1">
-                當日工時超過此門檻時，系統會提示員工確認是否申請加班
-              </p>
+          {expanded.overtime && (
+            <div className="mt-4 pt-4 border-t border-slate-200 space-y-4 animate-fade-in">
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">加班門檻 (小時)</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="24"
+                  step="0.5"
+                  value={overtimeThreshold}
+                  onChange={(e) => setOvertimeThreshold(Number(e.target.value))}
+                  className="w-full border p-3 rounded-lg bg-white text-lg font-bold"
+                />
+                <p className="text-xs text-slate-400 mt-1">當日工時超過此門檻時，系統會提示員工確認是否申請加班</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  id="overtime_approval"
+                  checked={overtimeApprovalRequired}
+                  onChange={(e) => setOvertimeApprovalRequired(e.target.checked)}
+                  className="w-5 h-5"
+                />
+                <label htmlFor="overtime_approval" className="text-sm font-bold text-slate-700">需要主管審核</label>
+              </div>
             </div>
-            <div className="flex items-center gap-3">
-              <input
-                type="checkbox"
-                id="overtime_approval"
-                checked={overtimeApprovalRequired}
-                onChange={(e) => setOvertimeApprovalRequired(e.target.checked)}
-                className="w-5 h-5"
-              />
-              <label htmlFor="overtime_approval" className="text-sm font-bold text-slate-700">
-                需要主管審核
-              </label>
-            </div>
-            <p className="text-xs text-slate-400">
-              {overtimeApprovalRequired 
-                ? '✓ 加班申請需要主管審核後才會生效' 
-                : '✓ 加班申請將自動核准，無需審核'}
-            </p>
-          </div>
+          )}
         </div>
       </div>
 
