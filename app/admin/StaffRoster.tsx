@@ -56,14 +56,14 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
         loadMonthData();
     }, [currentDate]);
 
-    // 🟢 功能：讀取系統設定 (營業時間)
-    const fetchGlobalSettings = async () => {
+  // 🟢 功能：讀取系統設定 (營業時間) - 從 clinic JSONB 讀取
+  const fetchGlobalSettings = async () => {
         try {
-            const response = await fetch('/api/settings?key=clinic_business_hours');
+            const response = await fetch('/api/settings?type=clinic');
             const result = await response.json();
-            if (result.data && result.data.length > 0 && result.data[0].value) {
+            if (result.data && result.data.business_hours) {
+                const settings = result.data.business_hours;
                 try {
-                    const settings = JSON.parse(result.data[0].value);
                     // 動態班別陣列轉換
                     if (settings?.shifts) {
                         const rawShifts = settings.shifts;
@@ -191,15 +191,15 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
         }
     };
 
-    // 🟢 功能：儲存臨時修改的營業時間 (更新全域設定)
+    // 🟢 功能：儲存臨時修改的營業時間 (更新全域設定，寫入 clinic JSONB)
     const handleSaveGlobalTime = async () => {
         try {
             const response = await fetch('/api/settings', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    key: 'clinic_business_hours',
-                    value: JSON.stringify(businessHours)
+                    type: 'clinic',
+                    settings: { business_hours: businessHours }
                 })
             });
             const result = await response.json();

@@ -162,28 +162,45 @@ export async function POST(request: NextRequest) {
     // 🟢 多租戶：移除前端可能傳入的 clinic_id，由後端自動填入
     const updates = rawUpdates.map((item: any) => {
       const { clinic_id, ...rest } = item;
-      return {
-        ...rest,
-        clinic_id: clinicId // 🟢 自動填入，不讓前端傳入
-      };
+      return { ...rest, clinic_id: clinicId };
     });
 
-    const { error } = await supabaseAdmin
-      .from('system_settings')
-      .upsert(updates);
+    // 🟢 使用安全迴圈取代 upsert，避免 onConflict 報錯
+    for (const update of updates) {
+      const { data: existing } = await supabaseAdmin
+        .from('system_settings')
+        .select('id')
+        .eq('clinic_id', clinicId)
+        .eq('key', update.key)
+        .single();
 
-    if (error) {
-      console.error('Update settings error:', error);
-      return NextResponse.json(
-        { success: false, message: `儲存失敗: ${error.message}` },
-        { status: 500 }
-      );
+      if (existing) {
+        const { error } = await supabaseAdmin
+          .from('system_settings')
+          .update({ value: update.value })
+          .eq('id', existing.id);
+        if (error) {
+          console.error('Update settings error:', error);
+          return NextResponse.json(
+            { success: false, message: `儲存失敗: ${error.message}` },
+            { status: 500 }
+          );
+        }
+      } else {
+        const { error } = await supabaseAdmin
+          .from('system_settings')
+          .insert(update);
+        if (error) {
+          console.error('Insert settings error:', error);
+          return NextResponse.json(
+            { success: false, message: `儲存失敗: ${error.message}` },
+            { status: 500 }
+          );
+        }
+      }
     }
 
-    return NextResponse.json({
-      success: true,
-      message: '設定已更新'
-    });
+    return NextResponse.json({ success: true, message: '設定已更新' });
   } catch (error: any) {
     console.error('Settings POST API Error:', error);
     return NextResponse.json(

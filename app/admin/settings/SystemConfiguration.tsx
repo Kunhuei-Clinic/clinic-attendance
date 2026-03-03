@@ -231,15 +231,6 @@ export default function SystemConfiguration() {
           if (item.key === 'special_clinic_types') {
             try { setSpecialClinics(JSON.parse(item.value)); } catch (e) { }
           }
-          if (item.key === 'clinic_business_hours') {
-            try { 
-              const raw = JSON.parse(item.value);
-              const converted = migrateBusinessHours(raw);
-              setBusinessHours(converted);
-            } catch (e) { 
-              // 若解析失敗則維持預設值
-            }
-          }
           if (item.key === 'leave_calculation_system') {
             setLeaveCalculationSystem(item.value === 'calendar' ? 'calendar' : 'anniversary');
           }
@@ -255,12 +246,16 @@ export default function SystemConfiguration() {
         setJobTitles(DEFAULT_JOB_TITLES);
       }
 
-      // 取得診所設定（加班設定）
+      // 取得診所設定（加班設定與班表）
       const clinicResponse = await fetch('/api/settings?type=clinic');
       const clinicResult = await clinicResponse.json();
       if (clinicResult.data) {
         setOvertimeThreshold(clinicResult.data.overtime_threshold ?? 9);
         setOvertimeApprovalRequired(clinicResult.data.overtime_approval_required !== false);
+        // 🟢 從 clinics.settings 讀取班表，完美相容舊資料
+        if (clinicResult.data.business_hours) {
+          setBusinessHours(migrateBusinessHours(clinicResult.data.business_hours));
+        }
       }
     } catch (error) {
       console.error('Fetch system settings error:', error);
@@ -270,12 +265,11 @@ export default function SystemConfiguration() {
   const handleSaveSystem = async () => {
     setLoadingSystem(true);
     try {
-      // 系統設定
+      // 系統設定 (移除 business_hours，改由 clinic JSONB 管理)
       const updates = [
         { key: 'org_entities', value: JSON.stringify(entities) },
         { key: 'job_titles', value: JSON.stringify(jobTitles.length > 0 ? jobTitles : DEFAULT_JOB_TITLES) },
         { key: 'special_clinic_types', value: JSON.stringify(specialClinics) },
-        { key: 'clinic_business_hours', value: JSON.stringify(businessHours) },
         { key: 'leave_calculation_system', value: leaveCalculationSystem }
       ];
       const response = await fetch('/api/settings', {
@@ -285,7 +279,7 @@ export default function SystemConfiguration() {
       });
       const result = await response.json();
       
-      // 儲存診所設定（加班設定）
+      // 儲存診所設定（加班設定 + 班表 business_hours）
       const clinicResponse = await fetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -293,7 +287,8 @@ export default function SystemConfiguration() {
           type: 'clinic',
           settings: {
             overtime_threshold: overtimeThreshold,
-            overtime_approval_required: overtimeApprovalRequired
+            overtime_approval_required: overtimeApprovalRequired,
+            business_hours: businessHours
           }
         })
       });
