@@ -10,6 +10,86 @@ type JobTitleConfig = {
   in_roster: boolean;
 };
 
+type ShiftConfig = {
+  id: string;      // 系統唯一識別碼 (例如 uuid 或時間戳)
+  code: string;    // 短代號 (供排班表顯示，例如 M, A, N)
+  name: string;    // 班別名稱 (例如 早診, 午診)
+  start: string;   // 開始時間 (例如 08:00)
+  end: string;     // 結束時間 (例如 12:00)
+};
+
+type BusinessHoursConfig = {
+  openDays: number[];
+  shifts: ShiftConfig[];
+};
+
+const DEFAULT_SHIFTS: ShiftConfig[] = [
+  { id: '1', code: 'M', name: '早診', start: '08:00', end: '12:00' },
+  { id: '2', code: 'A', name: '午診', start: '14:00', end: '18:00' },
+  { id: '3', code: 'N', name: '晚診', start: '18:30', end: '21:30' }
+];
+
+const DEFAULT_BUSINESS_HOURS: BusinessHoursConfig = {
+  openDays: [1, 2, 3, 4, 5, 6],
+  shifts: DEFAULT_SHIFTS
+};
+
+const migrateBusinessHours = (raw: any): BusinessHoursConfig => {
+  if (!raw || typeof raw !== 'object') {
+    return DEFAULT_BUSINESS_HOURS;
+  }
+
+  const openDays = Array.isArray(raw.openDays) ? raw.openDays : DEFAULT_BUSINESS_HOURS.openDays;
+
+  // 新版：shifts 已經是陣列格式
+  if (Array.isArray(raw.shifts)) {
+    const shifts: ShiftConfig[] = raw
+      .map((s: any, index: number) => {
+        if (!s) return null;
+        const start = typeof s.start === 'string' ? s.start : '00:00';
+        const end = typeof s.end === 'string' ? s.end : '00:00';
+        const name = typeof s.name === 'string' && s.name ? s.name : `班別${index + 1}`;
+        const code = typeof s.code === 'string' && s.code ? s.code.toUpperCase().slice(0, 2) : `S${index + 1}`;
+        const id = typeof s.id === 'string' && s.id ? s.id : `${Date.now()}_${index}`;
+        return { id, code, name, start, end };
+      })
+      .filter((s): s is ShiftConfig => !!s);
+
+    return {
+      openDays,
+      shifts: shifts.length > 0 ? shifts : DEFAULT_SHIFTS
+    };
+  }
+
+  // 舊版：shifts 為物件，例如 { AM: { start, end }, ... }
+  if (raw.shifts && typeof raw.shifts === 'object') {
+    const entries = Object.entries(raw.shifts as Record<string, any>);
+    const shifts: ShiftConfig[] = entries.map(([key, value], index) => {
+      const start = typeof value?.start === 'string' ? value.start : '00:00';
+      const end = typeof value?.end === 'string' ? value.end : '00:00';
+
+      let name = '';
+      const upperKey = key.toUpperCase();
+      if (upperKey === 'AM' || upperKey === 'M') name = '早診';
+      else if (upperKey === 'PM' || upperKey === 'A') name = '午診';
+      else if (upperKey === 'NIGHT' || upperKey === 'N') name = '晚診';
+      else name = key;
+
+      const code = upperKey.slice(0, 2);
+      const id = `${Date.now()}_${index}`;
+
+      return { id, code, name, start, end };
+    });
+
+    return {
+      openDays,
+      shifts: shifts.length > 0 ? shifts : DEFAULT_SHIFTS
+    };
+  }
+
+  return DEFAULT_BUSINESS_HOURS;
+};
+
 const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六'];
 const DEFAULT_JOB_TITLES: JobTitleConfig[] = [
   { name: '醫師', in_roster: false }, // 醫師有獨立班表
@@ -23,14 +103,7 @@ export default function SystemConfiguration() {
   const [entities, setEntities] = useState<Entity[]>([]);
   const [jobTitles, setJobTitles] = useState<JobTitleConfig[]>([]);
   const [specialClinics, setSpecialClinics] = useState<string[]>([]);
-  const [businessHours, setBusinessHours] = useState({
-    openDays: [1,2,3,4,5,6], 
-    shifts: {
-      AM: { start: '08:00', end: '12:30' },
-      PM: { start: '14:00', end: '17:30' },
-      NIGHT: { start: '18:00', end: '21:30' }
-    }
-  });
+  const [businessHours, setBusinessHours] = useState<BusinessHoursConfig>(DEFAULT_BUSINESS_HOURS);
   const [leaveCalculationSystem, setLeaveCalculationSystem] = useState<'anniversary' | 'calendar'>('anniversary');
   const [loadingSystem, setLoadingSystem] = useState(false);
   const [systemMessage, setSystemMessage] = useState('');
@@ -127,7 +200,13 @@ export default function SystemConfiguration() {
             try { setSpecialClinics(JSON.parse(item.value)); } catch (e) { }
           }
           if (item.key === 'clinic_business_hours') {
-            try { setBusinessHours(JSON.parse(item.value)); } catch (e) { }
+            try { 
+              const raw = JSON.parse(item.value);
+              const converted = migrateBusinessHours(raw);
+              setBusinessHours(converted);
+            } catch (e) { 
+              // 若解析失敗則維持預設值
+            }
           }
           if (item.key === 'leave_calculation_system') {
             setLeaveCalculationSystem(item.value === 'calendar' ? 'calendar' : 'anniversary');
@@ -240,16 +319,6 @@ export default function SystemConfiguration() {
       ? businessHours.openDays.filter(d => d !== dayIndex)
       : [...businessHours.openDays, dayIndex].sort();
     setBusinessHours({ ...businessHours, openDays: newDays });
-  };
-
-  const updateShiftTime = (shift: 'AM'|'PM'|'NIGHT', field: 'start'|'end', val: string) => {
-    setBusinessHours({
-      ...businessHours,
-      shifts: {
-        ...businessHours.shifts,
-        [shift]: { ...businessHours.shifts[shift], [field]: val }
-      }
-    });
   };
 
   return (
@@ -379,30 +448,102 @@ export default function SystemConfiguration() {
                 ))}
               </div>
             </div>
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-              {(['AM', 'PM', 'NIGHT'] as const).map(shift => (
-                <div key={shift} className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                  <h4 className="font-bold text-slate-700 mb-3 flex justify-between">
-                    {shift === 'AM' ? '早診' : shift === 'PM' ? '午診' : '晚診'}
-                    <span className="text-xs text-slate-400 bg-white px-2 py-0.5 rounded border">{shift}</span>
-                  </h4>
-                  <div className="flex gap-1 items-center">
+            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+              <div className="flex justify-between items-center mb-4">
+                <label className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                  <Clock size={16} /> 診所班別與時間設定 (支援多班制)
+                </label>
+                <button 
+                  onClick={() => setBusinessHours(prev => ({
+                    ...prev, 
+                    shifts: [
+                      ...prev.shifts, 
+                      { 
+                        id: Date.now().toString(), 
+                        code: 'NEW', 
+                        name: '新班別', 
+                        start: '00:00', 
+                        end: '00:00' 
+                      }
+                    ]
+                  }))}
+                  className="text-xs bg-white border border-blue-200 text-blue-600 px-3 py-1.5 rounded-lg hover:bg-blue-50 font-bold flex items-center gap-1"
+                >
+                  <Plus size={14} /> 新增班別
+                </button>
+              </div>
+              
+              <div className="space-y-3">
+                {businessHours.shifts.map((shift, index) => (
+                  <div key={shift.id} className="flex items-center gap-3 bg-white p-3 rounded-lg border border-slate-200 shadow-sm">
                     <input 
-                      type="time" 
-                      value={businessHours.shifts[shift].start} 
-                      onChange={(e) => updateShiftTime(shift, 'start', e.target.value)} 
-                      className="w-full border p-1 rounded text-center font-mono text-sm"
+                      type="text" 
+                      value={shift.name}
+                      onChange={e => {
+                        const newShifts = [...businessHours.shifts];
+                        newShifts[index] = { ...newShifts[index], name: e.target.value };
+                        setBusinessHours({ ...businessHours, shifts: newShifts });
+                      }}
+                      className="w-24 border-b border-slate-300 p-1 text-sm font-bold focus:border-blue-500 outline-none"
+                      placeholder="班別名稱"
                     />
-                    <span className="text-slate-400">-</span>
                     <input 
-                      type="time" 
-                      value={businessHours.shifts[shift].end} 
-                      onChange={(e) => updateShiftTime(shift, 'end', e.target.value)} 
-                      className="w-full border p-1 rounded text-center font-mono text-sm"
+                      type="text" 
+                      value={shift.code}
+                      onChange={e => {
+                        const newShifts = [...businessHours.shifts];
+                        newShifts[index] = { 
+                          ...newShifts[index], 
+                          code: e.target.value.toUpperCase().slice(0, 2) 
+                        };
+                        setBusinessHours({ ...businessHours, shifts: newShifts });
+                      }}
+                      className="w-12 border-b border-slate-300 p-1 text-sm font-mono text-center text-slate-500 focus:border-blue-500 outline-none"
+                      placeholder="代號"
+                      maxLength={2}
                     />
+                    <div className="flex-1 flex items-center gap-2">
+                      <input 
+                        type="time" 
+                        value={shift.start}
+                        onChange={e => {
+                          const newShifts = [...businessHours.shifts];
+                          newShifts[index] = { ...newShifts[index], start: e.target.value };
+                          setBusinessHours({ ...businessHours, shifts: newShifts });
+                        }}
+                        className="border p-1.5 rounded text-sm font-mono w-full"
+                      />
+                      <span className="text-slate-400">-</span>
+                      <input 
+                        type="time" 
+                        value={shift.end}
+                        onChange={e => {
+                          const newShifts = [...businessHours.shifts];
+                          newShifts[index] = { ...newShifts[index], end: e.target.value };
+                          setBusinessHours({ ...businessHours, shifts: newShifts });
+                        }}
+                        className="border p-1.5 rounded text-sm font-mono w-full"
+                      />
+                    </div>
+                    <button 
+                      onClick={() => {
+                        if (window.confirm(`確定要刪除「${shift.name}」嗎？(不影響歷史排班紀錄)`)) {
+                          setBusinessHours(prev => ({
+                            ...prev,
+                            shifts: prev.shifts.filter(s => s.id !== shift.id)
+                          }));
+                        }
+                      }}
+                      className="text-red-300 hover:text-red-500 p-1 transition"
+                    >
+                      <Trash2 size={16} />
+                    </button>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
+              <p className="text-xs text-slate-400 mt-3">
+                💡 提示：代號 (如 M, A, N) 會顯示在排班表的小格子上。刪除或更改班別「不會」影響過去已經結算的薪資與排班紀錄。
+              </p>
             </div>
           </div>
         </div>
