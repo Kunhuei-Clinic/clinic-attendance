@@ -391,9 +391,6 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
         const key = `${staffId}_${dateStr}`;
         const currentData = rosterMap[key] || { shifts: [], day_type: 'normal', shift_details: {} };
 
-        // 如果是例假日或休息日，禁止排班
-        if (currentData.day_type === 'regular' || currentData.day_type === 'rest') return;
-
         let nextShifts = [...currentData.shifts];
         let nextDetails: Record<string, { start: string; end: string }> = { ...(currentData.shift_details || {}) };
 
@@ -582,19 +579,18 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
                                                     >
                                                         {btnText}
                                                     </button>
-                                                    {data.day_type !== 'regular' && data.day_type !== 'rest' && (
+                                                    {(
                                                         <div className="flex flex-col h-[calc(100%-22px)] w-full divide-y divide-slate-100 overflow-hidden">
                                                             {shiftsConfig.map(shift => {
                                                                 const isSelected = data.shifts.includes(shift.code);
                                                                 return (
                                                                     <button
                                                                         key={shift.id}
-                                                                        disabled={data.day_type === 'regular' || data.day_type === 'rest'}
                                                                         onClick={() => toggleShift(staff.id, d.dateStr, shift)}
                                                                         className={`flex-1 w-full flex items-center justify-center transition-all min-h-[14px] text-[10px] leading-none ${
                                                                             isSelected 
                                                                                 ? 'bg-blue-500 text-white shadow-inner font-bold' 
-                                                                                : 'bg-transparent text-slate-300 hover:bg-slate-100 disabled:opacity-0 disabled:cursor-not-allowed'
+                                                                                : 'bg-transparent text-slate-400 hover:bg-slate-200'
                                                                         }`}
                                                                         title={`${shift.name} (${shift.start}-${shift.end})`}
                                                                     >
