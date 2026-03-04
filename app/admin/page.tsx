@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { createBrowserClient } from '@supabase/ssr';
 import { CheckCircle, Calendar, Stethoscope, BookOpen, DollarSign, Settings, FileText, Calculator, FileSpreadsheet, LogOut, Bell } from 'lucide-react';
+import ClinicSwitcher from '@/app/components/ClinicSwitcher';
 
 // 建立 Supabase 客戶端（使用 @supabase/ssr 確保 Session 寫入 Cookie）
 const supabase = createBrowserClient(
@@ -218,7 +219,13 @@ export default function AdminPage() {
               <Calendar size={16}/> 員工排班
             </button>
           )}
-        </div>
+            </div>
+
+            {/* 連鎖診所切換器 (Workspace Switcher) */}
+            <div className="mt-2 md:mt-0">
+              <ClinicSwitcher />
+            </div>
+          </div>
       </div>
 
           <div>
