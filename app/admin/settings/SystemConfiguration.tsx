@@ -43,7 +43,7 @@ const migrateBusinessHours = (raw: any): BusinessHoursConfig => {
 
   // 新版：shifts 已經是陣列格式
   if (Array.isArray(raw.shifts)) {
-    const shifts: ShiftConfig[] = raw
+    const shifts: ShiftConfig[] = raw.shifts
       .map((s: any, index: number) => {
         if (!s) return null;
         const start = typeof s.start === 'string' ? s.start : '00:00';
