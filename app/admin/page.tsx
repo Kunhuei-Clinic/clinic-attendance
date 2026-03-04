@@ -18,11 +18,10 @@ import {
 } from 'lucide-react';
 import ClinicSwitcher from '@/app/components/ClinicSwitcher';
 
-// 建立 Supabase 客戶端（使用 @supabase/ssr 確保 Session 寫入 Cookie）
+// 建立 Supabase 客戶端（使用環境變數）
 const supabase = createBrowserClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://ucpkvptnhgbtmghqgbof.supabase.co',
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVjcGt2cHRuaGdidG1naHFnYm9mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUzNDg5MTAsImV4cCI6MjA4MDkyNDkxMH0.zdLx86ey-QywuGD-S20JJa7ZD6xHFRalAMRN659bbuo'
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
 import StaffRosterView from './StaffRoster';
