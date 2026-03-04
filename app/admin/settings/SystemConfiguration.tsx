@@ -53,7 +53,7 @@ const migrateBusinessHours = (raw: any): BusinessHoursConfig => {
         const id = typeof s.id === 'string' && s.id ? s.id : `${Date.now()}_${index}`;
         return { id, code, name, start, end };
       })
-      .filter((s): s is ShiftConfig => !!s);
+      .filter((s: ShiftConfig | null): s is ShiftConfig => !!s);
 
     return {
       openDays,
@@ -382,6 +382,14 @@ export default function SystemConfiguration() {
                   </button>
                 </div>
               ))}
+              <div className="mt-4 pt-4 border-t border-slate-200 flex justify-end">
+                <button 
+                  onClick={() => handleSaveSystemSetting('org_entities', JSON.stringify(entities))} 
+                  className="flex items-center gap-2 bg-slate-800 text-white px-5 py-2 rounded-lg text-sm font-bold hover:bg-black transition"
+                >
+                  <Save size={16}/> 儲存單位設定
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -460,6 +468,14 @@ export default function SystemConfiguration() {
                     </div>
                   </div>
                 ))}
+              </div>
+              <div className="mt-4 pt-4 border-t border-slate-200 flex justify-end">
+                <button 
+                  onClick={() => handleSaveSystemSetting('job_titles', JSON.stringify(jobTitles.length > 0 ? jobTitles : DEFAULT_JOB_TITLES))} 
+                  className="flex items-center gap-2 bg-slate-800 text-white px-5 py-2 rounded-lg text-sm font-bold hover:bg-black transition"
+                >
+                  <Save size={16}/> 儲存職稱設定
+                </button>
               </div>
             </div>
           )}
@@ -590,6 +606,14 @@ export default function SystemConfiguration() {
               <p className="text-xs text-slate-400 mt-3">
                 💡 提示：代號 (如 M, A, N) 會顯示在排班表的小格子上。刪除或更改班別「不會」影響過去已經結算的薪資與排班紀錄。
               </p>
+              <div className="mt-4 pt-4 border-t border-slate-200 flex justify-end">
+                <button 
+                  onClick={() => handleSaveClinicSettings({ business_hours: businessHours })} 
+                  className="flex items-center gap-2 bg-blue-600 text-white px-5 py-2 rounded-lg text-sm font-bold hover:bg-blue-700 transition shadow-sm"
+                >
+                  <Save size={16}/> 儲存班別設定
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -601,30 +625,40 @@ export default function SystemConfiguration() {
             {expanded.special ? <ChevronUp size={20} className="text-slate-400"/> : <ChevronDown size={20} className="text-slate-400"/>}
           </div>
           {expanded.special && (
-            <div className="mt-4 pt-4 border-t border-slate-200 grid grid-cols-2 gap-4 animate-fade-in">
-              {specialClinics.map((name, idx) => (
-                <div key={idx} className="flex gap-2 items-center">
-                  <input 
-                    type="text" 
-                    value={name} 
-                    onChange={(e) => updateSpecial(idx, e.target.value)} 
-                    className="flex-1 p-2 border rounded-lg font-bold outline-none focus:ring-2 focus:ring-purple-200" 
-                    placeholder="門診名稱"
-                  />
-                  <button 
-                    onClick={() => removeSpecial(idx)} 
-                    className="p-2 text-red-400 hover:bg-red-50 rounded-lg"
-                  >
-                    <Trash2 size={18}/>
-                  </button>
-                </div>
-              ))}
-              <button 
-                onClick={(e) => { e.stopPropagation(); addSpecial(); }} 
-                className="py-2 border-2 border-dashed border-slate-300 text-slate-500 rounded-xl hover:bg-purple-50 font-bold flex items-center justify-center gap-2"
-              >
-                <Plus size={18}/> 新增類型
-              </button>
+            <div className="mt-4 pt-4 border-t border-slate-200 animate-fade-in">
+              <div className="grid grid-cols-2 gap-4">
+                {specialClinics.map((name, idx) => (
+                  <div key={idx} className="flex gap-2 items-center">
+                    <input 
+                      type="text" 
+                      value={name} 
+                      onChange={(e) => updateSpecial(idx, e.target.value)} 
+                      className="flex-1 p-2 border rounded-lg font-bold outline-none focus:ring-2 focus:ring-purple-200" 
+                      placeholder="門診名稱"
+                    />
+                    <button 
+                      onClick={() => removeSpecial(idx)} 
+                      className="p-2 text-red-400 hover:bg-red-50 rounded-lg"
+                    >
+                      <Trash2 size={18}/>
+                    </button>
+                  </div>
+                ))}
+                <button 
+                  onClick={(e) => { e.stopPropagation(); addSpecial(); }} 
+                  className="py-2 border-2 border-dashed border-slate-300 text-slate-500 rounded-xl hover:bg-purple-50 font-bold flex items-center justify-center gap-2"
+                >
+                  <Plus size={18}/> 新增類型
+                </button>
+              </div>
+              <div className="mt-4 pt-4 border-t border-slate-200 flex justify-end">
+                <button 
+                  onClick={() => handleSaveSystemSetting('special_clinic_types', JSON.stringify(specialClinics))} 
+                  className="flex items-center gap-2 bg-slate-800 text-white px-5 py-2 rounded-lg text-sm font-bold hover:bg-black transition"
+                >
+                  <Save size={16}/> 儲存門診類型
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -663,6 +697,14 @@ export default function SystemConfiguration() {
                 >
                   <div className="text-lg font-bold mb-1">曆年制</div>
                   <div className="text-xs opacity-80">Calendar System</div>
+                </button>
+              </div>
+              <div className="mt-6 pt-4 border-t border-slate-200 flex justify-end">
+                <button 
+                  onClick={() => handleSaveSystemSetting('leave_calculation_system', leaveCalculationSystem)} 
+                  className="flex items-center gap-2 bg-slate-800 text-white px-5 py-2 rounded-lg text-sm font-bold hover:bg-black transition"
+                >
+                  <Save size={16}/> 儲存特休制度
                 </button>
               </div>
             </div>
@@ -755,20 +797,17 @@ export default function SystemConfiguration() {
                 />
                 <label htmlFor="overtime_approval" className="text-sm font-bold text-slate-700">需要主管審核</label>
               </div>
+              <div className="mt-4 pt-4 border-t border-slate-200 flex justify-end">
+                <button 
+                  onClick={() => handleSaveClinicSettings({ overtime_threshold: overtimeThreshold, overtime_approval_required: overtimeApprovalRequired })} 
+                  className="flex items-center gap-2 bg-blue-600 text-white px-5 py-2 rounded-lg text-sm font-bold hover:bg-blue-700 transition shadow-sm"
+                >
+                  <Save size={16}/> 儲存加班規則
+                </button>
+              </div>
             </div>
           )}
         </div>
-      </div>
-
-      <div className="mt-10 pt-6 border-t flex justify-between items-center">
-        <span className="text-sm font-bold text-green-600">{systemMessage}</span>
-        <button 
-          onClick={handleSaveSystem} 
-          disabled={loadingSystem} 
-          className="flex items-center gap-2 bg-slate-800 text-white px-6 py-3 rounded-xl font-bold hover:bg-black transition disabled:opacity-50"
-        >
-          <Save size={20}/> {loadingSystem ? '儲存中...' : '儲存設定'}
-        </button>
       </div>
     </div>
   );
