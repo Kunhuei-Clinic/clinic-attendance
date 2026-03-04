@@ -134,72 +134,72 @@ async function getUserIdFromSession(request: NextRequest): Promise<string | null
 }
 
 /**
- * 從 Request 中取得當前使用者的 clinic_id
- * 
- * 此函數會依序嘗試：
- * 1. 從 Supabase Session Cookie 取得 user ID，查詢 profiles 表取得 clinic_id（使用 @supabase/ssr）
- * 2. 從 Authorization header 取得 Supabase token，解析 user ID
- * 3. 從 cookie 取得 user_id (向後兼容)
- * 
- * @param request - NextRequest 物件
- * @returns clinic_id (uuid) 或 null
+ * 從 Request 中取得當前使用者的 clinic_id（企業級多租戶權限驗證）
+ *
+ * 邏輯：
+ * 1. 解析目前登入的 userId（使用 Supabase Session Cookie）
+ * 2. 檢查是否為 Super Admin：
+ *    - 若是，且 Header/Cookie 有指定 clinic_id，直接放行
+ * 3. 讀取 active_clinic_id Cookie 或 Header 的 x-clinic-id 作為目標診所
+ * 4. 嚴格驗證：確認 userId 對該 clinic_id 存在於 clinic_members
+ * 5. 若沒有合法目標診所，回退為該使用者在 clinic_members 的第一家診所
  */
 export async function getClinicIdFromRequest(request: NextRequest): Promise<string | null> {
   try {
-    // 方法 1: 從 Supabase Session Cookie 取得 user ID (主要方法，使用 @supabase/ssr)
-    const cookieStore = cookies();
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          get(name: string) {
-            return cookieStore.get(name)?.value;
-          },
-        },
+    // 1. 取得當前使用者 ID（沿用現有 Session 解析邏輯）
+    const userId = await getUserIdFromSession(request);
+    if (!userId) {
+      return null;
+    }
+
+    // 2. 讀取前端傳來的目標診所 ID：優先 Header，其次 active_clinic_id Cookie，再向後相容 clinic_id cookie
+    const targetClinicId =
+      request.headers.get('x-clinic-id') ||
+      request.cookies.get('active_clinic_id')?.value ||
+      request.cookies.get('clinic_id')?.value ||
+      null;
+
+    // 3. 檢查是否為 Super Admin
+    const { data: superAdmin } = await supabaseAdmin
+      .from('super_admins')
+      .select('user_id')
+      .eq('user_id', userId)
+      .single();
+
+    if (superAdmin) {
+      // 總管特權：若有指定診所，直接放行；否則回傳 null 讓前端自行決定
+      return targetClinicId || null;
+    }
+
+    // 4. 一般使用者的嚴格驗證：若有指定診所，確認是否為該診所成員
+    if (targetClinicId) {
+      const { data: memberRecord, error: memberError } = await supabaseAdmin
+        .from('clinic_members')
+        .select('clinic_id')
+        .eq('user_id', userId)
+        .eq('clinic_id', targetClinicId)
+        .single();
+
+      if (!memberError && memberRecord) {
+        return memberRecord.clinic_id;
       }
-    );
-
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
-    if (!authError && user) {
-      const clinicId = await getClinicIdByUserId(user.id);
-      if (clinicId) {
-        return clinicId;
-      }
     }
 
-    // 方法 2: 從 Authorization header 取得 Supabase token (API 呼叫時使用)
-    const authHeader = request.headers.get('authorization');
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      const token = authHeader.replace('Bearer ', '');
-      
-      // 使用 Supabase Admin 驗證 token 並取得 user
-      const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
-      
-      if (!error && user) {
-        return await getClinicIdByUserId(user.id);
-      }
+    // 5. 預設降級：抓出該使用者名下的第一家合法診所
+    const { data: firstValidClinic, error: firstError } = await supabaseAdmin
+      .from('clinic_members')
+      .select('clinic_id')
+      .eq('user_id', userId)
+      .limit(1)
+      .single();
+
+    if (firstError) {
+      console.error('getClinicIdFromRequest fallback error:', firstError);
     }
 
-    // 方法 3: 向後兼容 - 從 cookie 取得 user_id (舊系統)
-    const userIdCookie = cookieStore.get('user_id');
-    
-    if (userIdCookie?.value) {
-      return await getClinicIdByUserId(userIdCookie.value);
-    }
-
-    // 方法 4: LINE 登入支援 - 直接從 cookie 取得 clinic_id
-    const clinicIdCookie = cookieStore.get('clinic_id');
-    
-    if (clinicIdCookie?.value) {
-      return clinicIdCookie.value;
-    }
-
-    // 無法取得 clinic_id，回傳 null
-    return null;
+    return firstValidClinic?.clinic_id || null;
   } catch (error) {
-    console.error('getClinicIdFromRequest error:', error);
+    console.error('getClinicIdFromRequest Security Error:', error);
     return null;
   }
 }
