@@ -1,57 +1,74 @@
-import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
-import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { NextResponse } from 'next/server';
+import { createServerClient } from '@supabase/ssr';
+import { cookies } from 'next/headers';
+import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
-export async function GET() {
-  // 1. 取得 Cookie Store
-  const cookieStore = cookies()
-
-  // 2. 建立 Server Client (只讀模式)
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value
+export async function GET(request: Request) {
+  try {
+    const cookieStore = cookies();
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            return cookieStore.get(name)?.value;
+          },
         },
-      },
+      }
+    );
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ authenticated: false });
     }
-  )
 
-  // 3. 正規取得 User (這會自動處理 base64 格式)
-  const { data: { user }, error } = await supabase.auth.getUser()
+    // 1. 檢查是否為平台總管
+    const { data: superAdmin } = await supabaseAdmin
+      .from('super_admins')
+      .select('user_id')
+      .eq('user_id', user.id)
+      .single();
 
-  if (error || !user) {
-    return NextResponse.json({ authenticated: false }, { status: 401 })
-  }
+    let dbRole = 'staff'; // 預設權限
+    const activeClinicId = cookieStore.get('active_clinic_id')?.value;
 
-  // 4. 查詢使用者的角色 (使用 supabaseAdmin 繞過 RLS)
-  const { data: profile, error: profileError } = await supabaseAdmin
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single()
+    // 2. 根據目前切換的診所，查詢該員工在那家診所的權限
+    if (activeClinicId) {
+      const { data: member } = await supabaseAdmin
+        .from('clinic_members')
+        .select('role')
+        .eq('user_id', user.id)
+        .eq('clinic_id', activeClinicId)
+        .single();
+      if (member) dbRole = member.role;
+    } else {
+      // 若無選擇診所，抓取第一家
+      const { data: member } = await supabaseAdmin
+        .from('clinic_members')
+        .select('role')
+        .eq('user_id', user.id)
+        .limit(1)
+        .single();
+      if (member) dbRole = member.role;
+    }
 
-  if (profileError || !profile) {
-    // 如果查不到 profile，預設為 'boss' (向後兼容)
-    console.warn('Profile not found for user:', user.id, profileError)
+    // 總管絕對擁有最高權限
+    if (superAdmin) dbRole = 'owner';
+
+    // 3. 轉換為前端認識的 authLevel ('boss' | 'manager' | null)
+    let frontendAuthLevel: 'boss' | 'manager' | null = null;
+    if (dbRole === 'owner' || dbRole === 'boss') frontendAuthLevel = 'boss';
+    else if (dbRole === 'manager') frontendAuthLevel = 'manager';
+
     return NextResponse.json({
       authenticated: true,
       user: { id: user.id, email: user.email },
-      authLevel: 'boss'
-    }, { status: 200 })
+      authLevel: frontendAuthLevel,
+    });
+  } catch (error) {
+    return NextResponse.json({ authenticated: false });
   }
-
-  // 5. 轉換角色為 authLevel
-  // 'admin' -> 'boss', 'user' -> 'manager'
-  const authLevel = profile.role === 'admin' ? 'boss' : 'manager'
-
-  // 6. 回傳成功（包含 authLevel）
-  return NextResponse.json({
-    authenticated: true,
-    user: { id: user.id, email: user.email },
-    authLevel: authLevel
-  }, { status: 200 })
 }
