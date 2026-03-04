@@ -165,39 +165,20 @@ export async function POST(request: NextRequest) {
       return { ...rest, clinic_id: clinicId };
     });
 
-    // 🟢 使用安全迴圈取代 upsert，避免 onConflict 報錯
-    for (const update of updates) {
-      const { data: existing } = await supabaseAdmin
-        .from('system_settings')
-        .select('id')
-        .eq('clinic_id', clinicId)
-        .eq('key', update.key)
-        .single();
+    // 🏆 企業級 SaaS 黃金標準：批次原子化寫入 (Bulk Atomic Upsert)
+    // 直接依賴資料庫底層的交易鎖，一次寫入多筆陣列，徹底根絕 Race Condition
+    const { error } = await supabaseAdmin
+      .from('system_settings')
+      .upsert(updates, { 
+        onConflict: 'clinic_id, key' // 👈 告訴資料庫：當這兩個欄位組合重複時，執行覆蓋更新 (Update)；否則新增 (Insert)
+      });
 
-      if (existing) {
-        const { error } = await supabaseAdmin
-          .from('system_settings')
-          .update({ value: update.value })
-          .eq('id', existing.id);
-        if (error) {
-          console.error('Update settings error:', error);
-          return NextResponse.json(
-            { success: false, message: `儲存失敗: ${error.message}` },
-            { status: 500 }
-          );
-        }
-      } else {
-        const { error } = await supabaseAdmin
-          .from('system_settings')
-          .insert(update);
-        if (error) {
-          console.error('Insert settings error:', error);
-          return NextResponse.json(
-            { success: false, message: `儲存失敗: ${error.message}` },
-            { status: 500 }
-          );
-        }
-      }
+    if (error) {
+      console.error('Upsert settings error:', error);
+      return NextResponse.json(
+        { success: false, message: `儲存失敗: ${error.message}` },
+        { status: 500 }
+      );
     }
 
     return NextResponse.json({ success: true, message: '設定已更新' });
