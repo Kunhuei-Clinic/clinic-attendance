@@ -6,28 +6,34 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin';
 export async function GET(request: Request) {
   try {
     const cookieStore = cookies();
+    
+    // 🟢 使用最新 SSR 標準寫法，避免 Next.js 在 GET 請求中修改 Cookie 而報錯
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
         cookies: {
-          get(name: string) {
-            return cookieStore.get(name)?.value;
+          getAll() {
+            return cookieStore.getAll();
           },
-          // 🟢 必須補上這兩段，SSR 登入才不會失效
-          set(name: string, value: string, options: any) {
-            cookieStore.set({ name, value, ...options });
-          },
-          remove(name: string, options: any) {
-            cookieStore.set({ name, value: '', ...options });
+          setAll(cookiesToSet) {
+            try {
+              cookiesToSet.forEach(({ name, value, options }) => {
+                cookieStore.set({ name, value, ...options });
+              });
+            } catch (error) {
+              // 忽略 Server Component 的設定錯誤
+            }
           },
         },
       }
     );
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ authenticated: false });
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    
+    if (authError || !user) {
+      console.error('🔴 [Auth API] 無法取得使用者:', authError?.message);
+      return NextResponse.json({ authenticated: false, reason: 'no_user' });
     }
 
     // 1. 檢查是否為平台總管
@@ -40,17 +46,20 @@ export async function GET(request: Request) {
     let dbRole = 'staff'; // 預設權限
     const activeClinicId = cookieStore.get('active_clinic_id')?.value;
 
-    // 2. 根據目前切換的診所，查詢該員工在那家診所的權限
+    // 2. 查詢該員工的權限
     if (activeClinicId) {
-        const { data: member } = await supabaseAdmin
+        const { data: member, error: memberError } = await supabaseAdmin
             .from('clinic_members')
             .select('role')
             .eq('user_id', user.id)
             .eq('clinic_id', activeClinicId)
             .single();
+            
+        if (memberError && memberError.code !== 'PGRST116') {
+            console.error('🔴 [Auth API] 查詢診所成員失敗:', memberError);
+        }
         if (member) dbRole = member.role;
     } else {
-        // 若無選擇診所，抓取第一家
         const { data: member } = await supabaseAdmin
             .from('clinic_members')
             .select('role')
@@ -60,20 +69,24 @@ export async function GET(request: Request) {
         if (member) dbRole = member.role;
     }
 
-    // 總管絕對擁有最高權限
     if (superAdmin) dbRole = 'owner';
 
-    // 3. 轉換為前端認識的 authLevel ('boss' | 'manager' | null)
+    // 3. 轉換權限
     let frontendAuthLevel = null;
     if (dbRole === 'owner' || dbRole === 'boss') frontendAuthLevel = 'boss';
     else if (dbRole === 'manager') frontendAuthLevel = 'manager';
+
+    console.log(`🟢 [Auth API] 登入成功 - User: ${user.email}, Role: ${dbRole}, Level: ${frontendAuthLevel}`);
 
     return NextResponse.json({
       authenticated: true,
       user: { id: user.id, email: user.email },
       authLevel: frontendAuthLevel
     });
-  } catch (error) {
-    return NextResponse.json({ authenticated: false });
+    
+  } catch (error: any) {
+    // 🔴 這裡會印出真正的致命錯誤！
+    console.error('🔴 [Auth API] 系統崩潰:', error.message || error);
+    return NextResponse.json({ authenticated: false, reason: 'fatal_error', error: error.message });
   }
 }
