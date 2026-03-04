@@ -148,28 +148,58 @@ export default function AdminPage() {
     }
   };
 
-  // 🔒 資安防護：閒置 30 分鐘自動登出
+  // 🔒 資安防護：全時段閒置偵測 (含網頁關閉後重開)
   useEffect(() => {
-    if (!authLevel) return; // 尚未登入則不執行
+    if (!authLevel) return;
+
+    const IDLE_TIME = 30 * 60 * 1000; // 30 分鐘
+    const ACTIVITY_KEY = 'last_system_activity';
+
+    // 1. 初始化檢查：一進網頁先看上次是什麼時候活動的
+    const checkOnMount = () => {
+      try {
+        const lastActivity = typeof window !== 'undefined'
+          ? window.localStorage.getItem(ACTIVITY_KEY)
+          : null;
+        if (lastActivity) {
+          const elapsed = Date.now() - parseInt(lastActivity, 10);
+          if (elapsed > IDLE_TIME) {
+            handleLogout(true); // 如果關掉網頁期間已經超時，直接登出
+            return true;
+          }
+        }
+      } catch (e) {
+        console.error('[AdminPage] Idle check error:', e);
+      }
+      return false;
+    };
+
+    if (checkOnMount()) return; // 如果已經超時，後面的監聽就不用跑了
 
     let timeoutId: NodeJS.Timeout;
-    const IDLE_TIME = 30 * 60 * 1000; // 30 分鐘 (毫秒)
 
     const resetTimer = () => {
+      try {
+        // 🟢 記錄活動時間到硬碟，關掉網頁也不會消失
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem(ACTIVITY_KEY, Date.now().toString());
+        }
+      } catch (e) {
+        console.error('[AdminPage] Idle timer localStorage error:', e);
+      }
+
       clearTimeout(timeoutId);
       timeoutId = setTimeout(() => {
-        handleLogout(true); // 觸發自動登出
+        handleLogout(true);
       }, IDLE_TIME);
     };
 
-    // 監聽各種使用者活動
+    // 監聽活動
     const events = ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'];
     events.forEach((event) => window.addEventListener(event, resetTimer));
 
-    // 初始化計時器
     resetTimer();
 
-    // 元件卸載時清除監聽器
     return () => {
       clearTimeout(timeoutId);
       events.forEach((event) => window.removeEventListener(event, resetTimer));

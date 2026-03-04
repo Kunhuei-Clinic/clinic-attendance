@@ -36,7 +36,9 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
   const [entities, setEntities] = useState<Entity[]>([]);
   const [phoneError, setPhoneError] = useState('');
   const [expandedSection, setExpandedSection] = useState<string>('basic'); // 🟢 控制區塊展開
-
+  const [showSudoModal, setShowSudoModal] = useState(false);
+  const [sudoPassword, setSudoPassword] = useState('');
+  const [isVerifying, setIsVerifying] = useState(false);
   // 讀取系統設定：職稱與組織單位
   useEffect(() => {
     if (isOpen) {
@@ -188,7 +190,13 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
     setExpandedSection(expandedSection === sec ? '' : sec);
   };
 
-  const handleSave = async () => {
+  const handleSave = async (skipSudoCheck = false) => {
+    // 🔐 安全檢查：如果是設定負責人，且還沒開啟驗證視窗
+    if (!skipSudoCheck && editData?.system_role === 'owner' && !showSudoModal) {
+      setShowSudoModal(true);
+      return;
+    }
+
     if (!editData?.name) {
       alert("請輸入姓名");
       return;
@@ -261,6 +269,28 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
     } catch (error) {
       console.error('Save staff error:', error);
       alert("儲存失敗");
+    }
+  };
+
+  const confirmSudo = async () => {
+    setIsVerifying(true);
+    try {
+      const res = await fetch('/api/auth/verify-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: sudoPassword })
+      });
+
+      if (res.ok) {
+        setShowSudoModal(false);
+        setSudoPassword('');
+        // 驗證成功後，直接呼叫原本的 handleSave，這次就不會再跳出視窗了
+        await handleSave(true);
+      } else {
+        alert('密碼驗證失敗，無法變更最高權限。');
+      }
+    } finally {
+      setIsVerifying(false);
     }
   };
 
@@ -639,7 +669,7 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
               取消
             </button>
             <button 
-              onClick={handleSave} 
+              onClick={() => handleSave()} 
               className="px-6 py-2.5 rounded-lg bg-slate-900 text-white hover:bg-black font-bold text-sm shadow-lg flex items-center gap-2"
             >
               <Save size={16}/> 儲存資料
@@ -647,6 +677,40 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
           </div>
         </div>
       </div>
+      {showSudoModal && (
+        <div className="fixed inset-0 bg-slate-900/90 z-[60] flex items-center justify-center p-4 backdrop-blur-md">
+          <div className="bg-white rounded-2xl p-8 max-w-sm w-full shadow-2xl border-4 border-amber-500">
+            <Shield className="text-amber-500 mb-4 mx-auto" size={48} />
+            <h3 className="text-xl font-bold text-center mb-2">最高權限變更確認</h3>
+            <p className="text-sm text-slate-500 text-center mb-6">
+              您正在授權「負責人」權限，此操作極為敏感，請輸入「您的登入密碼」以確認身分。
+            </p>
+            <input
+              type="password"
+              value={sudoPassword}
+              onChange={e => setSudoPassword(e.target.value)}
+              className="w-full border-2 border-slate-200 p-3 rounded-xl mb-4 text-center text-lg"
+              placeholder="請輸入您的密碼"
+              autoFocus
+            />
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowSudoModal(false)}
+                className="flex-1 py-3 font-bold text-slate-400"
+              >
+                取消
+              </button>
+              <button
+                onClick={confirmSudo}
+                disabled={isVerifying}
+                className="flex-1 bg-amber-500 text-white py-3 rounded-xl font-bold shadow-lg disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {isVerifying ? '驗證中...' : '確認授權'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
