@@ -117,6 +117,7 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
               ...initialData,
               role: initialData.role || defaultRole,
               entity: initialData.entity || defaultEntity,
+              system_role: initialData.system_role || 'staff', // 🟢 系統權限預設
               password: '' // 🟢 編輯模式：密碼預設空白
             });
           } else {
@@ -134,6 +135,7 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
               insurance_labor: 0,
               insurance_health: 0,
               phone: '',
+              system_role: 'staff', // 🟢 新增模式預設為一般員工
               password: '0000', // 🟢 新增模式：預設密碼為 0000
               address: '',
               emergency_contact: '',
@@ -147,7 +149,11 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
           setJobTitles(DEFAULT_JOB_TITLES);
           setEntities(FALLBACK_ENTITIES);
           if (initialData) {
-            setEditData({ ...initialData, password: '' }); // 🟢 編輯模式：密碼預設空白
+            setEditData({
+              ...initialData,
+              system_role: initialData.system_role || 'staff',
+              password: '' // 🟢 編輯模式：密碼預設空白
+            });
           } else {
             setEditData({
               name: '',
@@ -160,6 +166,7 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
               insurance_labor: 0,
               insurance_health: 0,
               phone: '',
+              system_role: 'staff', // 🟢 新增模式預設為一般員工
               password: '0000', // 🟢 新增模式：預設密碼為 0000
               address: '',
               emergency_contact: '',
@@ -201,6 +208,7 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
       name: editData.name,
       role: editData.role,
       entity: editData.entity || 'clinic',
+      system_role: editData.system_role || 'staff', // 🟢 系統權限
       is_active: editData.is_active,
       start_date: editData.start_date || null,
       salary_mode: editData.salary_mode || 'hourly',
@@ -404,6 +412,51 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
                   <p className="font-bold mb-1">💡 提示</p>
                   <p>員工可透過 LINE 綁定自動登入。若需手動登入，請使用手機號碼與此密碼。</p>
                 </div>
+
+                {/* 🟢 系統權限設定 */}
+                <div className="mb-4">
+                  <label className="block text-xs font-bold text-slate-500 mb-2 flex items-center gap-1">
+                    <Shield size={12}/> 後台系統權限
+                  </label>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setEditData({ ...editData, system_role: 'staff' })}
+                      className={`flex-1 py-2 rounded-lg border text-sm font-bold transition flex flex-col items-center gap-1 ${
+                        editData.system_role === 'staff'
+                          ? 'bg-slate-800 text-white border-slate-800 shadow-md'
+                          : 'bg-white text-slate-500 border-slate-300 hover:bg-slate-50'
+                      }`}
+                    >
+                      <span>一般員工</span>
+                      <span className="text-[10px] font-normal opacity-80">僅看班表打卡</span>
+                    </button>
+                    <button
+                      onClick={() => setEditData({ ...editData, system_role: 'manager' })}
+                      className={`flex-1 py-2 rounded-lg border text-sm font-bold transition flex flex-col items-center gap-1 ${
+                        editData.system_role === 'manager'
+                          ? 'bg-purple-600 text-white border-purple-600 shadow-md'
+                          : 'bg-white text-slate-500 border-slate-300 hover:bg-slate-50'
+                      }`}
+                    >
+                      <span>排班主管</span>
+                      <span className="text-[10px] font-normal opacity-80">可管理排班表</span>
+                    </button>
+
+                    {/* 🟢 新增：負責人 (Owner) 按鈕 */}
+                    <button
+                      onClick={() => setEditData({ ...editData, system_role: 'owner' })}
+                      className={`flex-1 py-2 rounded-lg border text-sm font-bold transition flex flex-col items-center gap-1 ${
+                        editData.system_role === 'owner'
+                          ? 'bg-amber-500 text-white border-amber-500 shadow-md'
+                          : 'bg-white text-slate-500 border-slate-300 hover:bg-slate-50'
+                      }`}
+                    >
+                      <span>負責人</span>
+                      <span className="text-[10px] font-normal opacity-80">最高權限(含薪資)</span>
+                    </button>
+                  </div>
+                </div>
+
                 <div>
                   <label className="block text-xs font-bold text-slate-500 mb-1">登入密碼</label>
                   <input 

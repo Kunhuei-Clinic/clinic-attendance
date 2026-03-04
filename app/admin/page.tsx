@@ -123,9 +123,9 @@ export default function AdminPage() {
     fetchClinicName();
   }, [authLevel]);
 
-  // 登出
-  const handleLogout = async () => {
-    if (!confirm('確定要登出嗎？')) return;
+  // 登出 (支援自動登出)
+  const handleLogout = async (isAutoLogout = false) => {
+    if (!isAutoLogout && !confirm('確定要登出嗎？')) return;
 
     try {
       const { error } = await supabase.auth.signOut();
@@ -136,6 +136,10 @@ export default function AdminPage() {
         return;
       }
 
+      if (isAutoLogout) {
+        alert('為保護系統安全，您已閒置超過 30 分鐘，系統已自動為您登出。');
+      }
+
       router.refresh();
       router.push('/login');
     } catch (error) {
@@ -143,6 +147,34 @@ export default function AdminPage() {
       alert('登出失敗');
     }
   };
+
+  // 🔒 資安防護：閒置 30 分鐘自動登出
+  useEffect(() => {
+    if (!authLevel) return; // 尚未登入則不執行
+
+    let timeoutId: NodeJS.Timeout;
+    const IDLE_TIME = 30 * 60 * 1000; // 30 分鐘 (毫秒)
+
+    const resetTimer = () => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        handleLogout(true); // 觸發自動登出
+      }, IDLE_TIME);
+    };
+
+    // 監聽各種使用者活動
+    const events = ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'];
+    events.forEach((event) => window.addEventListener(event, resetTimer));
+
+    // 初始化計時器
+    resetTimer();
+
+    // 元件卸載時清除監聽器
+    return () => {
+      clearTimeout(timeoutId);
+      events.forEach((event) => window.removeEventListener(event, resetTimer));
+    };
+  }, [authLevel]);
 
   if (loading) {
     return (
@@ -189,7 +221,7 @@ export default function AdminPage() {
               )}
 
               <button
-                onClick={handleLogout}
+                onClick={() => handleLogout()}
                 className="px-4 py-2 bg-red-50 text-red-600 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-red-100 transition"
                 title="登出"
               >
