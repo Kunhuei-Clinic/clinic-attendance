@@ -6,21 +6,41 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin';
 export async function GET(request: Request) {
   try {
     const cookieStore = cookies();
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          get(name: string) {
-            return cookieStore.get(name)?.value;
-          },
+
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    console.log('[auth/check] SUPABASE_URL defined:', !!supabaseUrl);
+    console.log('[auth/check] SUPABASE_ANON_KEY defined:', !!supabaseAnonKey);
+
+    if (!supabaseUrl || !supabaseAnonKey) {
+      console.error('[auth/check] Supabase env missing');
+      return NextResponse.json(
+        { authenticated: false, error: 'Supabase env not configured' },
+        { status: 500 }
+      );
+    }
+
+    const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value;
         },
-      }
-    );
+        // 確保 Session 能正確同步
+        set(name: string, value: string, options: any) {
+          cookieStore.set({ name, value, ...options });
+        },
+        remove(name: string, options: any) {
+          cookieStore.set({ name, value: '', ...options });
+        },
+      },
+    });
 
     const {
       data: { user },
     } = await supabase.auth.getUser();
+
+    console.log('[auth/check] getUser result:', user ? { id: user.id, email: user.email } : null);
+
     if (!user) {
       return NextResponse.json({ authenticated: false });
     }
@@ -69,6 +89,7 @@ export async function GET(request: Request) {
       authLevel: frontendAuthLevel,
     });
   } catch (error) {
+    console.error('[auth/check] Unexpected error:', error);
     return NextResponse.json({ authenticated: false });
   }
 }
