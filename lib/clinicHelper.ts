@@ -15,6 +15,13 @@ export async function getClinicIdFromRequest(request: NextRequest): Promise<stri
           get(name: string) {
             return cookieStore.get(name)?.value;
           },
+          // 🟢 必須補上這兩段，SSR 登入才不會失效
+          set(name: string, value: string, options: any) {
+            cookieStore.set({ name, value, ...options });
+          },
+          remove(name: string, options: any) {
+            cookieStore.set({ name, value: '', ...options });
+          },
         },
       }
     );
