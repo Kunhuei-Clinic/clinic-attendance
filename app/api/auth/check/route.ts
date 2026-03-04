@@ -3,11 +3,14 @@ import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
+// 🟢 終極解法：強制 Next.js 在每次請求時都重新執行此 API，絕對不快取！
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: Request) {
+  // 🟢 將 cookies() 移到 try 外面，絕對不攔截 Next.js 的系統拋錯
+  const cookieStore = cookies();
+
   try {
-    const cookieStore = cookies();
-    
-    // 🟢 使用最新 SSR 標準寫法，避免 Next.js 在 GET 請求中修改 Cookie 而報錯
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -29,10 +32,9 @@ export async function GET(request: Request) {
       }
     );
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    const { data: { user } } = await supabase.auth.getUser();
     
-    if (authError || !user) {
-      console.error('🔴 [Auth API] 無法取得使用者:', authError?.message);
+    if (!user) {
       return NextResponse.json({ authenticated: false, reason: 'no_user' });
     }
 
@@ -43,21 +45,17 @@ export async function GET(request: Request) {
       .eq('user_id', user.id)
       .single();
 
-    let dbRole = 'staff'; // 預設權限
+    let dbRole = 'staff';
     const activeClinicId = cookieStore.get('active_clinic_id')?.value;
 
     // 2. 查詢該員工的權限
     if (activeClinicId) {
-        const { data: member, error: memberError } = await supabaseAdmin
+        const { data: member } = await supabaseAdmin
             .from('clinic_members')
             .select('role')
             .eq('user_id', user.id)
             .eq('clinic_id', activeClinicId)
             .single();
-            
-        if (memberError && memberError.code !== 'PGRST116') {
-            console.error('🔴 [Auth API] 查詢診所成員失敗:', memberError);
-        }
         if (member) dbRole = member.role;
     } else {
         const { data: member } = await supabaseAdmin
@@ -76,8 +74,6 @@ export async function GET(request: Request) {
     if (dbRole === 'owner' || dbRole === 'boss') frontendAuthLevel = 'boss';
     else if (dbRole === 'manager') frontendAuthLevel = 'manager';
 
-    console.log(`🟢 [Auth API] 登入成功 - User: ${user.email}, Role: ${dbRole}, Level: ${frontendAuthLevel}`);
-
     return NextResponse.json({
       authenticated: true,
       user: { id: user.id, email: user.email },
@@ -85,8 +81,7 @@ export async function GET(request: Request) {
     });
     
   } catch (error: any) {
-    // 🔴 這裡會印出真正的致命錯誤！
-    console.error('🔴 [Auth API] 系統崩潰:', error.message || error);
-    return NextResponse.json({ authenticated: false, reason: 'fatal_error', error: error.message });
+    console.error('API Error:', error);
+    return NextResponse.json({ authenticated: false, reason: 'fatal_error' });
   }
 }

@@ -4,8 +4,10 @@ import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 
 export async function getClinicIdFromRequest(request: NextRequest): Promise<string | null> {
+  // 🟢 移到 try 外面
+  const cookieStore = cookies();
+
   try {
-    const cookieStore = cookies();
     // 🟢 使用最新 SSR 標準讀取 User
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
