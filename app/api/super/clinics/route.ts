@@ -88,11 +88,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '診所名稱必填' }, { status: 400 });
     }
 
+    // 🟢 自動產生一個唯一代碼 (例如 C-隨機碼)
+    const uniqueCode = 'C' + Date.now().toString(36).toUpperCase();
+
     // 建立新診所
     const { data, error } = await supabaseAdmin
       .from('clinics')
       .insert({
         name: body.name,
+        code: uniqueCode, // 👈 補上這個必填欄位滿足資料庫約束
         settings: {
           overtime_threshold: 9,
           overtime_approval_required: true,
