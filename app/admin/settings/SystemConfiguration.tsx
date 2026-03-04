@@ -105,8 +105,6 @@ export default function SystemConfiguration() {
   const [specialClinics, setSpecialClinics] = useState<string[]>([]);
   const [businessHours, setBusinessHours] = useState<BusinessHoursConfig>(DEFAULT_BUSINESS_HOURS);
   const [leaveCalculationSystem, setLeaveCalculationSystem] = useState<'anniversary' | 'calendar'>('anniversary');
-  const [loadingSystem, setLoadingSystem] = useState(false);
-  const [systemMessage, setSystemMessage] = useState('');
   const [overtimeThreshold, setOvertimeThreshold] = useState(9);
   const [overtimeApprovalRequired, setOvertimeApprovalRequired] = useState(true);
   const [clinicData, setClinicData] = useState<any | null>(null);
@@ -261,68 +259,35 @@ export default function SystemConfiguration() {
       console.error('Fetch system settings error:', error);
     }
   };
-
-  const handleSaveSystem = async () => {
-    setLoadingSystem(true);
+  // 🟢 儲存至 system_settings (字典資料)
+  const handleSaveSystemSetting = async (key: string, value: string) => {
     try {
-      // 系統設定 (移除 business_hours，改由 clinic JSONB 管理)
-      const updates = [
-        { key: 'org_entities', value: JSON.stringify(entities) },
-        { key: 'job_titles', value: JSON.stringify(jobTitles.length > 0 ? jobTitles : DEFAULT_JOB_TITLES) },
-        { key: 'special_clinic_types', value: JSON.stringify(specialClinics) },
-        { key: 'leave_calculation_system', value: leaveCalculationSystem }
-      ];
       const response = await fetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updates)
+        body: JSON.stringify([{ key, value }])
       });
       const result = await response.json();
-      
-      // 儲存診所設定（加班設定 + 班表 business_hours）
-      const clinicResponse = await fetch('/api/settings', {
+      if (result.success) alert('✅ 儲存成功！');
+      else alert('❌ 儲存失敗: ' + result.message);
+    } catch (error) {
+      alert('❌ 發生錯誤');
+    }
+  };
+
+  // 🟢 儲存至 clinics.settings (核心設定)
+  const handleSaveClinicSettings = async (settingsObj: any) => {
+    try {
+      const response = await fetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type: 'clinic',
-          settings: {
-            overtime_threshold: overtimeThreshold,
-            overtime_approval_required: overtimeApprovalRequired,
-            business_hours: businessHours
-          }
-        })
+        body: JSON.stringify({ type: 'clinic', settings: settingsObj })
       });
-      const clinicResult = await clinicResponse.json();
-
-      // 儲存診所 JSONB 設定（目前僅保留其他 settings，business_hours 由 /api/settings 管理）
-      let clinicsResult: any = { success: true };
-      if (clinicData) {
-        const payload = {
-          ...clinicData,
-          settings: {
-            ...(clinicData.settings || {})
-          }
-        };
-
-        const clinicsResponse = await fetch('/api/clinics', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-        clinicsResult = await clinicsResponse.json();
-      }
-      
-      if (result.success && clinicResult.success && clinicsResult.success !== false) {
-        setSystemMessage('✅ 設定已更新，排班表將套用新時間');
-        setTimeout(() => setSystemMessage(''), 3000);
-      } else {
-        setSystemMessage('❌ 儲存失敗: ' + (result.message || clinicResult.message || clinicsResult.message));
-      }
+      const result = await response.json();
+      if (result.success) alert('✅ 儲存成功！');
+      else alert('❌ 儲存失敗: ' + result.message);
     } catch (error) {
-      console.error('Save system settings error:', error);
-      setSystemMessage('❌ 儲存失敗');
-    } finally {
-      setLoadingSystem(false);
+      alert('❌ 發生錯誤');
     }
   };
 
