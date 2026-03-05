@@ -18,6 +18,7 @@ type RosterTableProps = {
     todayStr: string;
     weekDays: string[];
     rosterMap: Record<string, RosterData>;
+    holidays: string[];
     complianceErrors: Record<string, string[]>;
     shiftsConfig: ShiftConfig[];
     calculateStats: (staffId: string) => { totalDays: number; totalHours: number };
@@ -34,6 +35,7 @@ export default function RosterTable({
     todayStr,
     weekDays,
     rosterMap,
+    holidays,
     complianceErrors,
     shiftsConfig,
     calculateStats,
@@ -58,21 +60,31 @@ export default function RosterTable({
                                 員工
                             </th>
                             {days.map(d => {
+                                const isHoliday = holidays.includes(d.dateStr); // 🟢 判斷是否為全域國定假日
                                 const isToday = d.dateStr === todayStr;
                                 const isWeekend = d.dayOfWeek === 0 || d.dayOfWeek === 6;
+
+                                // 🟢 決定標題列的顏色
+                                let headerClasses = 'text-slate-600';
+                                if (isHoliday) {
+                                    headerClasses = 'bg-pink-100 text-pink-700 font-black border-pink-200';
+                                } else if (isToday) {
+                                    headerClasses = 'bg-yellow-100 text-yellow-800 font-bold';
+                                } else if (isWeekend) {
+                                    headerClasses = 'text-red-500 font-bold';
+                                }
+
                                 return (
                                     <th
                                         key={d.dateStr}
                                         onClick={() => toggleGlobalHoliday(d.dateStr)}
-                                        // 🟢 每日欄位恢復：寬度鎖定 42px
-                                        className={`border p-1 text-center w-[42px] cursor-default select-none ${
-                                            isToday ? 'bg-yellow-100 text-yellow-800' : isWeekend ? 'text-red-500' : ''
-                                        }`}
+                                        className={`border p-1 text-center w-[42px] cursor-pointer select-none hover:bg-slate-100 transition ${headerClasses}`}
+                                        title={isHoliday ? '點擊取消國定假日' : '點擊設為國定假日'}
                                     >
-                                        <div className="text-[10px] leading-tight opacity-60">
+                                        <div className="text-[10px] leading-tight opacity-80">
                                             {weekDays[d.dayOfWeek]}
                                         </div>
-                                        <div className="text-xs font-bold">
+                                        <div className="text-xs">
                                             {d.dateStr.slice(8)}
                                         </div>
                                     </th>

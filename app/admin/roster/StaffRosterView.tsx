@@ -661,6 +661,7 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
                         todayStr={todayStr}
                         weekDays={weekDays}
                         rosterMap={rosterMap}
+                        holidays={holidays}
                         complianceErrors={complianceErrors}
                         shiftsConfig={shiftsConfig}
                         calculateStats={calculateStats}

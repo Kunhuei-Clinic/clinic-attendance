@@ -144,11 +144,16 @@ export const calculateStaffSalary = (
     const isHoliday = holidaySet.has(dateStr);
 
     let dayType = 'normal';
+    let shiftNote = ''; // 🟢 記錄調移軌跡
+
     if (rosterInfo && rosterInfo.day_type) {
       if (rosterInfo.day_type === 'shifted') {
-        dayType = 'normal';
+        dayType = 'normal'; // 國假調平日，以平日計薪 (不給加倍)
+        if (isHoliday) shiftNote = '國定假日調移作平日';
       } else if (rosterInfo.day_type !== 'normal') {
         dayType = rosterInfo.day_type;
+        // 如果全域不是國定假日，但個人被蓋了「國」的印章
+        if (!isHoliday && dayType === 'holiday') shiftNote = '調移之國定假日';
       } else {
         dayType = isHoliday ? 'holiday' : 'normal';
       }
@@ -282,7 +287,7 @@ export const calculateStaffSalary = (
       normalHours: 0,
       ot134: 0,
       ot167: 0,
-      note: note.trim(),
+      note: [shiftNote, note.trim()].filter(Boolean).join(' | '),
     };
 
     if (dailyHours > 0) {

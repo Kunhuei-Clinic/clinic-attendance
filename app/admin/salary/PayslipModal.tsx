@@ -268,7 +268,13 @@ function PrintContent({ report, yearMonth, clinicName }: any) {
                 <td className="p-1 text-center text-slate-400">{rec.normalHours > 0 ? rec.normalHours : '-'}</td>
                 <td className="p-1 text-center font-mono text-orange-600 print:text-black">{rec.ot134 > 0 ? rec.ot134.toFixed(1) : '-'}</td>
                 <td className="p-1 text-center font-mono text-orange-600 print:text-black">{rec.ot167 > 0 ? rec.ot167.toFixed(1) : '-'}</td>
-                <td className="p-1 text-slate-400 text-[10px] truncate max-w-[100px]">{rec.note}</td>
+                <td className="p-1 text-[10px] truncate max-w-[120px]">
+                  {rec.note && String(rec.note).includes('調移') ? (
+                    <span className="text-indigo-600 font-bold">{rec.note}</span>
+                  ) : (
+                    <span className="text-slate-400">{rec.note}</span>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>
