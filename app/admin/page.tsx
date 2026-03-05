@@ -58,7 +58,7 @@ export default function AdminPage() {
   // 診所名稱
   const [clinicName, setClinicName] = useState('診所');
 
-  // 檢查認證狀態（含 activeClinicId / clinicName，並補寫 Cookie）
+  // 檢查認證狀態（後端已於 Response Header 設定 active_clinic_id Cookie）
   useEffect(() => {
     const checkAuth = async () => {
       try {
@@ -68,15 +68,7 @@ export default function AdminPage() {
           if (data.authenticated && data.authLevel) {
             setAuthLevel(data.authLevel);
             setActiveTab(data.authLevel === 'boss' ? 'tasks' : 'staff_roster');
-            // 優先從 check 回傳的診所名稱設定，避免二次 fetch 延遲
             if (data.clinicName) setClinicName(data.clinicName);
-            // 若 Cookie 沒有 active_clinic_id，用手動補上，確保後續請求都帶上
-            if (data.activeClinicId && typeof document !== 'undefined') {
-              const hasCookie = document.cookie.includes('active_clinic_id=');
-              if (!hasCookie) {
-                document.cookie = `active_clinic_id=${data.activeClinicId}; path=/; max-age=2592000`; // 30 天
-              }
-            }
           } else {
             router.push('/login');
           }
@@ -208,30 +200,28 @@ export default function AdminPage() {
       <div className="max-w-[1600px] mx-auto">
         {/* 右側主要內容區 */}
         <div className="flex-1">
-          {/* Header 區塊：左側標題+切換器 / 右側按鈕；下方獨立一列 Tabs */}
+          {/* Header 區塊：單列橫向佈局 */}
           <div className="mb-6 flex flex-col gap-4">
-            <div className="flex justify-between items-start">
-              {/* 左側：標題與切換器 */}
-              <div className="space-y-2">
-                <h1 className="text-2xl font-black text-slate-900 flex items-center gap-2 tracking-tight">
-                  {clinicName}管理系統
-                  {authLevel === 'manager' && (
-                    <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full font-bold">
-                      排班模式
-                    </span>
-                  )}
-                </h1>
-                <div className="w-64">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+              {/* 左側：系統標題 */}
+              <h1 className="text-2xl font-black text-slate-900 flex items-center gap-2 tracking-tight">
+                {clinicName}管理系統
+                {authLevel === 'manager' && (
+                  <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full font-bold">
+                    排班模式
+                  </span>
+                )}
+              </h1>
+
+              {/* 右側：診所切換器 + 功能按鈕 (同一排) */}
+              <div className="flex items-center gap-2 w-full md:w-auto">
+                <div className="flex-1 md:w-56">
                   <ClinicSwitcher />
                 </div>
-              </div>
-
-              {/* 右側：功能按鈕 */}
-              <div className="flex items-center gap-2">
                 {authLevel === 'boss' && (
                   <button
                     onClick={() => setActiveTab('tasks')}
-                    className={`p-2 rounded-lg transition border ${
+                    className={`p-2 rounded-lg transition border flex-shrink-0 ${
                       activeTab === 'tasks'
                         ? 'bg-teal-100 border-teal-300 text-teal-700'
                         : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'
@@ -243,16 +233,16 @@ export default function AdminPage() {
                 )}
                 <button
                   onClick={() => handleLogout()}
-                  className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-lg text-sm font-bold hover:bg-red-100 transition"
+                  className="flex items-center justify-center gap-2 px-3 py-2 bg-red-50 text-red-600 rounded-lg text-sm font-bold hover:bg-red-100 transition flex-shrink-0"
                   title="登出"
                 >
-                  <LogOut size={16} /> <span className="hidden md:inline">登出系統</span>
+                  <LogOut size={16} /> <span className="hidden lg:inline">登出系統</span>
                 </button>
               </div>
             </div>
 
-            {/* 導航 Tabs：獨立一列，可橫向捲動 */}
-            <div className="flex bg-white p-1 rounded-xl border shadow-sm overflow-x-auto">
+            {/* 導航 Tabs：獨立一列 */}
+            <div className="flex bg-white p-1 rounded-xl border shadow-sm overflow-x-auto no-scrollbar">
               {authLevel === 'boss' && (
                 <>
                   <button

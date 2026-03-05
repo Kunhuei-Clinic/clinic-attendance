@@ -88,13 +88,26 @@ export async function GET(request: Request) {
       if (clinic?.name) clinicName = clinic.name;
     }
 
-    return NextResponse.json({
+    const responseData = {
       authenticated: true,
       user: { id: user.id, email: user.email },
       authLevel: frontendAuthLevel,
       activeClinicId: activeClinicId ?? undefined,
       clinicName: clinicName ?? undefined
-    });
+    };
+
+    const response = NextResponse.json(responseData);
+
+    if (activeClinicId) {
+      response.cookies.set('active_clinic_id', activeClinicId, {
+        path: '/',
+        maxAge: 30 * 24 * 60 * 60,
+        httpOnly: false,
+        sameSite: 'lax'
+      });
+    }
+
+    return response;
     
   } catch (error: any) {
     console.error('API Error:', error);
