@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Settings, Save, Plus, User, Shield, DollarSign, ChevronDown, ChevronRight, Briefcase } from 'lucide-react';
 
 interface StaffEditModalProps {
@@ -36,6 +36,17 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
   const [entities, setEntities] = useState<Entity[]>([]);
   const [phoneError, setPhoneError] = useState('');
   const [expandedSection, setExpandedSection] = useState<string>('basic'); // 🟢 控制區塊展開
+
+  // 登入權限相關
+  const [enableLogin, setEnableLogin] = useState(false);
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('0000'); // 預設密碼
+
+  // Sudo 二次驗證相關
+  const [showSudoModal, setShowSudoModal] = useState(false);
+  const [sudoPassword, setSudoPassword] = useState('');
+  const [isVerifying, setIsVerifying] = useState(false);
+  const sudoVerifiedRef = useRef(false); // 驗證通過後接續儲存時跳過再次彈窗
 
   // 讀取系統設定：職稱與組織單位
   useEffect(() => {
@@ -108,7 +119,7 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
           setJobTitles(loadedJobTitles);
           setEntities(loadedEntities);
 
-          // 🟢 初始化 editData（密碼邏輯）
+          // 🟢 初始化 editData（密碼邏輯）與登入權限
           if (initialData) {
             // 編輯模式：密碼預設空白，避免誤改
             const defaultRole = loadedJobTitles[0]?.name || '護理師';
@@ -117,8 +128,18 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
               ...initialData,
               role: initialData.role || defaultRole,
               entity: initialData.entity || defaultEntity,
-              password: '' // 🟢 編輯模式：密碼預設空白
+              password: '', // 🟢 編輯模式：密碼預設空白
+              system_role: initialData.system_role || 'staff'
             });
+            // 登入權限：已有 auth_user_id 表示已開通
+            if (initialData.auth_user_id) {
+              setEnableLogin(true);
+              setLoginEmail(initialData.email || initialData.login_email || '');
+            } else {
+              setEnableLogin(false);
+              setLoginEmail(initialData.email || '');
+            }
+            setLoginPassword('0000');
           } else {
             // 新增模式：給予預設值
             const defaultRole = loadedJobTitles[0]?.name || '護理師';
@@ -138,8 +159,12 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
               address: '',
               emergency_contact: '',
               bank_account: '',
-              id_number: ''
+              id_number: '',
+              system_role: 'staff'
             });
+            setEnableLogin(false);
+            setLoginEmail('');
+            setLoginPassword('0000');
           }
           setExpandedSection('basic'); // 每次打開重置為展開基本資料
         } catch (error) {
@@ -147,7 +172,15 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
           setJobTitles(DEFAULT_JOB_TITLES);
           setEntities(FALLBACK_ENTITIES);
           if (initialData) {
-            setEditData({ ...initialData, password: '' }); // 🟢 編輯模式：密碼預設空白
+            setEditData({ ...initialData, password: '', system_role: initialData.system_role || 'staff' });
+            if (initialData.auth_user_id) {
+              setEnableLogin(true);
+              setLoginEmail(initialData.email || initialData.login_email || '');
+            } else {
+              setEnableLogin(false);
+              setLoginEmail(initialData.email || '');
+            }
+            setLoginPassword('0000');
           } else {
             setEditData({
               name: '',
@@ -164,8 +197,12 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
               address: '',
               emergency_contact: '',
               bank_account: '',
-              id_number: ''
+              id_number: '',
+              system_role: 'staff'
             });
+            setEnableLogin(false);
+            setLoginEmail('');
+            setLoginPassword('0000');
           }
           setExpandedSection('basic');
         }
@@ -181,6 +218,27 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
     setExpandedSection(expandedSection === sec ? '' : sec);
   };
 
+  const confirmSudo = async () => {
+    setIsVerifying(true);
+    try {
+      const res = await fetch('/api/auth/verify-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: sudoPassword })
+      });
+      if (res.ok) {
+        setShowSudoModal(false);
+        setSudoPassword('');
+        sudoVerifiedRef.current = true;
+        setTimeout(() => handleSave(), 100); // 驗證成功後自動接續儲存
+      } else {
+        alert('密碼驗證失敗，權限開通遭拒。');
+      }
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
   const handleSave = async () => {
     if (!editData?.name) {
       alert("請輸入姓名");
@@ -190,13 +248,22 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
     // 🟢 驗證手機號碼（必填）
     if (!editData.phone || editData.phone.trim() === '') {
       setPhoneError('手機號碼為綁定帳號，務必填寫');
-      // 自動展開基本資料區塊
       setExpandedSection('basic');
       return;
-    } else {
-      setPhoneError('');
     }
-    
+    setPhoneError('');
+
+    // 🔒 安全攔截：若要「新開通權限」或「設定為負責人」，須經二次驗證
+    const isGrantingNewLogin = enableLogin && !initialData?.auth_user_id;
+    const isGrantingOwner = editData.system_role === 'owner';
+
+    if ((isGrantingNewLogin || isGrantingOwner) && !sudoVerifiedRef.current) {
+      setShowSudoModal(true);
+      return;
+    }
+    // 接續儲存時清除 ref，避免下次儲存誤跳過
+    sudoVerifiedRef.current = false;
+
     const payload: any = {
       name: editData.name,
       role: editData.role,
@@ -211,18 +278,19 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
       address: editData.address || null,
       emergency_contact: editData.emergency_contact || null,
       bank_account: editData.bank_account || null,
-      id_number: editData.id_number || null
+      id_number: editData.id_number || null,
+      enable_login: enableLogin,
+      login_email: loginEmail,
+      login_password: loginPassword,
+      system_role: editData.system_role || 'staff'
     };
 
     // 🟢 處理密碼欄位
     if (editData.id) {
-      // 編輯模式：只有當密碼欄位有值時才更新
       if (editData.password && editData.password.trim() !== '') {
         payload.password = editData.password.trim();
       }
-      // 若密碼為空，不傳送 password 欄位（保持原密碼）
     } else {
-      // 新增模式：必須有密碼（預設為 0000）
       payload.password = editData.password?.trim() || '0000';
     }
 
@@ -400,15 +468,96 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
             </button>
             {expandedSection === 'security' && (
               <div className="p-4 bg-white space-y-4 animate-fade-in">
+                {/* 開通系統登入權限 */}
+                <div className="mb-6 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                  <label className="flex items-center gap-3 cursor-pointer mb-4">
+                    <input
+                      type="checkbox"
+                      checked={enableLogin}
+                      onChange={(e) => setEnableLogin(e.target.checked)}
+                      className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500"
+                    />
+                    <span className="font-bold text-slate-700">開通系統登入權限</span>
+                  </label>
+
+                  {enableLogin && (
+                    <div className="space-y-4 pl-8 border-l-2 border-blue-200 ml-2 animate-fade-in">
+                      {!initialData?.auth_user_id && (
+                        <>
+                          <div>
+                            <label className="block text-xs font-bold text-slate-500 mb-1">登入 Email 帳號</label>
+                            <input
+                              type="email"
+                              value={loginEmail}
+                              onChange={e => setLoginEmail(e.target.value)}
+                              className="w-full border p-2 rounded-lg bg-white"
+                              placeholder="例如：staff@clinic.com"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-bold text-slate-500 mb-1">預設登入密碼</label>
+                            <input
+                              type="text"
+                              value={loginPassword}
+                              onChange={e => setLoginPassword(e.target.value)}
+                              className="w-full border p-2 rounded-lg bg-white"
+                            />
+                            <p className="text-xs text-slate-400 mt-1">員工首次登入後可自行修改密碼</p>
+                          </div>
+                        </>
+                      )}
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 mb-2">系統權限</label>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setEditData({ ...editData, system_role: 'staff' })}
+                            className={`px-3 py-2 rounded-lg border text-sm font-bold transition ${
+                              (editData.system_role || 'staff') === 'staff'
+                                ? 'bg-blue-50 border-blue-500 text-blue-700'
+                                : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-50'
+                            }`}
+                          >
+                            一般員工
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditData({ ...editData, system_role: 'manager' })}
+                            className={`px-3 py-2 rounded-lg border text-sm font-bold transition ${
+                              editData.system_role === 'manager'
+                                ? 'bg-blue-50 border-blue-500 text-blue-700'
+                                : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-50'
+                            }`}
+                          >
+                            排班主管
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditData({ ...editData, system_role: 'owner' })}
+                            className={`px-3 py-2 rounded-lg border text-sm font-bold transition ${
+                              editData.system_role === 'owner'
+                                ? 'bg-amber-50 border-amber-500 text-amber-700'
+                                : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-50'
+                            }`}
+                          >
+                            負責人
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-200 text-xs text-yellow-700">
                   <p className="font-bold mb-1">💡 提示</p>
                   <p>員工可透過 LINE 綁定自動登入。若需手動登入，請使用手機號碼與此密碼。</p>
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-500 mb-1">登入密碼</label>
-                  <input 
-                    type="text" 
-                    value={editData.password || ''} 
+                  <input
+                    type="text"
+                    value={editData.password || ''}
                     onChange={e => setEditData({...editData, password: e.target.value})}
                     className="w-full border p-2 rounded font-mono tracking-widest bg-white"
                     placeholder={initialData ? "若不修改請留空 (保持原密碼)" : "預設 0000"}
@@ -594,6 +743,33 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
           </div>
         </div>
       </div>
+
+      {/* Sudo 二次驗證視窗 */}
+      {showSudoModal && (
+        <div className="fixed inset-0 bg-slate-900/90 z-[70] flex items-center justify-center p-4 backdrop-blur-md">
+          <div className="bg-white rounded-2xl p-8 max-w-sm w-full shadow-2xl border-4 border-red-500 animate-fade-in">
+            <h3 className="text-xl font-bold text-center mb-2 text-red-600">⚠️ 系統權限開通確認</h3>
+            <p className="text-sm text-slate-600 text-center mb-6 bg-red-50 p-3 rounded-lg border border-red-100">
+              此動作將會建立登入帳號，並正式開通對方登入本系統後台的權限。<br/><br/>
+              為保護診所資訊安全，請輸入<strong className="text-red-600">「您本人的登入密碼」</strong>以驗證身分：
+            </p>
+            <input
+              type="password"
+              value={sudoPassword}
+              onChange={e => setSudoPassword(e.target.value)}
+              className="w-full border-2 border-slate-300 p-3 rounded-xl mb-4 text-center text-lg focus:border-red-500 outline-none"
+              placeholder="請輸入您的密碼"
+              autoFocus
+            />
+            <div className="flex gap-3">
+              <button onClick={() => setShowSudoModal(false)} className="flex-1 py-3 font-bold text-slate-500 bg-slate-100 rounded-xl hover:bg-slate-200">取消</button>
+              <button onClick={confirmSudo} disabled={isVerifying} className="flex-1 bg-red-600 text-white py-3 rounded-xl font-bold shadow-lg hover:bg-red-700 disabled:opacity-50">
+                {isVerifying ? '驗證中...' : '確認開通'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

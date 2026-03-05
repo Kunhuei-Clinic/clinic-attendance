@@ -96,19 +96,54 @@ export async function POST(request: NextRequest) {
     }
 
     // 🟢 多租戶：移除前端可能傳入的 clinic_id，由後端自動填入
-    const { clinic_id, ...staffData } = body;
+    const { clinic_id, enable_login, login_email, login_password, system_role, ...staffData } = body;
 
     // 🟢 處理密碼欄位：若前端沒傳 password，後端自動補上預設值 '0000'
     const password = staffData.password?.trim() || '0000';
 
-    // 🟢 多租戶：將 clinic_id 合併到 payload 中（不讓前端傳入）
-    // 同時確保 entity 欄位有預設值，並包含 phone 和 password
+    let finalAuthUserId: string | null = null;
+
+    // 🟢 1. 如果勾選「開通登入」，自動在 Supabase Auth 建立帳號
+    if (enable_login && login_email && login_password) {
+      const { data: authData, error: authErr } = await supabaseAdmin.auth.admin.createUser({
+        email: login_email.trim(),
+        password: String(login_password),
+        email_confirm: true
+      });
+
+      if (authErr) {
+        return NextResponse.json(
+          { success: false, message: '建立登入帳號失敗：' + authErr.message },
+          { status: 400 }
+        );
+      }
+      finalAuthUserId = authData.user.id;
+
+      // 🟢 2. 將新建立的帳號寫入多租戶權限表 (clinic_members)
+      const { error: memberErr } = await supabaseAdmin.from('clinic_members').insert({
+        user_id: finalAuthUserId,
+        clinic_id: clinicId,
+        role: system_role || 'staff'
+      });
+
+      if (memberErr) {
+        console.error('Insert clinic_members error:', memberErr);
+        return NextResponse.json(
+          { success: false, message: '寫入權限失敗：' + memberErr.message },
+          { status: 500 }
+        );
+      }
+    }
+
+    // 🟢 3. 儲存員工資料到 staff 表格（並綁定 auth_user_id）
     const payload = {
       ...staffData,
-      clinic_id: clinicId, // 自動填入，不讓前端傳入
-      entity: staffData.entity || 'clinic', // 如果沒有提供 entity，預設為 'clinic'
-      phone: staffData.phone.trim(), // 🟢 必填，去除空白
-      password: password // 🟢 必填，若未提供則使用預設值 '0000'
+      clinic_id: clinicId,
+      entity: staffData.entity || 'clinic',
+      phone: staffData.phone.trim(),
+      password,
+      email: login_email?.trim() || staffData.email || null,
+      auth_user_id: finalAuthUserId
     };
 
     const { error } = await supabaseAdmin
@@ -157,7 +192,17 @@ export async function PATCH(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { id, clinic_id, password, ...updateData } = body; // 🟢 移除前端可能傳入的 clinic_id，並分離 password
+    const {
+      id,
+      clinic_id,
+      password,
+      enable_login,
+      login_email,
+      login_password,
+      system_role,
+      auth_user_id: bodyAuthUserId,
+      ...updateData
+    } = body;
 
     if (!id) {
       return NextResponse.json(
@@ -166,10 +211,10 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    // 🟢 多租戶：驗證該員工是否屬於當前診所
+    // 🟢 多租戶：驗證該員工是否屬於當前診所，並取得現有 auth_user_id
     const { data: staff } = await supabaseAdmin
       .from('staff')
-      .select('id, clinic_id')
+      .select('id, clinic_id, auth_user_id')
       .eq('id', id)
       .eq('clinic_id', clinicId)
       .single();
@@ -181,35 +226,112 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    // 🟢 多租戶：確保更新時不會改變 clinic_id
-    // 同時確保 entity 欄位有預設值（如果提供）
+    const currentAuthUserId = bodyAuthUserId ?? staff.auth_user_id ?? null;
+
+    // 🔒 防呆鎖：最後負責人檢查（降級或取消登入權限時）
+    if (
+      currentAuthUserId &&
+      (system_role !== 'owner' || enable_login === false)
+    ) {
+      const { data: currentMember } = await supabaseAdmin
+        .from('clinic_members')
+        .select('role')
+        .eq('user_id', currentAuthUserId)
+        .eq('clinic_id', clinicId)
+        .single();
+
+      if (currentMember?.role === 'owner') {
+        const { count } = await supabaseAdmin
+          .from('clinic_members')
+          .select('*', { count: 'exact', head: true })
+          .eq('clinic_id', clinicId)
+          .eq('role', 'owner');
+
+        if (count !== null && count <= 1) {
+          return NextResponse.json(
+            {
+              success: false,
+              message: '操作失敗：此為本診所最後一位負責人，請先指派其他負責人！'
+            },
+            { status: 400 }
+          );
+        }
+      }
+    }
+
+    let finalAuthUserId: string | null = staff.auth_user_id;
+    let didCreateAuth = false;
+
+    // 🟢 PATCH 時新開通登入：既有員工尚未綁定 Auth 時，建立帳號並寫入 clinic_members
+    if (!staff.auth_user_id && enable_login && login_email && login_password) {
+      const { data: authData, error: authErr } = await supabaseAdmin.auth.admin.createUser({
+        email: String(login_email).trim(),
+        password: String(login_password),
+        email_confirm: true
+      });
+
+      if (authErr) {
+        return NextResponse.json(
+          { success: false, message: '建立登入帳號失敗：' + authErr.message },
+          { status: 400 }
+        );
+      }
+      finalAuthUserId = authData.user.id;
+      didCreateAuth = true;
+
+      const { error: memberErr } = await supabaseAdmin.from('clinic_members').insert({
+        user_id: finalAuthUserId,
+        clinic_id: clinicId,
+        role: system_role || 'staff'
+      });
+
+      if (memberErr) {
+        console.error('Insert clinic_members error:', memberErr);
+        return NextResponse.json(
+          { success: false, message: '寫入權限失敗：' + memberErr.message },
+          { status: 500 }
+        );
+      }
+    }
+
+    // 🟢 既有帳號更新權限（clinic_members.role）
+    if ((currentAuthUserId || finalAuthUserId) && system_role) {
+      const userIdToUpdate = finalAuthUserId ?? currentAuthUserId;
+      await supabaseAdmin
+        .from('clinic_members')
+        .update({ role: system_role })
+        .eq('user_id', userIdToUpdate)
+        .eq('clinic_id', clinicId);
+    }
+
+    // 🟢 多租戶：確保更新時不會改變 clinic_id，並排除權限專用欄位
     const payload: any = {
       ...updateData,
-      clinic_id: clinicId // 確保 clinic_id 不會被修改
+      clinic_id: clinicId
     };
-    
-    // 如果提供了 entity 欄位，確保它有值
+
     if (updateData.entity !== undefined) {
       payload.entity = updateData.entity || 'clinic';
     }
 
-    // 🟢 處理密碼欄位：若 request body 有傳 password 且不為空字串，才更新密碼欄位
-    // 若為空，則保留原密碼不變（不將 password 加入 payload）
-    if (password !== undefined && password !== null && password.trim() !== '') {
-      payload.password = password.trim();
+    if (password !== undefined && password !== null && String(password).trim() !== '') {
+      payload.password = String(password).trim();
     }
-    // 若 password 為空字串或未提供，則不更新密碼（不加入 payload）
 
-    // 處理 phone 欄位（如果提供）
     if (updateData.phone !== undefined) {
-      payload.phone = updateData.phone.trim();
+      payload.phone = String(updateData.phone).trim();
+    }
+
+    if (didCreateAuth && finalAuthUserId) {
+      payload.auth_user_id = finalAuthUserId;
+      payload.email = login_email?.trim() ?? updateData.email ?? null;
     }
 
     const { error } = await supabaseAdmin
       .from('staff')
       .update(payload)
       .eq('id', id)
-      .eq('clinic_id', clinicId); // 🟢 確保只更新該診所的員工
+      .eq('clinic_id', clinicId);
 
     if (error) {
       console.error('Update staff error:', error);
