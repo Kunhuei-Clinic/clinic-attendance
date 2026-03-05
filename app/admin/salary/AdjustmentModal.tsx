@@ -81,6 +81,34 @@ export default function AdjustmentModal({ staff, adjustments, selectedMonth, onS
   const activeBonus = localItems.filter(a => a.type === 'bonus' && !a.isDeleted);
   const activeDeduction = localItems.filter(a => a.type === 'deduction' && !a.isDeleted);
 
+  const handleQuickAddOnlineHours = () => {
+    const input = window.prompt('請輸入本月線上諮詢總時數：');
+    if (input === null || input.trim() === '') return;
+    const hours = parseFloat(input.trim());
+    if (isNaN(hours) || hours <= 0) {
+      alert('請輸入有效的正數時數');
+      return;
+    }
+    const hourlyRate = staff.online_hourly_rate ?? (staff.salary_mode === 'monthly'
+      ? (staff.base_salary ?? 0) / 240
+      : (staff.base_salary ?? 0));
+    const rate = Number(hourlyRate) || 0;
+    if (rate <= 0) {
+      alert('請先在薪資設定中設定本薪或線上諮詢時薪');
+      return;
+    }
+    const amount = Math.round(hours * rate);
+    setLocalItems(prev => [...prev, {
+      id: Date.now() + Math.random(),
+      staff_id: staffId,
+      year_month: selectedMonth,
+      type: 'bonus',
+      name: `線上諮詢 (${hours} 小時)`,
+      amount,
+      isNew: true,
+    }]);
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 animate-fade-in">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg p-6">
@@ -91,9 +119,18 @@ export default function AdjustmentModal({ staff, adjustments, selectedMonth, onS
 
         {/* 獎金區 */}
         <div className="mb-6 bg-emerald-50/50 p-4 rounded-lg border border-emerald-100">
-          <div className="flex justify-between items-center mb-3">
+          <div className="flex justify-between items-center mb-3 flex-wrap gap-2">
             <h4 className="font-bold text-emerald-800 text-sm">獎金加項 (+)</h4>
-            <button onClick={() => handleAdd('bonus')} className="text-xs bg-emerald-600 text-white px-3 py-1.5 rounded shadow-sm hover:bg-emerald-700 font-bold">+ 新增獎金</button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleQuickAddOnlineHours}
+                className="text-xs py-1.5 px-3 rounded border-2 border-indigo-300 bg-indigo-50 text-indigo-700 font-bold hover:bg-indigo-100 transition"
+              >
+                ⚡ 快速補登線上工時
+              </button>
+              <button onClick={() => handleAdd('bonus')} className="text-xs bg-emerald-600 text-white px-3 py-1.5 rounded shadow-sm hover:bg-emerald-700 font-bold">+ 新增獎金</button>
+            </div>
           </div>
           <div className="space-y-2">
             {activeBonus.map(adj => (

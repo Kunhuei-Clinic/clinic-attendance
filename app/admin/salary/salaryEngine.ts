@@ -119,14 +119,14 @@ export const calculateStaffSalary = (
     }
   });
 
-  // --- 2. 每日工時計算 (完美符合勞基法變形工時規範) ---
+  // --- 2. 每日工時計算 (每日正常工時上限判定) ---
   let dailyNormalLimit = 8;
   if (staff.work_rule === '2week' || staff.work_rule === '4week') {
-    dailyNormalLimit = 10; // 二/四週可將2小時空班挪移至工作日
-  } else if (staff.work_rule === '8week') {
-    dailyNormalLimit = 8;  // 八週變形工時不可挪移每日正常工時 (維持8H)
+    dailyNormalLimit = 10;
+  } else if (staff.work_rule === 'online_consultation') {
+    dailyNormalLimit = 24; // 責任制線上諮詢，不計算每日超時
   } else if (staff.work_rule === 'none') {
-    dailyNormalLimit = 24; // 責任制，不計算每日例行超時加班費
+    dailyNormalLimit = 24;
   }
   let accumulatedNormalHours = 0;
 
@@ -333,7 +333,8 @@ export const calculateStaffSalary = (
     result.dailyRecords.push(dailyRecord);
   });
 
-  if (accumulatedNormalHours > monthlyStandardHours) {
+  const isExemptFromPeriodCap = staff.work_rule === 'none' || staff.work_rule === 'online_consultation';
+  if (!isExemptFromPeriodCap && accumulatedNormalHours > monthlyStandardHours) {
     const periodExcess = accumulatedNormalHours - monthlyStandardHours;
     result.period_ot_hours = periodExcess;
     result.ot_pay += staff.salary_mode === 'hourly' ? calculateTieredOtPremium(periodExcess, hourlyRate) : calculateTieredOt(periodExcess, hourlyRate);

@@ -269,6 +269,8 @@ export default function SalaryPage() {
           staff_name: staff.name,
           salary_mode: staff.salary_mode,
           work_rule: staff.work_rule,
+          base_salary: staff.base_salary,
+          online_hourly_rate: staff.online_hourly_rate,
           hire_date: staff.start_date,
           annual_leave_days: calculateAnnualLeave(staff.start_date),
           fixed_bonus_pay: fixedBonus,

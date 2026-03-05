@@ -83,6 +83,7 @@ export default function SettingsModal({ staff, updateStaff, entityList, onClose 
                       <option value="4week">四週變形 (每日 10H)</option>
                       <option value="8week">八週變形 (每日 8H)</option>
                       <option value="none">責任制 (無超時加班)</option>
+                      <option value="online_consultation">責任制 (線上諮詢)</option>
                    </select>
                 </div>
              </div>
@@ -177,6 +178,17 @@ export default function SettingsModal({ staff, updateStaff, entityList, onClose 
                   <span className="text-xs text-slate-400">
                     {staff.salary_mode === 'monthly' ? '元 / 月' : '元 / 時'}
                   </span>
+               </div>
+               <div className="flex items-center gap-2 border p-3 rounded-lg bg-white shadow-sm border-indigo-200">
+                  <span className="text-indigo-600 font-bold text-sm">線上諮詢時薪</span>
+                  <input 
+                    type="number"
+                    value={staff.online_hourly_rate ?? staff.base_salary ?? ''} 
+                    onChange={(e)=>updateStaff(staff.id, 'online_hourly_rate', e.target.value === '' ? undefined : Number(e.target.value))}
+                    className="bg-transparent font-bold w-full outline-none text-slate-800"
+                    placeholder="未設定則依本薪/時薪"
+                  />
+                  <span className="text-xs text-slate-400">元/時</span>
                </div>
             </div>
           )}

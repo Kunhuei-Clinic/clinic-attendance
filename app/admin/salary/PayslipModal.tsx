@@ -93,6 +93,7 @@ function PrintContent({ report, yearMonth, clinicName }: any) {
         case '4week': return '四週變形';
         case '8week': return '八週變形';
         case 'none': return '責任制';
+        case 'online_consultation': return '責任制-線上諮詢';
         default: return '正常工時';
     }
   };
@@ -144,9 +145,24 @@ function PrintContent({ report, yearMonth, clinicName }: any) {
                   <tr key={`fb-${i}`} className="text-xs text-slate-500"><td className="pl-2 py-0.5">• {item.name}</td><td className="text-right py-0.5">${fmt(item.amount)}</td></tr>
                 ))}
                 <Row label="變動獎金" amount={report.temp_bonus_pay} highlight />
-                {report.temp_bonus_details?.map((item: any, i: number) => (
-                  <tr key={`tb-${i}`} className="text-xs text-blue-600"><td className="pl-2 py-0.5">↳ {item.name}</td><td className="text-right py-0.5">${fmt(item.amount)}</td></tr>
-                ))}
+                {report.temp_bonus_details?.map((item: any, i: number) => {
+                  const isOnlineConsult = String(item.name || '').includes('線上諮詢');
+                  const hoursMatch = String(item.name || '').match(/線上諮詢\s*\(([\d.]+)\s*小時\)/);
+                  const hoursNum = hoursMatch ? hoursMatch[1] : null;
+                  return (
+                    <React.Fragment key={`tb-${i}`}>
+                      <tr className="text-xs text-blue-600">
+                        <td className="pl-2 py-0.5">
+                          ↳ {item.name}
+                          {isOnlineConsult && hoursNum != null && (
+                            <span className="block text-slate-600 font-medium mt-0.5">線上諮詢時數: {hoursNum} 小時（勞檢備查）</span>
+                          )}
+                        </td>
+                        <td className="text-right py-0.5">${fmt(item.amount)}</td>
+                      </tr>
+                    </React.Fragment>
+                  );
+                })}
                   
                   {/* 🟢 新增：請假給薪 (Leave Addition) */}
                   <Row label="請假給薪" amount={report.leave_addition} sub="特休/公假/喪假" />

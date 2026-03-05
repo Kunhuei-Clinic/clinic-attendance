@@ -367,7 +367,15 @@ export default function SalaryRow({
                     <li key={`f-${i}`} className="flex justify-between text-slate-600"><span>[固定] {b.name}:</span> <span className="font-mono">${b.amount}</span></li>
                   ))}
                   {(rpt.temp_bonus_details || []).map((b: any, i: number) => (
-                    <li key={`t-${i}`} className="flex justify-between text-green-700"><span>[變動] {b.name}:</span> <span className="font-mono">${b.amount}</span></li>
+                    <li key={`t-${i}`} className="flex justify-between text-green-700">
+                      <span>
+                        [變動] {b.name}
+                        {String(b.name || '').includes('線上諮詢') && (
+                          <span className="block text-[10px] text-slate-500 font-normal">時數已載明於項目名稱，供勞檢備查</span>
+                        )}
+                      </span>
+                      <span className="font-mono">${b.amount}</span>
+                    </li>
                   ))}
                 </ul>
               </div>
