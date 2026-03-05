@@ -119,9 +119,15 @@ export const calculateStaffSalary = (
     }
   });
 
-  // --- 2. 每日工時計算 ---
+  // --- 2. 每日工時計算 (完美符合勞基法變形工時規範) ---
   let dailyNormalLimit = 8;
-  if (staff.work_rule === '2week' || staff.work_rule === '4week') dailyNormalLimit = 10;
+  if (staff.work_rule === '2week' || staff.work_rule === '4week') {
+    dailyNormalLimit = 10; // 二/四週可將2小時空班挪移至工作日
+  } else if (staff.work_rule === '8week') {
+    dailyNormalLimit = 8;  // 八週變形工時不可挪移每日正常工時 (維持8H)
+  } else if (staff.work_rule === 'none') {
+    dailyNormalLimit = 24; // 責任制，不計算每日例行超時加班費
+  }
   let accumulatedNormalHours = 0;
 
   // 🟢 強制生成當月 1 號到月底的所有日期，確保例休假不會漏掉

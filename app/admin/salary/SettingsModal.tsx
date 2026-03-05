@@ -45,7 +45,7 @@ export default function SettingsModal({ staff, updateStaff, entityList, onClose 
           
           {/* 基本資料區 */}
           <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-4">
-             <div className="grid grid-cols-2 gap-4">
+             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 <div>
                    <label className="text-xs font-bold text-slate-500 mb-1 flex items-center gap-1"><Building2 size={12}/> 歸屬單位</label>
                    <select 
@@ -68,6 +68,21 @@ export default function SettingsModal({ staff, updateStaff, entityList, onClose 
                    >
                       <option value="actual">實支實付 (依打卡)</option>
                       <option value="schedule">依班表 (遲到早退扣薪)</option>
+                   </select>
+                </div>
+                {/* 🟢 加回遺失的變形工時選項 */}
+                <div>
+                   <label className="text-xs font-bold text-slate-500 mb-1 flex items-center gap-1"><Clock size={12}/> 工時制度 (勞基法)</label>
+                   <select 
+                     value={staff.work_rule || 'normal'} 
+                     onChange={(e) => updateStaff(staff.id, 'work_rule', e.target.value)} 
+                     className="w-full border border-slate-300 p-2 rounded-lg bg-white text-sm font-bold text-indigo-700"
+                   >
+                      <option value="normal">正常工時 (每日 8H)</option>
+                      <option value="2week">二週變形 (每日 10H)</option>
+                      <option value="4week">四週變形 (每日 10H)</option>
+                      <option value="8week">八週變形 (每日 8H)</option>
+                      <option value="none">責任制 (無超時加班)</option>
                    </select>
                 </div>
              </div>
