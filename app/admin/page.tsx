@@ -70,13 +70,16 @@ export default function AdminPage() {
             setActiveTab(data.authLevel === 'boss' ? 'tasks' : 'staff_roster');
             if (data.clinicName) setClinicName(data.clinicName);
           } else {
+            localStorage.removeItem('last_system_activity'); // 🟢 防呆
             router.push('/login');
           }
         } else {
+          localStorage.removeItem('last_system_activity'); // 🟢 防呆
           router.push('/login');
         }
       } catch (error) {
         console.error('Auth check error:', error);
+        localStorage.removeItem('last_system_activity'); // 🟢 防呆
         router.push('/login');
       } finally {
         setLoading(false);
@@ -172,6 +175,9 @@ export default function AdminPage() {
   const handleLogout = async (isAutoLogout = false) => {
     if (!isAutoLogout && !confirm('確定要登出嗎？')) return;
     try {
+      // 🟢 核心修復：登出時務必清除舊的活動時間戳記，避免登入無限迴圈
+      localStorage.removeItem('last_system_activity');
+
       await supabase.auth.signOut();
       if (isAutoLogout) {
         alert('為保護系統安全，您已閒置超過 30 分鐘，系統已自動登出。');
