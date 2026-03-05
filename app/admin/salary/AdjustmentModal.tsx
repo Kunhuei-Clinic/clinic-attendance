@@ -122,13 +122,16 @@ export default function AdjustmentModal({ staff, adjustments, selectedMonth, onS
           <div className="flex justify-between items-center mb-3 flex-wrap gap-2">
             <h4 className="font-bold text-emerald-800 text-sm">獎金加項 (+)</h4>
             <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleQuickAddOnlineHours}
-                className="text-xs py-1.5 px-3 rounded border-2 border-indigo-300 bg-indigo-50 text-indigo-700 font-bold hover:bg-indigo-100 transition"
-              >
-                ⚡ 快速補登線上工時
-              </button>
+              {/* 🟢 僅對線上諮詢人員顯示此按鈕 */}
+              {staff.work_rule === 'online_consultation' && (
+                <button
+                  type="button"
+                  onClick={handleQuickAddOnlineHours}
+                  className="text-xs py-1.5 px-3 rounded border-2 border-indigo-300 bg-indigo-50 text-indigo-700 font-bold hover:bg-indigo-100 transition"
+                >
+                  ⚡ 快速補登線上工時
+                </button>
+              )}
               <button onClick={() => handleAdd('bonus')} className="text-xs bg-emerald-600 text-white px-3 py-1.5 rounded shadow-sm hover:bg-emerald-700 font-bold">+ 新增獎金</button>
             </div>
           </div>

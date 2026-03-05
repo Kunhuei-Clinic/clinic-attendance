@@ -69,6 +69,14 @@ function PrintContent({ report, yearMonth, clinicName }: any) {
   const [year, month] = yearMonth.split('-');
   const fmt = (n: number) => Math.round(n).toLocaleString();
 
+  // 🟢 萃取線上諮詢的申報時數
+  const onlineBonus = report.temp_bonus_details?.find((b: any) => String(b.name).includes('線上諮詢'));
+  let onlineHours = 0;
+  if (onlineBonus) {
+    const match = String(onlineBonus.name).match(/線上諮詢\s*\(([\d.]+)\s*小時\)/);
+    if (match) onlineHours = parseFloat(match[1]);
+  }
+
   // 🟢 計算加班時數分佈 (toFixed 避免浮點溢位)
   const total134 = Number((report.dailyRecords?.reduce((sum: number, r: any) => sum + (r.ot134 || 0), 0) || 0).toFixed(2));
   const total167 = Number((report.dailyRecords?.reduce((sum: number, r: any) => sum + (r.ot167 || 0), 0) || 0).toFixed(2));
@@ -226,6 +234,17 @@ function PrintContent({ report, yearMonth, clinicName }: any) {
           <p className="text-slate-600 text-sm font-bold">{year}年{month}月 • {report.staff_role} {report.staff_name}</p>
         </div>
 
+        {/* 🟢 遠端彈性工時法定聲明 (勞檢備查用) */}
+        {report.work_rule === 'online_consultation' && onlineHours > 0 && (
+          <div className="mb-4 p-3 border-2 border-slate-400 bg-slate-50 print:border-black print:bg-transparent rounded">
+            <h4 className="font-bold text-slate-800 text-sm mb-1">📝 遠端線上勤務工時申報證明 (Remote Work Hours Declaration)</h4>
+            <p className="text-xs text-slate-600 print:text-black leading-relaxed">
+              此員工本月採「線上諮詢/彈性責任制」，因勤務性質屬遠端線上作業，無固定之每日上下班打卡時間。<br/>
+              經勞資雙方確認，本月實際執行線上勤務之總工時為：<strong className="text-base underline">{onlineHours} 小時</strong>，並以此申報時數核發薪資。特此聲明備查。
+            </p>
+          </div>
+        )}
+
         <table className="w-full text-[11px] border-collapse">
           <thead>
             <tr className="bg-slate-100 text-slate-700 border-b border-slate-300 print:bg-slate-50">
@@ -256,12 +275,13 @@ function PrintContent({ report, yearMonth, clinicName }: any) {
           <tfoot>
             <tr className="bg-slate-800 text-white font-bold print:bg-slate-200 print:text-black print:border-t-2 print:border-black">
               <td colSpan={3} className="p-1 text-right">總計:</td>
-              <td className="p-1 text-center">{report.total_work_hours.toFixed(1)}</td>
-              <td className="p-1 text-center">{report.normal_hours.toFixed(1)}</td>
+              {/* 🟢 將線上時數計入總工時與正常工時顯示 */}
+              <td className="p-1 text-center">{((report.total_work_hours ?? 0) + onlineHours).toFixed(1)}</td>
+              <td className="p-1 text-center">{((report.normal_hours ?? 0) + onlineHours).toFixed(1)}</td>
               <td className="p-1 text-center text-orange-600">{total134 > 0 ? total134.toFixed(1) : '-'}</td>
               <td className="p-1 text-center text-orange-600">{total167 > 0 ? total167.toFixed(1) : '-'}</td>
               <td className="p-1 text-[10px] font-normal opacity-70 print:opacity-100 print:text-slate-600">
-                * 超時: {report.period_ot_hours.toFixed(1)} hr
+                * 超時: {(report.period_ot_hours ?? 0).toFixed(1)} hr
               </td>
             </tr>
           </tfoot>
@@ -283,7 +303,9 @@ function PrintPortal({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!container) return;
     document.body.appendChild(container);
-    return () => document.body.removeChild(container);
+    return () => {
+      document.body.removeChild(container);
+    };
   }, [container]);
 
   if (!container) return null;
