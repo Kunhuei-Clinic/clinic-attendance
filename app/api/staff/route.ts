@@ -199,6 +199,7 @@ export async function PATCH(request: NextRequest) {
       enable_login,
       login_email,
       login_password,
+      new_password,
       system_role,
       auth_user_id: bodyAuthUserId,
       ...updateData
@@ -227,6 +228,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     const currentAuthUserId = bodyAuthUserId ?? staff.auth_user_id ?? null;
+    const authUserIdForOps = staff.auth_user_id ?? bodyAuthUserId ?? null;
 
     // 🔒 防呆鎖：最後負責人檢查（降級或取消登入權限時）
     if (
@@ -257,6 +259,24 @@ export async function PATCH(request: NextRequest) {
           );
         }
       }
+    }
+
+    // 🟢 動作 A：強制重設密碼
+    if (authUserIdForOps && new_password && String(new_password).trim() !== '') {
+      const { error: updateAuthErr } = await supabaseAdmin.auth.admin.updateUserById(
+        authUserIdForOps,
+        { password: String(new_password).trim() }
+      );
+      if (updateAuthErr) {
+        console.error('更新密碼失敗:', updateAuthErr);
+      }
+    }
+
+    // 🟢 動作 B：撤銷登入權限 (沒收鑰匙)
+    if (authUserIdForOps && enable_login === false) {
+      await supabaseAdmin.from('clinic_members').delete().eq('user_id', authUserIdForOps).eq('clinic_id', clinicId);
+      await supabaseAdmin.from('staff').update({ auth_user_id: null }).eq('id', id).eq('clinic_id', clinicId);
+      return NextResponse.json({ success: true, message: '已成功撤銷該員工的系統登入權限' });
     }
 
     let finalAuthUserId: string | null = staff.auth_user_id;
@@ -294,8 +314,8 @@ export async function PATCH(request: NextRequest) {
       }
     }
 
-    // 🟢 既有帳號更新權限（clinic_members.role）
-    if ((currentAuthUserId || finalAuthUserId) && system_role) {
+    // 🟢 動作 C：既有帳號更新權限（clinic_members.role）
+    if ((currentAuthUserId || finalAuthUserId) && system_role && enable_login !== false) {
       const userIdToUpdate = finalAuthUserId ?? currentAuthUserId;
       await supabaseAdmin
         .from('clinic_members')

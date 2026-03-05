@@ -41,6 +41,7 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
   const [enableLogin, setEnableLogin] = useState(false);
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('0000'); // 預設密碼
+  const [newPassword, setNewPassword] = useState(''); // 既有帳號重設密碼
 
   // Sudo 二次驗證相關
   const [showSudoModal, setShowSudoModal] = useState(false);
@@ -140,6 +141,7 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
               setLoginEmail(initialData.email || '');
             }
             setLoginPassword('0000');
+            setNewPassword('');
           } else {
             // 新增模式：給予預設值
             const defaultRole = loadedJobTitles[0]?.name || '護理師';
@@ -165,6 +167,7 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
             setEnableLogin(false);
             setLoginEmail('');
             setLoginPassword('0000');
+            setNewPassword('');
           }
           setExpandedSection('basic'); // 每次打開重置為展開基本資料
         } catch (error) {
@@ -181,6 +184,7 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
               setLoginEmail(initialData.email || '');
             }
             setLoginPassword('0000');
+            setNewPassword('');
           } else {
             setEditData({
               name: '',
@@ -203,6 +207,7 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
             setEnableLogin(false);
             setLoginEmail('');
             setLoginPassword('0000');
+            setNewPassword('');
           }
           setExpandedSection('basic');
         }
@@ -280,6 +285,7 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
       bank_account: editData.bank_account || null,
       id_number: editData.id_number || null,
       enable_login: enableLogin,
+      new_password: newPassword,
       login_email: loginEmail,
       login_password: loginPassword,
       system_role: editData.system_role || 'staff'
@@ -482,7 +488,7 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
 
                   {enableLogin && (
                     <div className="space-y-4 pl-8 border-l-2 border-blue-200 ml-2 animate-fade-in">
-                      {!initialData?.auth_user_id && (
+                      {!initialData?.auth_user_id ? (
                         <>
                           <div>
                             <label className="block text-xs font-bold text-slate-500 mb-1">登入 Email 帳號</label>
@@ -505,6 +511,17 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
                             <p className="text-xs text-slate-400 mt-1">員工首次登入後可自行修改密碼</p>
                           </div>
                         </>
+                      ) : (
+                        <div className="bg-orange-50 p-3 rounded-lg border border-orange-100">
+                          <label className="block text-xs font-bold text-orange-800 mb-1">強制重設密碼 (若不修改請留空)</label>
+                          <input
+                            type="text"
+                            value={newPassword}
+                            onChange={e => setNewPassword(e.target.value)}
+                            className="w-full border p-2 rounded-lg"
+                            placeholder="輸入新密碼..."
+                          />
+                        </div>
                       )}
 
                       <div>
@@ -554,7 +571,7 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
                   <p>員工可透過 LINE 綁定自動登入。若需手動登入，請使用手機號碼與此密碼。</p>
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 mb-1">登入密碼</label>
+                  <label className="block text-xs font-bold text-slate-500 mb-1">LINE系統登入密碼</label>
                   <input
                     type="text"
                     value={editData.password || ''}

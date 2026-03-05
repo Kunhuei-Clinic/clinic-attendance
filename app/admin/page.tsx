@@ -84,6 +84,54 @@ export default function AdminPage() {
     checkAuth();
   }, [router]);
 
+  // 🔒 資安防護：全時段閒置偵測 (含網頁關閉後重開)
+  useEffect(() => {
+    if (!authLevel) return; // 尚未登入則不執行
+
+    const IDLE_TIME = 30 * 60 * 1000; // 30 分鐘 (毫秒)
+    const ACTIVITY_KEY = 'last_system_activity';
+
+    // 1. 初始化檢查：網頁載入時，先檢查上次活動時間
+    const checkOnMount = () => {
+      const lastActivity = localStorage.getItem(ACTIVITY_KEY);
+      if (lastActivity) {
+        const elapsed = Date.now() - parseInt(lastActivity, 10);
+        if (elapsed > IDLE_TIME) {
+          handleLogout(true); // 關掉網頁期間已經超時，直接踢出
+          return true;
+        }
+      }
+      return false;
+    };
+
+    if (checkOnMount()) return; // 如果已經超時，就不掛載後續監聽了
+
+    // 2. 活動更新器：記錄最新活動時間到硬碟
+    let timeoutId: NodeJS.Timeout;
+    const updateActivity = () => {
+      localStorage.setItem(ACTIVITY_KEY, Date.now().toString());
+
+      // 重置計時器 (網頁開著的時候使用)
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        handleLogout(true);
+      }, IDLE_TIME);
+    };
+
+    // 3. 綁定監聽事件
+    const events = ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'];
+    events.forEach(event => window.addEventListener(event, updateActivity));
+
+    // 初始呼叫一次
+    updateActivity();
+
+    // 清除監聽器
+    return () => {
+      clearTimeout(timeoutId);
+      events.forEach(event => window.removeEventListener(event, updateActivity));
+    };
+  }, [authLevel]);
+
   // 讀取診所名稱
   useEffect(() => {
     if (!authLevel) return;
@@ -123,24 +171,18 @@ export default function AdminPage() {
     fetchClinicName();
   }, [authLevel]);
 
-  // 登出
-  const handleLogout = async () => {
-    if (!confirm('確定要登出嗎？')) return;
-
+  // 登出函式 (支援自動登出)
+  const handleLogout = async (isAutoLogout = false) => {
+    if (!isAutoLogout && !confirm('確定要登出嗎？')) return;
     try {
-      const { error } = await supabase.auth.signOut();
-
-      if (error) {
-        console.error('Logout error:', error);
-        alert('登出失敗: ' + error.message);
-        return;
+      await supabase.auth.signOut();
+      if (isAutoLogout) {
+        alert('為保護系統安全，您已閒置超過 30 分鐘，系統已自動登出。');
       }
-
       router.refresh();
       router.push('/login');
     } catch (error) {
       console.error('Logout error:', error);
-      alert('登出失敗');
     }
   };
 
