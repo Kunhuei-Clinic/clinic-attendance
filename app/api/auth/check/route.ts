@@ -46,25 +46,28 @@ export async function GET(request: Request) {
       .single();
 
     let dbRole = 'staff';
-    const activeClinicId = cookieStore.get('active_clinic_id')?.value;
+    let activeClinicId = cookieStore.get('active_clinic_id')?.value ?? null;
 
-    // 2. 查詢該員工的權限
+    // 2. 查詢該員工的權限（若無 Cookie 則取第一個診所）
     if (activeClinicId) {
-        const { data: member } = await supabaseAdmin
-            .from('clinic_members')
-            .select('role')
-            .eq('user_id', user.id)
-            .eq('clinic_id', activeClinicId)
-            .single();
-        if (member) dbRole = member.role;
+      const { data: member } = await supabaseAdmin
+        .from('clinic_members')
+        .select('role')
+        .eq('user_id', user.id)
+        .eq('clinic_id', activeClinicId)
+        .single();
+      if (member) dbRole = member.role;
     } else {
-        const { data: member } = await supabaseAdmin
-            .from('clinic_members')
-            .select('role')
-            .eq('user_id', user.id)
-            .limit(1)
-            .single();
-        if (member) dbRole = member.role;
+      const { data: member } = await supabaseAdmin
+        .from('clinic_members')
+        .select('role, clinic_id')
+        .eq('user_id', user.id)
+        .limit(1)
+        .single();
+      if (member) {
+        dbRole = member.role;
+        activeClinicId = (member as { clinic_id?: string }).clinic_id ?? null;
+      }
     }
 
     if (superAdmin) dbRole = 'owner';
@@ -74,10 +77,23 @@ export async function GET(request: Request) {
     if (dbRole === 'owner' || dbRole === 'boss') frontendAuthLevel = 'boss';
     else if (dbRole === 'manager') frontendAuthLevel = 'manager';
 
+    // 4. 若有診所 ID 則一併回傳診所名稱，減少前端二次請求
+    let clinicName: string | null = null;
+    if (activeClinicId) {
+      const { data: clinic } = await supabaseAdmin
+        .from('clinics')
+        .select('name')
+        .eq('id', activeClinicId)
+        .single();
+      if (clinic?.name) clinicName = clinic.name;
+    }
+
     return NextResponse.json({
       authenticated: true,
       user: { id: user.id, email: user.email },
-      authLevel: frontendAuthLevel
+      authLevel: frontendAuthLevel,
+      activeClinicId: activeClinicId ?? undefined,
+      clinicName: clinicName ?? undefined
     });
     
   } catch (error: any) {

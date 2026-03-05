@@ -58,7 +58,7 @@ export default function AdminPage() {
   // 診所名稱
   const [clinicName, setClinicName] = useState('診所');
 
-  // 檢查認證狀態
+  // 檢查認證狀態（含 activeClinicId / clinicName，並補寫 Cookie）
   useEffect(() => {
     const checkAuth = async () => {
       try {
@@ -68,6 +68,15 @@ export default function AdminPage() {
           if (data.authenticated && data.authLevel) {
             setAuthLevel(data.authLevel);
             setActiveTab(data.authLevel === 'boss' ? 'tasks' : 'staff_roster');
+            // 優先從 check 回傳的診所名稱設定，避免二次 fetch 延遲
+            if (data.clinicName) setClinicName(data.clinicName);
+            // 若 Cookie 沒有 active_clinic_id，用手動補上，確保後續請求都帶上
+            if (data.activeClinicId && typeof document !== 'undefined') {
+              const hasCookie = document.cookie.includes('active_clinic_id=');
+              if (!hasCookie) {
+                document.cookie = `active_clinic_id=${data.activeClinicId}; path=/; max-age=2592000`; // 30 天
+              }
+            }
           } else {
             router.push('/login');
           }
@@ -132,31 +141,27 @@ export default function AdminPage() {
     };
   }, [authLevel]);
 
-  // 讀取診所名稱
+  // 讀取診所名稱（當 auth/check 未帶回 clinicName 時才二次請求）
   useEffect(() => {
     if (!authLevel) return;
 
     const fetchClinicName = async () => {
       try {
-        // 策略 A：直接從 clinics 讀取（依賴 RLS）
         const { data: clinicData, error: clinicError } = await supabase
           .from('clinics')
           .select('name')
           .single();
 
-        if (!clinicError && clinicData && clinicData.name) {
+        if (!clinicError && clinicData?.name) {
           setClinicName(clinicData.name);
           return;
         }
 
-        // 策略 B：從 system_settings 讀取
-        const res = await fetch('/api/settings', {
-          credentials: 'include',
-        });
+        const res = await fetch('/api/settings', { credentials: 'include' });
         const json = await res.json();
         if (json.data) {
           const setting = json.data.find((s: any) => s.key === 'clinic_name');
-          if (setting && setting.value) {
+          if (setting?.value) {
             setClinicName(setting.value);
             return;
           }
@@ -203,174 +208,163 @@ export default function AdminPage() {
       <div className="max-w-[1600px] mx-auto">
         {/* 右側主要內容區 */}
         <div className="flex-1">
-          {/* Header 區塊：左邊標題 / 右邊 Tab + 分院切換器 */}
-          <div className="mb-6 flex flex-col md:flex-row justify-between items-center gap-4">
-            {/* 左側：標題 + 待審核 + 登出 */}
-            <div className="flex items-center gap-4">
-              <h1 className="text-2xl font-black text-slate-900 flex items-center gap-2 tracking-tight">
-                {clinicName}管理系統
-                {authLevel === 'manager' && (
-                  <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full font-bold">
-                    排班模式
-                  </span>
+          {/* Header 區塊：左側標題+切換器 / 右側按鈕；下方獨立一列 Tabs */}
+          <div className="mb-6 flex flex-col gap-4">
+            <div className="flex justify-between items-start">
+              {/* 左側：標題與切換器 */}
+              <div className="space-y-2">
+                <h1 className="text-2xl font-black text-slate-900 flex items-center gap-2 tracking-tight">
+                  {clinicName}管理系統
+                  {authLevel === 'manager' && (
+                    <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full font-bold">
+                      排班模式
+                    </span>
+                  )}
+                </h1>
+                <div className="w-64">
+                  <ClinicSwitcher />
+                </div>
+              </div>
+
+              {/* 右側：功能按鈕 */}
+              <div className="flex items-center gap-2">
+                {authLevel === 'boss' && (
+                  <button
+                    onClick={() => setActiveTab('tasks')}
+                    className={`p-2 rounded-lg transition border ${
+                      activeTab === 'tasks'
+                        ? 'bg-teal-100 border-teal-300 text-teal-700'
+                        : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'
+                    }`}
+                    title="待審核案件"
+                  >
+                    <CheckCircle size={20} />
+                  </button>
                 )}
-              </h1>
-
-              {authLevel === 'boss' && (
                 <button
-                  onClick={() => setActiveTab('tasks')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition ${
-                    activeTab === 'tasks'
-                      ? 'bg-teal-100 text-teal-700 border border-teal-300'
-                      : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-transparent'
-                  }`}
-                  title="待審核案件"
+                  onClick={() => handleLogout()}
+                  className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-lg text-sm font-bold hover:bg-red-100 transition"
+                  title="登出"
                 >
-                  <CheckCircle size={14} /> 待審核
+                  <LogOut size={16} /> <span className="hidden md:inline">登出系統</span>
                 </button>
-              )}
-
-              <button
-                onClick={handleLogout}
-                className="px-4 py-2 bg-red-50 text-red-600 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-red-100 transition"
-                title="登出"
-              >
-                <LogOut size={16} /> 登出
-              </button>
+              </div>
             </div>
 
-            {/* 右側：Tab 群組 + 分院切換器 */}
-            <div className="flex items-center gap-4">
-              {/* Tab 群組 */}
-              <div className="flex bg-white p-1 rounded-xl border shadow-sm overflow-x-auto">
-                {authLevel === 'boss' && (
-                  <>
-                    <button
-                      onClick={() => setActiveTab('attendance')}
-                      className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 whitespace-nowrap ${
-                        activeTab === 'attendance'
-                          ? 'bg-blue-100 text-blue-700'
-                          : 'text-slate-500 hover:bg-slate-50'
-                      }`}
-                    >
-                      <CheckCircle size={16} /> 考勤
-                    </button>
-
-                    <button
-                      onClick={() => setActiveTab('staff_roster')}
-                      className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 whitespace-nowrap ${
-                        activeTab === 'staff_roster'
-                          ? 'bg-purple-100 text-purple-700'
-                          : 'text-slate-500 hover:bg-slate-50'
-                      }`}
-                    >
-                      <Calendar size={16} /> 員工排班
-                    </button>
-
-                    <button
-                      onClick={() => setActiveTab('doctor_roster')}
-                      className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 whitespace-nowrap ${
-                        activeTab === 'doctor_roster'
-                          ? 'bg-teal-100 text-teal-700'
-                          : 'text-slate-500 hover:bg-slate-50'
-                      }`}
-                    >
-                      <Stethoscope size={16} /> 醫師排班
-                    </button>
-
-                    <button
-                      onClick={() => setActiveTab('leave')}
-                      className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 whitespace-nowrap ${
-                        activeTab === 'leave'
-                          ? 'bg-orange-100 text-orange-700'
-                          : 'text-slate-500 hover:bg-slate-50'
-                      }`}
-                    >
-                      <FileText size={16} /> 請假
-                    </button>
-
-                    <button
-                      onClick={() => setActiveTab('salary')}
-                      className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 whitespace-nowrap ${
-                        activeTab === 'salary'
-                          ? 'bg-green-100 text-green-700'
-                          : 'text-slate-500 hover:bg-slate-50'
-                      }`}
-                    >
-                      <DollarSign size={16} /> 員工薪資
-                    </button>
-
-                    <button
-                      onClick={() => setActiveTab('doctor_salary')}
-                      className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 whitespace-nowrap ${
-                        activeTab === 'doctor_salary'
-                          ? 'bg-teal-100 text-teal-700'
-                          : 'text-slate-500 hover:bg-slate-50'
-                      }`}
-                    >
-                      <Calculator size={16} /> 醫師薪資
-                    </button>
-
-                    <button
-                      onClick={() => setActiveTab('salary_report')}
-                      className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 whitespace-nowrap ${
-                        activeTab === 'salary_report'
-                          ? 'bg-indigo-100 text-indigo-700'
-                          : 'text-slate-500 hover:bg-slate-50'
-                      }`}
-                    >
-                      <FileSpreadsheet size={16} /> 人事報表
-                    </button>
-
-                    <button
-                      onClick={() => setActiveTab('labor_rules')}
-                      className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 whitespace-nowrap ${
-                        activeTab === 'labor_rules'
-                          ? 'bg-slate-800 text-white'
-                          : 'text-slate-500 hover:bg-slate-50'
-                      }`}
-                    >
-                      <BookOpen size={16} /> 法規
-                    </button>
-
-                    <button
-                      onClick={() => setActiveTab('announcements')}
-                      className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 whitespace-nowrap ${
-                        activeTab === 'announcements'
-                          ? 'bg-yellow-100 text-yellow-700'
-                          : 'text-slate-500 hover:bg-slate-50'
-                      }`}
-                    >
-                      <Bell size={16} /> 公告
-                    </button>
-
-                    <button
-                      onClick={() => setActiveTab('settings')}
-                      className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 whitespace-nowrap ${
-                        activeTab === 'settings'
-                          ? 'bg-gray-200 text-gray-800'
-                          : 'text-slate-500 hover:bg-slate-50'
-                      }`}
-                    >
-                      <Settings size={16} /> 設定
-                    </button>
-                  </>
-                )}
-
-                {authLevel === 'manager' && (
+            {/* 導航 Tabs：獨立一列，可橫向捲動 */}
+            <div className="flex bg-white p-1 rounded-xl border shadow-sm overflow-x-auto">
+              {authLevel === 'boss' && (
+                <>
+                  <button
+                    onClick={() => setActiveTab('attendance')}
+                    className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 whitespace-nowrap ${
+                      activeTab === 'attendance'
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'text-slate-500 hover:bg-slate-50'
+                    }`}
+                  >
+                    <CheckCircle size={16} /> 考勤
+                  </button>
                   <button
                     onClick={() => setActiveTab('staff_roster')}
-                    className="px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 whitespace-nowrap bg-purple-100 text-purple-700"
+                    className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 whitespace-nowrap ${
+                      activeTab === 'staff_roster'
+                        ? 'bg-purple-100 text-purple-700'
+                        : 'text-slate-500 hover:bg-slate-50'
+                    }`}
                   >
                     <Calendar size={16} /> 員工排班
                   </button>
-                )}
-              </div>
-
-              {/* 連鎖診所切換器 (Workspace Switcher) */}
-              <div className="mt-2 md:mt-0">
-                <ClinicSwitcher />
-              </div>
+                  <button
+                    onClick={() => setActiveTab('doctor_roster')}
+                    className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 whitespace-nowrap ${
+                      activeTab === 'doctor_roster'
+                        ? 'bg-teal-100 text-teal-700'
+                        : 'text-slate-500 hover:bg-slate-50'
+                    }`}
+                  >
+                    <Stethoscope size={16} /> 醫師排班
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('leave')}
+                    className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 whitespace-nowrap ${
+                      activeTab === 'leave'
+                        ? 'bg-orange-100 text-orange-700'
+                        : 'text-slate-500 hover:bg-slate-50'
+                    }`}
+                  >
+                    <FileText size={16} /> 請假
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('salary')}
+                    className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 whitespace-nowrap ${
+                      activeTab === 'salary'
+                        ? 'bg-green-100 text-green-700'
+                        : 'text-slate-500 hover:bg-slate-50'
+                    }`}
+                  >
+                    <DollarSign size={16} /> 員工薪資
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('doctor_salary')}
+                    className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 whitespace-nowrap ${
+                      activeTab === 'doctor_salary'
+                        ? 'bg-teal-100 text-teal-700'
+                        : 'text-slate-500 hover:bg-slate-50'
+                    }`}
+                  >
+                    <Calculator size={16} /> 醫師薪資
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('salary_report')}
+                    className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 whitespace-nowrap ${
+                      activeTab === 'salary_report'
+                        ? 'bg-indigo-100 text-indigo-700'
+                        : 'text-slate-500 hover:bg-slate-50'
+                    }`}
+                  >
+                    <FileSpreadsheet size={16} /> 人事報表
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('labor_rules')}
+                    className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 whitespace-nowrap ${
+                      activeTab === 'labor_rules'
+                        ? 'bg-slate-800 text-white'
+                        : 'text-slate-500 hover:bg-slate-50'
+                    }`}
+                  >
+                    <BookOpen size={16} /> 法規
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('announcements')}
+                    className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 whitespace-nowrap ${
+                      activeTab === 'announcements'
+                        ? 'bg-yellow-100 text-yellow-700'
+                        : 'text-slate-500 hover:bg-slate-50'
+                    }`}
+                  >
+                    <Bell size={16} /> 公告
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('settings')}
+                    className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 whitespace-nowrap ${
+                      activeTab === 'settings'
+                        ? 'bg-gray-200 text-gray-800'
+                        : 'text-slate-500 hover:bg-slate-50'
+                    }`}
+                  >
+                    <Settings size={16} /> 設定
+                  </button>
+                </>
+              )}
+              {authLevel === 'manager' && (
+                <button
+                  onClick={() => setActiveTab('staff_roster')}
+                  className="px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 whitespace-nowrap bg-purple-100 text-purple-700"
+                >
+                  <Calendar size={16} /> 員工排班
+                </button>
+              )}
             </div>
           </div>
 
