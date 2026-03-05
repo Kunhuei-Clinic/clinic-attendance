@@ -519,7 +519,9 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
                     <table className="w-full border-collapse bg-white">
                         <thead>
                             <tr>
-                                <th className="p-2 border bg-slate-50 sticky left-0 z-30 min-w-[150px] text-left shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">員工</th>
+                                <th className="p-1 border bg-slate-50 sticky left-0 z-30 min-w-[80px] max-w-[80px] text-left shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-xs">
+                                    員工
+                                </th>
                                 {days.map(d => {
                                     const isToday = d.dateStr === todayStr;
                                     const isWeekend = d.dayOfWeek === 0 || d.dayOfWeek === 6;
@@ -527,20 +529,16 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
                                         <th
                                             key={d.dateStr}
                                             onClick={() => toggleGlobalHoliday(d.dateStr)}
-                                            className={`border p-1 text-center min-w-[45px] h-10 cursor-default select-none ${
+                                            className={`border p-0.5 text-center min-w-[34px] w-[34px] h-8 cursor-default select-none ${
                                                 isToday ? 'bg-yellow-100 text-yellow-800' : isWeekend ? 'text-red-500' : ''
                                             }`}
                                         >
-                                            <div className="text-[10px] leading-tight opacity-60">
-                                                {weekDays[d.dayOfWeek]}
-                                            </div>
-                                            <div className="text-sm">
-                                                {d.dateStr.slice(8)}
-                                            </div>
+                                            <div className="text-[8px] leading-tight opacity-60">{weekDays[d.dayOfWeek]}</div>
+                                            <div className="text-[10px] font-bold">{d.dateStr.slice(8)}</div>
                                         </th>
                                     );
                                 })}
-                                <th className="p-2 border bg-slate-50 sticky right-0 z-30 min-w-[80px]">統計</th>
+                                <th className="p-1 border bg-slate-50 sticky right-0 z-30 min-w-[50px] text-center text-xs">統計</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -548,9 +546,10 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
                                 const stats = calculateStats(staff.id);
                                 return (
                                     <tr key={staff.id}>
-                                        <td className="p-2 border font-bold text-slate-700 sticky left-0 z-20 bg-white shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] align-top">
-                                            <div>{staff.name}<div className="text-[10px] text-slate-400">{staff.role}</div></div>
-                                            {complianceErrors[staff.id] && <div className="text-[10px] text-red-600 bg-red-50 p-0.5 rounded flex items-center gap-1"><ShieldAlert size={10} /> 違規</div>}
+                                        <td className="p-1 border font-bold text-slate-700 sticky left-0 z-20 bg-white shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] align-top min-w-[80px] max-w-[80px] overflow-hidden">
+                                            <div className="truncate text-xs" title={staff.name}>{staff.name}</div>
+                                            <div className="text-[9px] text-slate-400 truncate">{staff.role}</div>
+                                            {complianceErrors[staff.id] && <div className="text-[8px] text-red-600 bg-red-50 p-0.5 rounded flex items-center gap-0.5 mt-0.5 truncate"><ShieldAlert size={8} /> 違規</div>}
                                         </td>
                                         {days.map(d => {
                                             const key = `${staff.id}_${d.dateStr}`;
@@ -572,39 +571,40 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
                                             else if (data.day_type === 'shifted') { btnClass = 'bg-slate-300 text-slate-700'; btnText = '調'; }
 
                                             return (
-                                                <td key={d.dateStr} className={`border p-0.5 text-center align-top h-[76px] relative min-w-[45px] ${cellBg}`}>
+                                                <td key={d.dateStr} className={`border p-0 text-center align-top h-[64px] relative min-w-[34px] w-[34px] ${cellBg}`}>
                                                     <button
                                                         onClick={() => applyDayTypeStamp(staff.id, d.dateStr)}
-                                                        className={`w-full h-5 shrink-0 rounded-sm text-[10px] font-bold mb-0.5 transition-colors ${btnClass}`}
+                                                        className={`w-full h-4 shrink-0 rounded-none text-[9px] font-bold mb-0.5 transition-colors ${btnClass}`}
                                                     >
                                                         {btnText}
                                                     </button>
-                                                    {(
-                                                        <div className="flex flex-col h-[calc(100%-22px)] w-full divide-y divide-slate-100 overflow-hidden">
-                                                            {shiftsConfig.map(shift => {
-                                                                const isSelected = data.shifts.includes(shift.code);
-                                                                return (
-                                                                    <button
-                                                                        key={shift.id}
-                                                                        onClick={() => toggleShift(staff.id, d.dateStr, shift)}
-                                                                        className={`flex-1 w-full flex items-center justify-center transition-all min-h-[14px] text-[10px] leading-none ${
-                                                                            isSelected 
-                                                                                ? 'bg-blue-500 text-white shadow-inner font-bold' 
-                                                                                : 'bg-transparent text-slate-400 hover:bg-slate-200'
-                                                                        }`}
-                                                                        title={`${shift.name} (${shift.start}-${shift.end})`}
-                                                                    >
-                                                                        {isSelected ? shift.code : ''}
-                                                                    </button>
-                                                                );
-                                                            })}
-                                                        </div>
-                                                    )}
+                                                    <div className="flex flex-col h-[calc(100%-18px)] w-full divide-y divide-slate-100 overflow-hidden">
+                                                        {shiftsConfig.map(shift => {
+                                                            const isSelected = data.shifts.includes(shift.code);
+                                                            return (
+                                                                <button
+                                                                    key={shift.id}
+                                                                    onClick={() => toggleShift(staff.id, d.dateStr, shift)}
+                                                                    className={`flex-1 w-full flex items-center justify-center transition-all min-h-[12px] text-[9px] leading-none ${
+                                                                        isSelected
+                                                                            ? 'bg-blue-500 text-white shadow-inner font-bold'
+                                                                            : 'bg-transparent text-slate-400 hover:bg-slate-200'
+                                                                    }`}
+                                                                    title={`${shift.name} (${shift.start}-${shift.end})`}
+                                                                >
+                                                                    {isSelected ? shift.code : ''}
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
                                                 </td>
                                             );
                                         })}
-                                        <td className="p-2 border sticky right-0 z-20 bg-white text-center align-middle">
-                                            <div className="flex flex-col gap-1"><div className="font-bold text-slate-800 text-xs">{stats.totalDays} 天</div><div className="text-slate-500 font-mono text-[10px]">{stats.totalHours} hr</div></div>
+                                        <td className="p-1 border sticky right-0 z-20 bg-white text-center align-middle min-w-[50px]">
+                                            <div className="flex flex-col gap-0">
+                                                <div className="font-bold text-slate-800 text-[10px]">{stats.totalDays} 天</div>
+                                                <div className="text-slate-500 font-mono text-[9px]">{stats.totalHours} hr</div>
+                                            </div>
                                         </td>
                                     </tr>
                                 );
