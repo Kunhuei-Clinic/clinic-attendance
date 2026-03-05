@@ -1,20 +1,23 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, ShieldAlert, Lock, Clock, Settings, Save, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Clock, Settings } from 'lucide-react';
 
-type Staff = { id: string; name: string; role: string; display_order: number; work_rule: 'normal' | '2week' | '4week' | '8week' | 'none'; entity?: string; }; // UUID
-type DayType = 'normal' | 'rest' | 'regular' | 'holiday' | 'shifted';
-type ShiftConfig = { id: string; code: string; name: string; start: string; end: string; };
-// 更新 RosterData 定義，將 shifts 改為字串陣列，並保留 shift_details
-type RosterData = { shifts: string[]; day_type: DayType; shift_details?: Record<string, { start: string, end: string }> };
-
-type Entity = { id: string; name: string };
-type JobTitleConfig = { name: string; in_roster: boolean };
+import {
+    Staff,
+    DayType,
+    ShiftConfig,
+    RosterData,
+    Entity,
+    JobTitleConfig,
+    BusinessHours,
+} from './types';
+import TimeSettingModal from './TimeSettingModal';
+import RosterTable from './RosterTable';
 
 const FALLBACK_ENTITIES: Entity[] = [
     { id: 'clinic', name: '診所' },
-    { id: 'pharmacy', name: '藥局' }
+    { id: 'pharmacy', name: '藥局' },
 ];
 
 export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'manager' }) {
@@ -31,9 +34,9 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
 
     // --- 🕒 營業時間設定相關 State ---
     const [showTimeModal, setShowTimeModal] = useState(false);
-    const [businessHours, setBusinessHours] = useState({
+    const [businessHours, setBusinessHours] = useState<BusinessHours>({
         openDays: [1, 2, 3, 4, 5, 6],
-        shifts: [] as ShiftConfig[]
+        shifts: [],
     });
     // 🆕 一鍵排整天模式：勾選後，點「早班」可視為排整天 (早/午/晚)
     const [fullDayFromMorning, setFullDayFromMorning] = useState(false);
@@ -49,15 +52,17 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
         setTodayStr(`${y}-${m}-${day}`);
         fetchGlobalSettings(); // 載入營業時間設定
         fetchRosterSettings(); // 載入職稱與組織單位設定
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     // 🟢 優化：集中載入當月資料（員工列表、班表、國定假日），使用 Promise.all 減少重繪
     useEffect(() => {
         loadMonthData();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [currentDate]);
 
-  // 🟢 功能：讀取系統設定 (營業時間) - 從 clinic JSONB 讀取
-  const fetchGlobalSettings = async () => {
+    // 🟢 功能：讀取系統設定 (營業時間) - 從 clinic JSONB 讀取
+    const fetchGlobalSettings = async () => {
         try {
             const response = await fetch('/api/settings?type=clinic');
             const result = await response.json();
@@ -74,32 +79,32 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
                             // 舊版 Object 格式相容轉換
                             parsedShifts = Object.entries(rawShifts).map(([key, val]: any, idx) => ({
                                 id: String(idx),
-                                code: key === 'AM' ? 'M' : (key === 'PM' ? 'A' : 'N'),
-                                name: key === 'AM' ? '早診' : (key === 'PM' ? '午診' : '晚診'),
+                                code: key === 'AM' ? 'M' : key === 'PM' ? 'A' : 'N',
+                                name: key === 'AM' ? '早診' : key === 'PM' ? '午診' : '晚診',
                                 start: val.start,
-                                end: val.end
+                                end: val.end,
                             }));
                         }
                         setShiftsConfig(parsedShifts);
                         setBusinessHours({
                             openDays: Array.isArray(settings.openDays) ? settings.openDays : [1, 2, 3, 4, 5, 6],
-                            shifts: parsedShifts
+                            shifts: parsedShifts,
                         });
                     } else {
                         // 預設防呆
                         const fallbackShifts: ShiftConfig[] = [
                             { id: '1', code: 'M', name: '早診', start: '08:00', end: '12:00' },
                             { id: '2', code: 'A', name: '午診', start: '14:00', end: '18:00' },
-                            { id: '3', code: 'N', name: '晚診', start: '18:30', end: '21:30' }
+                            { id: '3', code: 'N', name: '晚診', start: '18:30', end: '21:30' },
                         ];
                         setShiftsConfig(fallbackShifts);
                         setBusinessHours({
                             openDays: [1, 2, 3, 4, 5, 6],
-                            shifts: fallbackShifts
+                            shifts: fallbackShifts,
                         });
                     }
                 } catch (e) {
-                    console.error("解析營業時間失敗", e);
+                    console.error('解析營業時間失敗', e);
                 }
             }
         } catch (error) {
@@ -115,7 +120,7 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
             if (!result.data) {
                 setJobTitleConfigs([
                     { name: '醫師', in_roster: false },
-                    { name: '護理師', in_roster: true }
+                    { name: '護理師', in_roster: true },
                 ]);
                 setEntities(FALLBACK_ENTITIES);
                 return;
@@ -129,17 +134,20 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
                     const raw = JSON.parse(jobTitlesItem.value);
                     if (Array.isArray(raw) && raw.length > 0) {
                         if (typeof raw[0] === 'string') {
-                            loadedJobTitles = (raw as string[]).map((name) => ({
+                            loadedJobTitles = (raw as string[]).map(name => ({
                                 name,
-                                in_roster: name === '醫師' ? false : true
+                                in_roster: name === '醫師' ? false : true,
                             }));
                         } else {
                             loadedJobTitles = raw
                                 .map((jt: any) => ({
                                     name: jt.name ?? '',
-                                    in_roster: typeof jt.in_roster === 'boolean'
-                                        ? jt.in_roster
-                                        : (jt.name === '醫師' ? false : true)
+                                    in_roster:
+                                        typeof jt.in_roster === 'boolean'
+                                            ? jt.in_roster
+                                            : jt.name === '醫師'
+                                            ? false
+                                            : true,
                                 }))
                                 .filter((jt: JobTitleConfig) => jt.name);
                         }
@@ -154,7 +162,7 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
                     { name: '護理師', in_roster: true },
                     { name: '行政', in_roster: true },
                     { name: '藥師', in_roster: true },
-                    { name: '清潔', in_roster: false }
+                    { name: '清潔', in_roster: false },
                 ];
             }
             setJobTitleConfigs(loadedJobTitles);
@@ -169,7 +177,7 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
                         loadedEntities = rawEnt
                             .map((e: any) => ({
                                 id: e.id ?? '',
-                                name: e.name ?? ''
+                                name: e.name ?? '',
                             }))
                             .filter((e: Entity) => e.id && e.name);
                     }
@@ -185,7 +193,7 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
             console.error('Fetch roster settings error:', error);
             setJobTitleConfigs([
                 { name: '醫師', in_roster: false },
-                { name: '護理師', in_roster: true }
+                { name: '護理師', in_roster: true },
             ]);
             setEntities(FALLBACK_ENTITIES);
         }
@@ -199,19 +207,19 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     type: 'clinic',
-                    settings: { business_hours: businessHours }
-                })
+                    settings: { business_hours: businessHours },
+                }),
             });
             const result = await response.json();
             if (result.success) {
-                alert("營業時間已更新，後續點擊排班將套用新時間。");
+                alert('營業時間已更新，後續點擊排班將套用新時間。');
                 setShowTimeModal(false);
             } else {
-                alert("儲存失敗: " + result.message);
+                alert('儲存失敗: ' + result.message);
             }
         } catch (error) {
             console.error('Save global time error:', error);
-            alert("儲存失敗");
+            alert('儲存失敗');
         }
     };
 
@@ -220,36 +228,36 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
         try {
             const year = currentDate.getFullYear();
             const month = currentDate.getMonth() + 1;
-            
+
             const [staffRes, rosterRes, holidaysRes] = await Promise.all([
                 fetch('/api/staff'),
                 fetch(`/api/roster/staff?year=${year}&month=${month}`),
-                fetch(`/api/roster/holidays?year=${year}&month=${month}`)
+                fetch(`/api/roster/holidays?year=${year}&month=${month}`),
             ]);
 
             const [staffResult, rosterResult, holidaysResult] = await Promise.all([
                 staffRes.json(),
                 rosterRes.json(),
-                holidaysRes.json()
+                holidaysRes.json(),
             ]);
 
             // 處理員工列表（權重排序）
             if (staffResult.data) {
-                const roleWeight: Record<string, number> = { 
-                  '醫師': 1, 
-                  '主管': 2, 
-                  '櫃台': 3, 
-                  '護理師': 4, 
-                  '營養師': 5, 
-                  '診助': 6, 
-                  '藥師': 7, 
-                  '藥局助理': 8 
+                const roleWeight: Record<string, number> = {
+                    醫師: 1,
+                    主管: 2,
+                    櫃台: 3,
+                    護理師: 4,
+                    營養師: 5,
+                    診助: 6,
+                    藥師: 7,
+                    藥局助理: 8,
                 };
                 const sorted = [...staffResult.data].sort((a, b) => {
-                  const aWeight = roleWeight[a.role || ''] ?? 999;
-                  const bWeight = roleWeight[b.role || ''] ?? 999;
-                  if (aWeight !== bWeight) return aWeight - bWeight;
-                  return (a.name || '').localeCompare(b.name || '');
+                    const aWeight = roleWeight[a.role || ''] ?? 999;
+                    const bWeight = roleWeight[b.role || ''] ?? 999;
+                    if (aWeight !== bWeight) return aWeight - bWeight;
+                    return (a.name || '').localeCompare(b.name || '');
                 });
                 setStaffList(sorted);
             }
@@ -265,7 +273,7 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
                     if (r.day_type === 'regular') day_type = 'regular';
                     if (r.day_type === 'holiday') day_type = 'holiday';
                     if (r.day_type === 'shifted') day_type = 'shifted';
-                    
+
                     const shift_details = r.shift_details || {};
                     map[`${r.staff_id}_${r.date}`] = { shifts, day_type, shift_details };
                 });
@@ -314,14 +322,14 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
             const rule = staff.work_rule || 'normal';
             if (rule === 'none') return;
             let consecutiveDays = 0;
-            let maxConsecutive = (rule === '4week') ? 12 : 6;
+            const maxConsecutive = rule === '4week' ? 12 : 6;
             days.forEach(day => {
                 const key = `${staff.id}_${day.dateStr}`;
                 const data = rosterMap[key] || { shifts: [], day_type: 'normal' };
                 if (data.shifts.length > 0) {
                     consecutiveDays++;
                     if (data.day_type === 'regular') {
-                        if (!staffErrors.includes(`例假排班`)) staffErrors.push(`例假排班`);
+                        if (!staffErrors.includes('例假排班')) staffErrors.push('例假排班');
                     }
                 } else {
                     consecutiveDays = 0;
@@ -334,18 +342,21 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
         });
         setComplianceErrors(errors);
     };
-    useEffect(() => { validateCompliance(); }, [rosterMap, staffList]);
+    useEffect(() => {
+        validateCompliance();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [rosterMap, staffList]);
 
     const updateWorkRule = async (staffId: string, rule: any) => {
         try {
             const response = await fetch('/api/staff', {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: staffId, work_rule: rule })
+                body: JSON.stringify({ id: staffId, work_rule: rule }),
             });
             const result = await response.json();
             if (result.success) {
-                setStaffList(prev => prev.map(s => s.id === staffId ? { ...s, work_rule: rule } : s));
+                setStaffList(prev => prev.map(s => (s.id === staffId ? { ...s, work_rule: rule } : s)));
             }
         } catch (error) {
             console.error('Update work rule error:', error);
@@ -354,7 +365,7 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
 
     const toggleGlobalHoliday = async (dateStr: string) => {
         if (authLevel !== 'boss') return;
-        
+
         try {
             if (holidays.includes(dateStr)) {
                 const response = await fetch(`/api/roster/holidays?date=${dateStr}`, { method: 'DELETE' });
@@ -366,7 +377,7 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
                 const response = await fetch('/api/roster/holidays', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ date: dateStr, name: '國定假日' })
+                    body: JSON.stringify({ date: dateStr, name: '國定假日' }),
                 });
                 const result = await response.json();
                 if (result.success) {
@@ -382,8 +393,8 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
         const key = `${staffId}_${dateStr}`;
         const currentData = rosterMap[key] || { shifts: [], day_type: 'normal' };
 
-        const nextType = currentData.day_type === activeStamp ? 'normal' : activeStamp;
-        const nextShifts = (nextType === 'regular') ? [] : currentData.shifts;
+        const nextType: DayType = currentData.day_type === activeStamp ? 'normal' : activeStamp;
+        const nextShifts = nextType === 'regular' ? [] : currentData.shifts;
         updateRoster(staffId, dateStr, nextShifts, nextType, currentData.shift_details);
     };
 
@@ -392,7 +403,9 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
         const currentData = rosterMap[key] || { shifts: [], day_type: 'normal', shift_details: {} };
 
         let nextShifts = [...currentData.shifts];
-        let nextDetails: Record<string, { start: string; end: string }> = { ...(currentData.shift_details || {}) };
+        const nextDetails: Record<string, { start: string; end: string }> = {
+            ...(currentData.shift_details || {}),
+        };
 
         const isActive = nextShifts.includes(shiftConfig.code);
 
@@ -406,11 +419,15 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
             if (isFullDayActive) {
                 // 已是整天班，再點一次則全部清空
                 nextShifts = [];
-                nextDetails = {};
+                Object.keys(nextDetails).forEach(code => {
+                    delete nextDetails[code];
+                });
             } else {
                 // 將當天所有班別都排上
                 nextShifts = [...allCodes];
-                nextDetails = {};
+                Object.keys(nextDetails).forEach(code => {
+                    delete nextDetails[code];
+                });
                 shiftsConfig.forEach(s => {
                     nextDetails[s.code] = { start: s.start, end: s.end };
                 });
@@ -431,11 +448,17 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
     };
 
     // 🟢 核心功能更新：將 shift_details 寫入資料庫（支援動態班別代號）
-    const updateRoster = async (staffId: string, dateStr: string, shifts: string[], dayType: DayType, details: any = {}) => {
+    const updateRoster = async (
+        staffId: string,
+        dateStr: string,
+        shifts: string[],
+        dayType: DayType,
+        details: Record<string, { start: string; end: string }> = {},
+    ) => {
         const key = `${staffId}_${dateStr}`;
-        
+
         setRosterMap(prev => ({ ...prev, [key]: { shifts, day_type: dayType, shift_details: details } }));
-        
+
         try {
             const response = await fetch('/api/roster/staff', {
                 method: 'POST',
@@ -445,8 +468,8 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
                     date: dateStr,
                     shifts,
                     day_type: dayType,
-                    shift_details: details
-                })
+                    shift_details: details,
+                }),
             });
             const result = await response.json();
             if (!result.success) {
@@ -462,13 +485,13 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
         let totalDays = 0;
         let totalHours = 0;
         const days = getDaysInMonth();
-        
+
         days.forEach(day => {
             const key = `${staffId}_${day.dateStr}`;
             const data = rosterMap[key];
             if (data && data.shifts.length > 0) {
                 totalDays++;
-                
+
                 // 優先使用 snapshot 的時間計算
                 if (data.shift_details && Object.keys(data.shift_details).length > 0) {
                     data.shifts.forEach(s => {
@@ -502,122 +525,7 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
 
     // 依 job_titles 設定取得允許排班的職稱
     const configuredRoleSet = new Set(jobTitleConfigs.map(j => j.name));
-    const allowedRoleSet = new Set(
-        jobTitleConfigs.filter(j => j.in_roster).map(j => j.name)
-    );
-
-    // UI Render Helper：根據給定的員工清單渲染一張表
-    const renderTable = (title: string, staffForEntity: Staff[], colorClass: string) => {
-        const groupStaff = staffForEntity.slice();
-
-        if (groupStaff.length === 0) return null;
-
-        return (
-            <div className="mb-8 overflow-hidden rounded-lg shadow-sm border border-slate-200">
-                <h3 className={`font-bold text-lg p-2 border-b bg-white border-l-4 ${colorClass}`}>{title}</h3>
-                <div className="overflow-x-auto">
-                    {/* 🟢 關鍵修正：加入 table-fixed 與 min-w-[1450px] 強制鎖定比例，防止按鈕擠壓變形 */}
-                    <table className="w-full border-collapse bg-white table-fixed min-w-[1450px]">
-                        <thead>
-                            <tr>
-                                {/* 🟢 頭部縮小：寬度鎖定在 90px */}
-                                <th className="p-2 border bg-slate-50 sticky left-0 z-30 w-[90px] text-left shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-xs">員工</th>
-                                {days.map(d => {
-                                    const isToday = d.dateStr === todayStr;
-                                    const isWeekend = d.dayOfWeek === 0 || d.dayOfWeek === 6;
-                                    return (
-                                        <th
-                                            key={d.dateStr}
-                                            onClick={() => toggleGlobalHoliday(d.dateStr)}
-                                            // 🟢 每日欄位恢復：寬度鎖定 42px
-                                            className={`border p-1 text-center w-[42px] cursor-default select-none ${
-                                                isToday ? 'bg-yellow-100 text-yellow-800' : isWeekend ? 'text-red-500' : ''
-                                            }`}
-                                        >
-                                            <div className="text-[10px] leading-tight opacity-60">
-                                                {weekDays[d.dayOfWeek]}
-                                            </div>
-                                            <div className="text-xs font-bold">
-                                                {d.dateStr.slice(8)}
-                                            </div>
-                                        </th>
-                                    );
-                                })}
-                                {/* 🟢 尾部縮小：寬度鎖定在 65px */}
-                                <th className="p-1 border bg-slate-50 sticky right-0 z-30 w-[65px] text-center text-xs">統計</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {groupStaff.map(staff => {
-                                const stats = calculateStats(staff.id);
-                                return (
-                                    <tr key={staff.id}>
-                                        <td className="p-2 border sticky left-0 z-20 bg-white shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] align-top w-[90px] overflow-hidden">
-                                            <div className="font-bold text-slate-700 text-xs truncate" title={staff.name}>{staff.name}</div>
-                                            <div className="text-[10px] text-slate-400 truncate">{staff.role}</div>
-                                            {complianceErrors[staff.id] && <div className="text-[9px] text-red-600 bg-red-50 p-0.5 rounded flex items-center gap-0.5 mt-0.5"><ShieldAlert size={10} /> 違規</div>}
-                                        </td>
-                                        {days.map(d => {
-                                            const key = `${staff.id}_${d.dateStr}`;
-                                            const data = rosterMap[key] || { shifts: [], day_type: 'normal' };
-                                            const isToday = d.dateStr === todayStr;
-                                            
-                                            let cellBg = isToday ? 'bg-yellow-50' : '';
-                                            if (data.day_type === 'rest') cellBg = 'bg-emerald-50';
-                                            else if (data.day_type === 'regular') cellBg = "bg-red-50 bg-[linear-gradient(45deg,transparent_25%,rgba(255,0,0,0.05)_50%,transparent_75%,transparent_100%)] bg-[length:10px_10px]";
-                                            else if (data.day_type === 'holiday') cellBg = 'bg-pink-50';
-                                            else if (data.day_type === 'shifted') cellBg = 'bg-slate-100';
-
-                                            let btnClass = 'text-transparent hover:text-slate-300';
-                                            let btnText = '•';
-                                            if (data.day_type === 'rest') { btnClass = 'bg-emerald-200 text-emerald-800'; btnText = '休'; }
-                                            else if (data.day_type === 'regular') { btnClass = 'bg-red-200 text-red-800'; btnText = '例'; }
-                                            else if (data.day_type === 'holiday') { btnClass = 'bg-pink-300 text-pink-900'; btnText = '國'; }
-                                            else if (data.day_type === 'shifted') { btnClass = 'bg-slate-300 text-slate-700'; btnText = '調'; }
-
-                                            return (
-                                                // 🟢 恢復安全高度 h-[76px] 並加上 overflow-hidden 防溢出
-                                                <td key={d.dateStr} className={`border p-0.5 text-center align-top h-[76px] relative w-[42px] overflow-hidden ${cellBg}`}>
-                                                    <button
-                                                        onClick={() => applyDayTypeStamp(staff.id, d.dateStr)}
-                                                        className={`w-full h-5 shrink-0 rounded-sm text-[10px] font-bold mb-0.5 transition-colors ${btnClass}`}
-                                                    >
-                                                        {btnText}
-                                                    </button>
-                                                    <div className="flex flex-col h-[calc(100%-22px)] w-full divide-y divide-slate-100 overflow-hidden">
-                                                        {shiftsConfig.map(shift => {
-                                                            const isSelected = data.shifts.includes(shift.code);
-                                                            return (
-                                                                <button
-                                                                    key={shift.id}
-                                                                    onClick={() => toggleShift(staff.id, d.dateStr, shift)}
-                                                                    className={`flex-1 w-full flex items-center justify-center transition-all min-h-[14px] text-[10px] leading-none ${
-                                                                        isSelected 
-                                                                            ? 'bg-blue-500 text-white shadow-inner font-bold' 
-                                                                            : 'bg-transparent text-slate-400 hover:bg-slate-200'
-                                                                    }`}
-                                                                    title={`${shift.name} (${shift.start}-${shift.end})`}
-                                                                >
-                                                                    {isSelected ? shift.code : ''}
-                                                                </button>
-                                                            );
-                                                        })}
-                                                    </div>
-                                                </td>
-                                            );
-                                        })}
-                                        <td className="p-1 border sticky right-0 z-20 bg-white text-center align-middle w-[65px]">
-                                            <div className="flex flex-col gap-0.5"><div className="font-bold text-slate-800 text-xs">{stats.totalDays} 天</div><div className="text-slate-500 font-mono text-[10px]">{stats.totalHours} hr</div></div>
-                                        </td>
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        );
-    };
+    const allowedRoleSet = new Set(jobTitleConfigs.filter(j => j.in_roster).map(j => j.name));
 
     if (!isMounted) return null;
 
@@ -626,9 +534,25 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
             {/* Header Area */}
             <div className="flex flex-col md:flex-row justify-between mb-4 items-center gap-4">
                 <div className="flex items-center gap-4 bg-slate-100 p-1 rounded-full shadow-inner">
-                    <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))} className="p-2 hover:bg-white rounded-full transition"><ChevronLeft size={16} /></button>
-                    <h2 className="text-lg font-bold min-w-[120px] text-center text-slate-700">{currentDate.getFullYear()}年 {currentDate.getMonth() + 1}月</h2>
-                    <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1))} className="p-2 hover:bg-white rounded-full transition"><ChevronRight size={16} /></button>
+                    <button
+                        onClick={() =>
+                            setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))
+                        }
+                        className="p-2 hover:bg-white rounded-full transition"
+                    >
+                        <ChevronLeft size={16} />
+                    </button>
+                    <h2 className="text-lg font-bold min-w-[120px] text-center text-slate-700">
+                        {currentDate.getFullYear()}年 {currentDate.getMonth() + 1}月
+                    </h2>
+                    <button
+                        onClick={() =>
+                            setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1))
+                        }
+                        className="p-2 hover:bg-white rounded-full transition"
+                    >
+                        <ChevronRight size={16} />
+                    </button>
                 </div>
 
                 <div className="flex flex-wrap gap-2 items-center justify-end">
@@ -649,18 +573,33 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
                     <div className="flex items-center gap-1 bg-white p-1 rounded-lg border border-slate-300 shadow-sm text-xs">
                         <span className="text-slate-500 font-bold px-2">假別印章:</span>
                         {(['normal', 'rest', 'regular', 'holiday', 'shifted'] as DayType[]).map(type => {
-                            let label = '平日'; let color = 'text-slate-400 bg-slate-100 hover:bg-slate-200';
-                            if (type === 'rest') { label = '休(休息日)'; color = 'text-emerald-800 bg-emerald-100 hover:bg-emerald-200'; }
-                            if (type === 'regular') { label = '例(例假日)'; color = 'text-red-800 bg-red-100 hover:bg-red-200'; }
-                            if (type === 'holiday') { label = '國(排國定假)'; color = 'text-pink-900 bg-pink-200 hover:bg-pink-300'; }
-                            if (type === 'shifted') { label = '調(調移作平日)'; color = 'text-slate-700 bg-slate-300 hover:bg-slate-400'; }
+                            let label = '平日';
+                            let color = 'text-slate-400 bg-slate-100 hover:bg-slate-200';
+                            if (type === 'rest') {
+                                label = '休(休息日)';
+                                color = 'text-emerald-800 bg-emerald-100 hover:bg-emerald-200';
+                            }
+                            if (type === 'regular') {
+                                label = '例(例假日)';
+                                color = 'text-red-800 bg-red-100 hover:bg-red-200';
+                            }
+                            if (type === 'holiday') {
+                                label = '國(排國定假)';
+                                color = 'text-pink-900 bg-pink-200 hover:bg-pink-300';
+                            }
+                            if (type === 'shifted') {
+                                label = '調(調移作平日)';
+                                color = 'text-slate-700 bg-slate-300 hover:bg-slate-400';
+                            }
 
                             const isActive = activeStamp === type;
                             return (
                                 <button
                                     key={type}
                                     onClick={() => setActiveStamp(type)}
-                                    className={`px-3 py-1.5 rounded-md font-bold transition ${isActive ? 'ring-2 ring-blue-500 shadow-md ' + color : color + ' opacity-60'}`}
+                                    className={`px-3 py-1.5 rounded-md font-bold transition ${
+                                        isActive ? `ring-2 ring-blue-500 shadow-md ${color}` : `${color} opacity-60`
+                                    }`}
                                 >
                                     {label}
                                 </button>
@@ -669,14 +608,26 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
                     </div>
 
                     {/* 🟢 營業時間設定按鈕 */}
-                    <button onClick={() => setShowTimeModal(true)} className="flex items-center gap-2 bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-bold shadow hover:bg-black transition">
+                    <button
+                        onClick={() => setShowTimeModal(true)}
+                        className="flex items-center gap-2 bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-bold shadow hover:bg-black transition"
+                    >
                         <Clock size={16} /> 班別時間設定
                     </button>
-                    
+
                     <div className="hidden md:flex flex-wrap gap-2 text-xs items-center bg白 p-2 rounded-lg border shadow-sm">
-                        <div className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-orange-400"></span>早</div>
-                        <div className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-blue-400"></span>午</div>
-                        <div className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-purple-400"></span>晚</div>
+                        <div className="flex items-center gap-1">
+                            <span className="w-3 h-3 rounded-sm bg-orange-400" />
+                            早
+                        </div>
+                        <div className="flex items-center gap-1">
+                            <span className="w-3 h-3 rounded-sm bg-blue-400" />
+                            午
+                        </div>
+                        <div className="flex items-center gap-1">
+                            <span className="w-3 h-3 rounded-sm bg-purple-400" />
+                            晚
+                        </div>
                     </div>
                 </div>
             </div>
@@ -700,62 +651,36 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
                         ? 'border-green-500 text-green-700'
                         : 'border-purple-500 text-purple-700';
 
-                return renderTable(`👥 ${ent.name}人員`, staffForEntity, colorClass);
+                return (
+                    <RosterTable
+                        key={ent.id}
+                        title={`👥 ${ent.name}人員`}
+                        staffForEntity={staffForEntity}
+                        colorClass={colorClass}
+                        days={days}
+                        todayStr={todayStr}
+                        weekDays={weekDays}
+                        rosterMap={rosterMap}
+                        complianceErrors={complianceErrors}
+                        shiftsConfig={shiftsConfig}
+                        calculateStats={calculateStats}
+                        applyDayTypeStamp={applyDayTypeStamp}
+                        toggleShift={toggleShift}
+                        toggleGlobalHoliday={toggleGlobalHoliday}
+                    />
+                );
             })}
 
             {/* 🟢 Modal: 班別時間設定 */}
-            {showTimeModal && (
-                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-md animate-in fade-in zoom-in duration-200 overflow-hidden">
-                        <div className="bg-slate-900 text-white p-4 flex justify-between items-center">
-                            <h3 className="font-bold flex items-center gap-2"><Clock size={18}/> 設定班表預設時間</h3>
-                            <button onClick={() => setShowTimeModal(false)} className="hover:bg-white/20 p-1 rounded-full"><X size={18}/></button>
-                        </div>
-                        <div className="p-6 space-y-6">
-                            <div className="bg-blue-50 p-3 rounded-lg text-xs text-blue-800 mb-4">
-                                💡 修改此處會更新系統預設值。點擊排班格子時，將寫入當下設定的時間 (Snapshot)，避免日後修改設定影響舊班表。
-                            </div>
-                            {businessHours.shifts.map((shift, index) => (
-                                <div key={shift.id} className="flex items-center gap-4">
-                                    <div className="w-16 text-center text-xs font-bold py-1 rounded text-white bg-slate-500">
-                                        {shift.name} ({shift.code})
-                                    </div>
-                                    <div className="flex items-center gap-2 flex-1">
-                                        <input
-                                            type="time"
-                                            value={shift.start}
-                                            onChange={e => {
-                                                const newShifts = businessHours.shifts.map((s, i) =>
-                                                    i === index ? { ...s, start: e.target.value } : s
-                                                );
-                                                setBusinessHours({ ...businessHours, shifts: newShifts });
-                                                setShiftsConfig(newShifts);
-                                            }}
-                                            className="border rounded p-2 text-sm font-mono flex-1 text-center bg-slate-50 focus:bg-white transition outline-none focus:ring-2 focus:ring-blue-200"
-                                        />
-                                        <span className="text-slate-400">-</span>
-                                        <input
-                                            type="time"
-                                            value={shift.end}
-                                            onChange={e => {
-                                                const newShifts = businessHours.shifts.map((s, i) =>
-                                                    i === index ? { ...s, end: e.target.value } : s
-                                                );
-                                                setBusinessHours({ ...businessHours, shifts: newShifts });
-                                                setShiftsConfig(newShifts);
-                                            }}
-                                            className="border rounded p-2 text-sm font-mono flex-1 text-center bg-slate-50 focus:bg-white transition outline-none focus:ring-2 focus:ring-blue-200"
-                                        />
-                                    </div>
-                                </div>
-                            ))}
-                            <button onClick={handleSaveGlobalTime} className="w-full bg-slate-800 text-white py-3 rounded-lg font-bold hover:bg-black transition flex justify-center items-center gap-2">
-                                <Save size={18}/> 儲存並套用
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            <TimeSettingModal
+                isOpen={showTimeModal}
+                onClose={() => setShowTimeModal(false)}
+                businessHours={businessHours}
+                setBusinessHours={setBusinessHours}
+                setShiftsConfig={setShiftsConfig}
+                handleSaveGlobalTime={handleSaveGlobalTime}
+            />
         </div>
     );
 }
+
