@@ -179,17 +179,20 @@ export default function SettingsModal({ staff, updateStaff, entityList, onClose 
                     {staff.salary_mode === 'monthly' ? '元 / 月' : '元 / 時'}
                   </span>
                </div>
-               <div className="flex items-center gap-2 border p-3 rounded-lg bg-white shadow-sm border-indigo-200">
-                  <span className="text-indigo-600 font-bold text-sm">線上諮詢時薪</span>
-                  <input 
-                    type="number"
-                    value={staff.online_hourly_rate ?? staff.base_salary ?? ''} 
-                    onChange={(e)=>updateStaff(staff.id, 'online_hourly_rate', e.target.value === '' ? undefined : Number(e.target.value))}
-                    className="bg-transparent font-bold w-full outline-none text-slate-800"
-                    placeholder="未設定則依本薪/時薪"
-                  />
-                  <span className="text-xs text-slate-400">元/時</span>
-               </div>
+               {/* 🟢 只有在工時制度選擇「線上諮詢」時，才顯示專屬時薪設定 */}
+               {staff.work_rule === 'online_consultation' && (
+                 <div className="flex items-center gap-2 border p-3 rounded-lg bg-white shadow-sm border-indigo-200 animate-fade-in">
+                    <span className="text-indigo-600 font-bold text-sm">線上諮詢時薪</span>
+                    <input
+                      type="number"
+                      value={staff.online_hourly_rate ?? ''}
+                      onChange={(e)=>updateStaff(staff.id, 'online_hourly_rate', e.target.value === '' ? null : Number(e.target.value))}
+                      className="bg-transparent font-bold w-full outline-none text-slate-800"
+                      placeholder={`未設定則依本薪 (${staff.salary_mode === 'monthly' ? Math.round((staff.base_salary || 0) / 240) : staff.base_salary})`}
+                    />
+                    <span className="text-xs text-slate-400">元/時</span>
+                 </div>
+               )}
             </div>
           )}
 
