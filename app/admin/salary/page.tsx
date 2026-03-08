@@ -573,7 +573,7 @@ export default function SalaryPage() {
               type="month"
               value={selectedMonth}
               onChange={(e) => setSelectedMonth(e.target.value)}
-              className="w-[200px] sm:w-[220px] text-center text-2xl sm:text-3xl font-black text-slate-700 bg-white border-2 border-slate-200 rounded-xl py-4 px-3 outline-none focus:border-blue-500 focus:shadow-md transition-all shadow-sm"
+              className="w-[200px] sm:w-[220px] text-center text-base sm:text-lg font-bold text-slate-700 bg-white border-2 border-slate-200 rounded-xl py-3 px-3 outline-none focus:border-blue-500 focus:shadow-md transition-all shadow-sm"
             />
             <button
               onClick={() => setSelectedMonth(prev => format(addMonths(new Date(`${prev}-01`), 1), 'yyyy-MM'))}

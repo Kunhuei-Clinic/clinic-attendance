@@ -386,7 +386,7 @@ export default function DoctorSalaryView() {
                             type="month"
                             value={currentMonth}
                             onChange={(e) => setCurrentMonth(e.target.value)}
-                            className="flex-1 min-w-0 text-center text-2xl md:text-3xl font-black text-slate-700 bg-white border-2 border-teal-200 rounded-xl py-4 px-2 outline-none focus:border-teal-500 focus:shadow-md transition-all shadow-sm"
+                            className="flex-1 min-w-0 text-center text-base sm:text-lg font-bold text-slate-700 bg-white border-2 border-teal-200 rounded-xl py-3 px-2 outline-none focus:border-teal-500 focus:shadow-md transition-all shadow-sm"
                         />
                         <button
                             onClick={() => changeMonth('next')}
