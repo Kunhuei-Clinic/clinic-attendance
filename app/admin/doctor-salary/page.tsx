@@ -78,6 +78,8 @@ export default function DoctorSalaryPage() {
     const [ppfData, setPpfData] = useState(() => ({ ...DEFAULT_PPF_DATA }));
 
     const [isSaving, setIsSaving] = useState(false);
+    const [hasConfirmedMonth, setHasConfirmedMonth] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
     const [showSettings, setShowSettings] = useState(false);
     const [showPayslip, setShowPayslip] = useState(false);
 
@@ -92,12 +94,13 @@ export default function DoctorSalaryPage() {
 
     useEffect(() => {
         resetForm();
-        if (!selectedDoctorId || !currentMonth || !ppfTargetMonth) return;
+        if (!selectedDoctorId || !currentMonth || !ppfTargetMonth || !hasConfirmedMonth) return; // 🟢 加入 !hasConfirmedMonth 攔截
 
         const doctor = doctors.find((d: any) => d.id === selectedDoctorId);
         if (!doctor) return;
 
         let cancelled = false;
+        setIsLoading(true); // 🟢 啟動遮罩
 
         const run = async () => {
             try {
@@ -242,9 +245,12 @@ export default function DoctorSalaryPage() {
             }
         };
 
-        run();
+        run().finally(() => {
+            if (!cancelled) setIsLoading(false); // 🟢 關閉遮罩
+        });
+
         return () => { cancelled = true; };
-    }, [selectedDoctorId, currentMonth, ppfTargetMonth, doctors]);
+    }, [selectedDoctorId, currentMonth, ppfTargetMonth, doctors, hasConfirmedMonth]);
 
     const fetchDoctors = async () => {
         try {
@@ -358,8 +364,46 @@ export default function DoctorSalaryPage() {
         }
     };
 
+    // 🟢 入口選擇畫面
+    if (!hasConfirmedMonth) {
+        return (
+            <div className="w-full flex items-center justify-center py-20 animate-fade-in min-h-[600px] bg-slate-50/50 rounded-3xl">
+                <div className="bg-white p-10 rounded-3xl shadow-xl border border-slate-100 max-w-md w-full flex flex-col items-center text-center">
+                    <div className="w-20 h-20 bg-teal-50 rounded-full flex items-center justify-center mb-6 shadow-inner">
+                        <Landmark className="text-teal-600" size={40} />
+                    </div>
+                    <h2 className="text-2xl font-bold text-slate-800 mb-2">請選擇醫師發薪月份</h2>
+                    <p className="text-slate-500 text-sm mb-8">選擇您要結算薪資的月份，系統將自動載入 PPF 業績與出勤班表。</p>
+
+                    <input
+                        type="month"
+                        value={currentMonth}
+                        onChange={(e) => setCurrentMonth(e.target.value)}
+                        className="w-full text-center text-3xl font-black text-slate-700 bg-slate-50 border-2 border-teal-200 rounded-xl py-4 mb-8 outline-none focus:border-teal-500 focus:bg-white transition-all shadow-sm"
+                    />
+
+                    <button
+                        onClick={() => setHasConfirmedMonth(true)}
+                        className="w-full bg-teal-600 text-white font-bold text-lg py-4 rounded-xl hover:bg-teal-700 shadow-lg shadow-teal-200 transition transform active:scale-95 flex items-center justify-center gap-2"
+                    >
+                        <Stethoscope size={20} /> 開始載入與結算
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
     return (
-        <div className="w-full animate-fade-in p-4 pb-24">
+        <div className="w-full animate-fade-in p-4 pb-24 relative min-h-[600px]">
+            {/* 🟢 全局載入遮罩 */}
+            {isLoading && (
+                <div className="absolute inset-0 z-50 bg-white/50 backdrop-blur-sm flex items-center justify-center rounded-2xl transition-all">
+                    <div className="flex flex-col items-center gap-4 bg-white/95 p-8 rounded-2xl shadow-2xl border border-slate-100">
+                        <div className="w-12 h-12 border-4 border-slate-200 border-t-teal-600 rounded-full animate-spin"></div>
+                        <span className="text-slate-700 font-bold animate-pulse text-lg">PPF 業績與薪資試算中...</span>
+                    </div>
+                </div>
+            )}
             <div className="flex justify-between items-center mb-6 bg-white p-4 rounded-xl shadow-sm border">
                 <h2 className="text-xl font-bold flex items-center gap-2 text-slate-800"><Stethoscope className="text-teal-600" /> 醫師薪資結算</h2>
                 <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-lg border">
