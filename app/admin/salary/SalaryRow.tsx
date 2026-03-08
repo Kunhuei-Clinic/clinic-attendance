@@ -349,7 +349,7 @@ export default function SalaryRow({
                       </li>
                       {rpt.holiday_pay > 0 && (
                         <li className="flex justify-between text-blue-600">
-                          <span>國定假日出勤:</span>
+                          <span>國定假日加發 ({rpt.salary_mode === 'monthly' ? '依法給予整日' : '時薪制核實'}):</span>
                           <span className="font-mono">${rpt.holiday_pay}</span>
                         </li>
                       )}

@@ -294,15 +294,21 @@ export const calculateStaffSalary = (
       result.total_work_hours += dailyHours;
 
       if (dayType === 'holiday') { 
-        result.holiday_work_hours += dailyHours;
-
-        // 🟢 勞基法修正：前 8 小時算國定假日加倍，超過部分算一般加班
         const normalWork = Math.min(dailyHours, dailyNormalLimit);
         const otWork = Math.max(0, dailyHours - dailyNormalLimit);
 
-        // 前 8 小時的國定假日加給 (時薪與月薪皆再加發 1 倍)
-        const multiplier = staff.salary_mode === 'hourly' ? 1 : (staff.salary_mode === 'monthly' ? 1 : 2);
-        result.holiday_pay += Math.round(normalWork * hourlyRate * multiplier);
+        // 🟢 修正：累積時數只採計正常工時，避免將加班時數重複顯示
+        result.holiday_work_hours += normalWork;
+
+        // 🟢 勞基法修正：月薪制與時薪制的國定假日給薪差異
+        if (staff.salary_mode === 'monthly') {
+          // 月薪制：只要有出勤 (8小時內)，一律「加發 1 日工資」(8小時)
+          result.holiday_pay += Math.round(8 * hourlyRate);
+        } else {
+          // 時薪制：依實際正常工時給予 1 倍加給 (本薪池已含另1倍)
+          result.holiday_pay += Math.round(normalWork * hourlyRate);
+        }
+
         dailyRecord.normalHours = normalWork;
 
         // 超過 8 小時的部分，落入 1.34 與 1.67 的一般加班費計算
@@ -319,9 +325,12 @@ export const calculateStaffSalary = (
 
         dailyRecord.note = (dailyRecord.note || "") + " 國定假日";
 
-      } else if (dayType === 'regular') { 
-        result.holiday_work_hours += dailyHours;
+      } else if (dayType === 'regular') {
+        // 🟢 順便補上例假日的正常工時紀錄
+        const normalWork = Math.min(dailyHours, dailyNormalLimit);
+        result.holiday_work_hours += normalWork;
         result.holiday_pay += Math.round(dailyHours * hourlyRate * 2);
+        dailyRecord.normalHours = normalWork;
         result.warnings.push(`${dateStr} 例假出勤`);
         dailyRecord.note = (dailyRecord.note || "") + " 例假違規";
 

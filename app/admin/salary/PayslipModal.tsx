@@ -84,7 +84,7 @@ function PrintContent({ report, yearMonth, clinicName }: any) {
   // 🟢 計算國定假日細節 (僅計有出勤的國定/例假)
   const holidayRecords = report.dailyRecords?.filter((r: any) => (r.dayType === 'holiday' || r.dayType === 'regular') && r.totalHours > 0) || [];
   const holidayDates = holidayRecords.map((r: any) => r.date.slice(5)).join(', ');
-  const holidayHours = Number((holidayRecords.reduce((sum: number, r: any) => sum + (r.totalHours || 0), 0) || 0).toFixed(2));
+  const holidayHours = Number((holidayRecords.reduce((sum: number, r: any) => sum + (r.normalHours || 0), 0) || 0).toFixed(2));
 
   const getDayTypeLabel = (type: string) => {
     switch(type) {
@@ -151,7 +151,13 @@ function PrintContent({ report, yearMonth, clinicName }: any) {
                           sub={`共 ${(report.normal_ot_hours ?? 0) + (report.rest_work_hours ?? 0)}hr (換算時薪 $${Math.round(report.base_pay / 240)})`}
                         />
                       )}
-                      <Row label="假日加給" amount={report.holiday_pay} />
+                      {(report.holiday_pay > 0) && (
+                        <Row
+                          label="國定假日加發"
+                          amount={report.holiday_pay}
+                          sub={`${holidayDates} (依法加發 ${holidayRecords.length} 日工資)`}
+                        />
+                      )}
                     </>
                   )}
                   <Row label="固定津貼" amount={report.fixed_bonus_pay} />
