@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
-import { requireOwnerAuth, authErrorToResponse, UnauthorizedError, ForbiddenError } from '@/lib/authHelper';
+import { checkSalaryAccess, authErrorToResponse, UnauthorizedError, ForbiddenError } from '@/lib/authHelper';
 
 /**
  * GET /api/report/salary
- * 取得薪資報表資料（僅 owner）
- * 
+ * 取得薪資報表資料。老闆可查全部或指定員工；員工僅能查本人（staff_id 會由 checkSalaryAccess 強制為本人）。
+ *
  * Query Parameters:
  *   - useDateFilter: boolean (optional)
  *   - startMonth: string (YYYY-MM, optional)
@@ -16,26 +16,28 @@ import { requireOwnerAuth, authErrorToResponse, UnauthorizedError, ForbiddenErro
  */
 export async function GET(request: NextRequest) {
   try {
-    const { clinicId } = await requireOwnerAuth(request);
-
     const searchParams = request.nextUrl.searchParams;
+    const selectedStaffIdParam = searchParams.get('selectedStaffId') || 'all';
+    const { clinicId, effectiveStaffId } = await checkSalaryAccess(
+      request,
+      selectedStaffIdParam === 'all' ? undefined : selectedStaffIdParam
+    );
+
     const useDateFilter = searchParams.get('useDateFilter') === 'true';
     const startMonth = searchParams.get('startMonth');
     const endMonth = searchParams.get('endMonth');
     const month = searchParams.get('month');
     const roleFilter = searchParams.get('roleFilter') || 'all';
-    const selectedStaffId = searchParams.get('selectedStaffId') || 'all';
 
     const data: any[] = [];
 
     // 1. 抓醫師資料 (doctor_ppf)
     if (roleFilter === 'all' || roleFilter === 'doctor') {
-      // 🟢 多租戶：強制加上 clinic_id 過濾
       let query = supabaseAdmin
         .from('doctor_ppf')
         .select(`*, staff:doctor_id (name, role, insurance_labor, insurance_health)`)
         .eq('status', 'locked')
-        .eq('clinic_id', clinicId); // 只查詢該診所的醫師薪資
+        .eq('clinic_id', clinicId);
 
       if (useDateFilter && startMonth && endMonth) {
         query = query.gte('paid_in_month', startMonth).lte('paid_in_month', endMonth);
@@ -43,8 +45,10 @@ export async function GET(request: NextRequest) {
         query = query.eq('paid_in_month', month);
       }
 
-      if (selectedStaffId !== 'all') {
-        query = query.eq('doctor_id', selectedStaffId);
+      if (effectiveStaffId) {
+        query = query.eq('doctor_id', effectiveStaffId);
+      } else if (selectedStaffIdParam !== 'all') {
+        query = query.eq('doctor_id', selectedStaffIdParam);
       }
 
       const { data: docs } = await query;
@@ -82,11 +86,10 @@ export async function GET(request: NextRequest) {
 
     // 2. 抓員工資料 (salary_history)
     if (roleFilter === 'all' || roleFilter === 'staff') {
-      // 🟢 多租戶：強制加上 clinic_id 過濾
       let query = supabaseAdmin
         .from('salary_history')
         .select('year_month, staff_name, snapshot')
-        .eq('clinic_id', clinicId); // 只查詢該診所的員工薪資
+        .eq('clinic_id', clinicId);
 
       if (useDateFilter && startMonth && endMonth) {
         query = query.gte('year_month', startMonth).lte('year_month', endMonth);
@@ -94,15 +97,15 @@ export async function GET(request: NextRequest) {
         query = query.eq('year_month', month);
       }
 
-      if (selectedStaffId !== 'all') {
-        // 🟢 多租戶：需要先取得該診所的員工姓名
+      if (effectiveStaffId) {
+        query = query.eq('staff_id', effectiveStaffId);
+      } else if (selectedStaffIdParam !== 'all') {
         const { data: staff } = await supabaseAdmin
           .from('staff')
           .select('name')
-          .eq('id', selectedStaffId)
-          .eq('clinic_id', clinicId) // 🟢 確保只查詢該診所的員工
+          .eq('id', selectedStaffIdParam)
+          .eq('clinic_id', clinicId)
           .single();
-        
         if (staff) {
           query = query.eq('staff_name', staff.name);
         }

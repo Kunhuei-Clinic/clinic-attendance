@@ -1,27 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
-import { requireOwnerAuth, authErrorToResponse, UnauthorizedError, ForbiddenError } from '@/lib/authHelper';
+import { checkSalaryAccess, requireOwnerAuth, authErrorToResponse, UnauthorizedError, ForbiddenError } from '@/lib/authHelper';
 
 export async function GET(request: NextRequest) {
   try {
-    const { clinicId } = await requireOwnerAuth(request);
-
     const searchParams = request.nextUrl.searchParams;
-    const yearMonth = searchParams.get('year_month');
-    const staffId = searchParams.get('staff_id');
+    const staffIdParam = searchParams.get('staff_id');
+    const { clinicId, effectiveStaffId } = await checkSalaryAccess(request, staffIdParam ?? undefined);
 
-    // 🟢 多租戶：強制加上 clinic_id 過濾
+    const yearMonth = searchParams.get('year_month');
+
+    // 🟢 多租戶 + 權限：clinic_id 過濾；員工僅能看本人（effectiveStaffId 已由 checkSalaryAccess 強制）
     let query = supabaseAdmin
       .from('salary_history')
       .select('*')
-      .eq('clinic_id', clinicId); // 只查詢該診所的薪資歷史
+      .eq('clinic_id', clinicId);
 
     if (yearMonth) {
       query = query.eq('year_month', yearMonth);
     }
 
-    if (staffId) {
-      query = query.eq('staff_id', staffId);
+    if (effectiveStaffId) {
+      query = query.eq('staff_id', effectiveStaffId);
     }
 
     const { data, error } = await query.order('id', { ascending: true });

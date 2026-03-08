@@ -134,3 +134,140 @@ export function authErrorToResponse(e: unknown): { status: number; message: stri
   }
   return { status: 403, message: '僅負責人可執行此操作' };
 }
+
+export type CheckSalaryAccessResult = {
+  clinicId: string;
+  /** owner 時可為 undefined（表示可查全部）；staff 時為本人 staff_id */
+  effectiveStaffId?: string;
+};
+
+/**
+ * 薪資存取檢查：老闆可查任意員工（須符合 clinic_id）；員工僅能查本人。
+ * 先取得當前登入者的 userId 與 authLevel（由 clinic_members.role 判斷），
+ * - 情境 1 (owner)：允許存取任何 targetStaffId 的資料（後續須以 clinic_id 過濾）。
+ * - 情境 2 (staff)：僅當 targetStaffId 為該使用者本人的 staff_id 時放行（經 staff.auth_user_id 反查）。
+ * 若不符合以上兩者，拋出 ForbiddenError（403）；未登入拋 UnauthorizedError（401）。
+ *
+ * @param request NextRequest
+ * @param targetStaffId 欲查詢的員工 ID；若為 null/undefined，員工視為「查本人」，老闆視為「可查全部」
+ * @returns { clinicId, effectiveStaffId? } 通過時；owner 查全部時 effectiveStaffId 為 undefined
+ */
+export async function checkSalaryAccess(
+  request: NextRequest,
+  targetStaffId?: string | null
+): Promise<CheckSalaryAccessResult> {
+  const cookieStore = cookies();
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value;
+        },
+        set(name: string, value: string, options: Record<string, unknown>) {
+          cookieStore.set({ name, value, ...options });
+        },
+        remove(name: string, options: Record<string, unknown>) {
+          cookieStore.set({ name, value: '', ...options });
+        },
+      },
+    }
+  );
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    throw new UnauthorizedError('無法識別診所，請重新登入');
+  }
+
+  const userId = user.id;
+  const targetClinicId = request.headers.get('x-clinic-id') || cookieStore.get('active_clinic_id')?.value;
+
+  // 1. Super Admin 視同 owner
+  const { data: superAdmin } = await supabaseAdmin
+    .from('super_admins')
+    .select('user_id')
+    .eq('user_id', userId)
+    .single();
+
+  if (superAdmin) {
+    const clinicId = targetClinicId || (await (async () => {
+      const { data: first } = await supabaseAdmin
+        .from('clinic_members')
+        .select('clinic_id')
+        .eq('user_id', userId)
+        .limit(1)
+        .single();
+      return first?.clinic_id ?? null;
+    })());
+    if (!clinicId) throw new UnauthorizedError('無法識別診所，請重新登入');
+    return { clinicId, effectiveStaffId: targetStaffId || undefined };
+  }
+
+  // 2. 取得該使用者在目標診所的 role 與 clinic_id
+  if (!targetClinicId) {
+    const { data: first } = await supabaseAdmin
+      .from('clinic_members')
+      .select('clinic_id, role')
+      .eq('user_id', userId)
+      .limit(1)
+      .single();
+    if (!first?.clinic_id) throw new UnauthorizedError('無法識別診所，請重新登入');
+    const role = (first as { role?: string }).role;
+    const isOwner = role === 'owner' || role === 'boss';
+    if (isOwner) {
+      return { clinicId: first.clinic_id, effectiveStaffId: targetStaffId || undefined };
+    }
+    // staff：反查本人 staff_id
+    const { data: staffRow } = await supabaseAdmin
+      .from('staff')
+      .select('id')
+      .eq('auth_user_id', userId)
+      .eq('clinic_id', first.clinic_id)
+      .single();
+    if (!staffRow) throw new ForbiddenError('找不到對應的員工資料，無法查詢薪資');
+    const myStaffId = (staffRow as { id: string }).id;
+    if (targetStaffId != null && targetStaffId !== myStaffId) {
+      throw new ForbiddenError('僅能查詢本人薪資資料');
+    }
+    return { clinicId: first.clinic_id, effectiveStaffId: myStaffId };
+  }
+
+  const { data: member } = await supabaseAdmin
+    .from('clinic_members')
+    .select('clinic_id, role')
+    .eq('user_id', userId)
+    .eq('clinic_id', targetClinicId)
+    .single();
+
+  if (!member) {
+    throw new ForbiddenError('您沒有此院區的存取權限');
+  }
+
+  const role = (member as { role?: string }).role;
+  const isOwner = role === 'owner' || role === 'boss';
+
+  if (isOwner) {
+    return { clinicId: member.clinic_id, effectiveStaffId: targetStaffId || undefined };
+  }
+
+  // 員工：僅能查本人
+  const { data: staffRow } = await supabaseAdmin
+    .from('staff')
+    .select('id')
+    .eq('auth_user_id', userId)
+    .eq('clinic_id', member.clinic_id)
+    .single();
+
+  if (!staffRow) {
+    throw new ForbiddenError('找不到對應的員工資料，無法查詢薪資');
+  }
+
+  const myStaffId = (staffRow as { id: string }).id;
+  if (targetStaffId != null && targetStaffId !== myStaffId) {
+    throw new ForbiddenError('僅能查詢本人薪資資料');
+  }
+
+  return { clinicId: member.clinic_id, effectiveStaffId: myStaffId };
+}
