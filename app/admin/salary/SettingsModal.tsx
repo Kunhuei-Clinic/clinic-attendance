@@ -1,13 +1,22 @@
 // SettingsModal.tsx
 'use client';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Settings, X, Building2, Calendar, Stethoscope, Clock, ShieldCheck } from 'lucide-react';
 
-export default function SettingsModal({ staff, updateStaff, entityList, onClose }: any) {
+export default function SettingsModal({ staff, updateStaff, entityList, onClose, onSaveSuccess }: any) {
+  const [localStaff, setLocalStaff] = useState<any>(staff ? { ...staff } : null);
   const [localBonuses, setLocalBonuses] = useState<any[]>(staff?.bonuses || []);
   const [localDeductions, setLocalDeductions] = useState<any[]>(staff?.default_deductions || []);
 
-  if (!staff) return null;
+  useEffect(() => {
+    if (staff) {
+      setLocalStaff({ ...staff });
+      setLocalBonuses(staff.bonuses || []);
+      setLocalDeductions(staff.default_deductions || []);
+    }
+  }, [staff]);
+
+  if (!staff || !localStaff) return null;
 
   // 年資與特休計算
   const calculateAnnualLeave = (startDateStr: string) => {
@@ -27,16 +36,16 @@ export default function SettingsModal({ staff, updateStaff, entityList, onClose 
     return 15 + Math.floor(years - 10);
   };
 
-  const annualDays = calculateAnnualLeave(staff.start_date);
-  const yearsWorked = staff.start_date ? (new Date().getFullYear() - new Date(staff.start_date).getFullYear()) : 0;
-  const isDoctor = staff.role === '醫師';
+  const annualDays = calculateAnnualLeave(localStaff.start_date);
+  const yearsWorked = localStaff.start_date ? (new Date().getFullYear() - new Date(localStaff.start_date).getFullYear()) : 0;
+  const isDoctor = localStaff.role === '醫師';
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
         <div className="flex justify-between items-center mb-6 border-b pb-4">
           <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-            <Settings className="text-blue-600"/> {staff.name} 薪資設定
+            <Settings className="text-blue-600"/> {localStaff.name} 薪資設定
           </h3>
           <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full transition"><X size={20}/></button>
         </div>
@@ -49,8 +58,8 @@ export default function SettingsModal({ staff, updateStaff, entityList, onClose 
                 <div>
                    <label className="text-xs font-bold text-slate-500 mb-1 flex items-center gap-1"><Building2 size={12}/> 歸屬單位</label>
                    <select 
-                     value={staff.entity || ''} 
-                     onChange={(e) => updateStaff(staff.id, 'entity', e.target.value)} 
+                     value={localStaff.entity || ''} 
+                     onChange={(e) => setLocalStaff({ ...localStaff, entity: e.target.value })} 
                      className="w-full border border-slate-300 p-2 rounded-lg bg-white text-sm font-bold"
                    >
                       <option value="" disabled>請選擇單位...</option>
@@ -62,8 +71,8 @@ export default function SettingsModal({ staff, updateStaff, entityList, onClose 
                 <div>
                    <label className="text-xs font-bold text-slate-500 mb-1 flex items-center gap-1"><Clock size={12}/> 工時計算基準</label>
                    <select 
-                     value={staff.clock_in_calc_mode || 'actual'} 
-                     onChange={(e) => updateStaff(staff.id, 'clock_in_calc_mode', e.target.value)} 
+                     value={localStaff.clock_in_calc_mode || 'actual'} 
+                     onChange={(e) => setLocalStaff({ ...localStaff, clock_in_calc_mode: e.target.value })} 
                      className="w-full border border-slate-300 p-2 rounded-lg bg-white text-sm font-bold text-blue-700"
                    >
                       <option value="actual">實支實付 (依打卡)</option>
@@ -74,8 +83,8 @@ export default function SettingsModal({ staff, updateStaff, entityList, onClose 
                 <div>
                    <label className="text-xs font-bold text-slate-500 mb-1 flex items-center gap-1"><Clock size={12}/> 工時制度 (勞基法)</label>
                    <select 
-                     value={staff.work_rule || 'normal'} 
-                     onChange={(e) => updateStaff(staff.id, 'work_rule', e.target.value)} 
+                     value={localStaff.work_rule || 'normal'} 
+                     onChange={(e) => setLocalStaff({ ...localStaff, work_rule: e.target.value })} 
                      className="w-full border border-slate-300 p-2 rounded-lg bg-white text-sm font-bold text-indigo-700"
                    >
                       <option value="normal">正常工時 (每日 8H)</option>
@@ -93,8 +102,8 @@ export default function SettingsModal({ staff, updateStaff, entityList, onClose 
                 <div className="flex gap-2 items-center">
                   <input 
                     type="date" 
-                    value={staff.start_date || ''}
-                    onChange={(e) => updateStaff(staff.id, 'start_date', e.target.value)}
+                    value={localStaff.start_date || ''}
+                    onChange={(e) => setLocalStaff({ ...localStaff, start_date: e.target.value })}
                     className="flex-1 border p-2 rounded-lg bg-white text-sm font-bold"
                   />
                   <div className="text-xs text-blue-600 bg-blue-50 px-3 py-2 rounded-lg border border-blue-100 font-bold whitespace-nowrap">
@@ -107,17 +116,15 @@ export default function SettingsModal({ staff, updateStaff, entityList, onClose 
              <div>
                 <label className="text-xs font-bold text-slate-500 mb-1 block">歷年特休紀錄 (JSON 格式)</label>
                 <textarea
-                  value={typeof staff.annual_leave_history === 'string' 
-                    ? staff.annual_leave_history 
-                    : JSON.stringify(staff.annual_leave_history || {}, null, 2)}
+                  value={typeof localStaff.annual_leave_history === 'string' 
+                    ? localStaff.annual_leave_history 
+                    : JSON.stringify(localStaff.annual_leave_history || {}, null, 2)}
                   onChange={(e) => {
                     try {
-                      // 嘗試解析 JSON，如果失敗則存為字串
                       const parsed = JSON.parse(e.target.value);
-                      updateStaff(staff.id, 'annual_leave_history', parsed);
+                      setLocalStaff({ ...localStaff, annual_leave_history: parsed });
                     } catch {
-                      // 如果不是有效 JSON，存為字串
-                      updateStaff(staff.id, 'annual_leave_history', e.target.value);
+                      setLocalStaff({ ...localStaff, annual_leave_history: e.target.value });
                     }
                   }}
                   className="w-full border p-2 rounded-lg bg-white text-xs font-mono min-h-[100px]"
@@ -138,11 +145,11 @@ export default function SettingsModal({ staff, updateStaff, entityList, onClose 
                 <div className="grid grid-cols-2 gap-3 text-sm">
                    <div>
                      <label className="block text-xs text-teal-700 mb-1">保底薪資</label>
-                     <input type="number" value={staff.doctor_guarantee_salary} onChange={(e)=>updateStaff(staff.id, 'doctor_guarantee_salary', Number(e.target.value))} className="w-full border p-1.5 rounded"/>
+                     <input type="number" value={localStaff.doctor_guarantee_salary} onChange={(e)=>setLocalStaff({ ...localStaff, doctor_guarantee_salary: Number(e.target.value) })} className="w-full border p-1.5 rounded"/>
                    </div>
                    <div>
                      <label className="block text-xs text-teal-700 mb-1">PPF 時薪</label>
-                     <input type="number" value={staff.doctor_hourly_rate} onChange={(e)=>updateStaff(staff.id, 'doctor_hourly_rate', Number(e.target.value))} className="w-full border p-1.5 rounded"/>
+                     <input type="number" value={localStaff.doctor_hourly_rate} onChange={(e)=>setLocalStaff({ ...localStaff, doctor_hourly_rate: Number(e.target.value) })} className="w-full border p-1.5 rounded"/>
                    </div>
                 </div>
             </div>
@@ -155,13 +162,13 @@ export default function SettingsModal({ staff, updateStaff, entityList, onClose 
                   <label className="text-sm font-bold text-slate-700">計薪設定</label>
                   <div className="flex gap-2 text-xs">
                     <button 
-                      onClick={()=>updateStaff(staff.id, 'salary_mode', 'monthly')}
-                      className={`px-3 py-1 rounded border ${staff.salary_mode==='monthly'?'bg-slate-800 text-white':'bg-white text-slate-500'}`}>
+                      onClick={()=>setLocalStaff({ ...localStaff, salary_mode: 'monthly' })}
+                      className={`px-3 py-1 rounded border ${localStaff.salary_mode==='monthly'?'bg-slate-800 text-white':'bg-white text-slate-500'}`}>
                       月薪制
                     </button>
                     <button 
-                      onClick={()=>updateStaff(staff.id, 'salary_mode', 'hourly')}
-                      className={`px-3 py-1 rounded border ${staff.salary_mode==='hourly'?'bg-slate-800 text-white':'bg-white text-slate-500'}`}>
+                      onClick={()=>setLocalStaff({ ...localStaff, salary_mode: 'hourly' })}
+                      className={`px-3 py-1 rounded border ${localStaff.salary_mode==='hourly'?'bg-slate-800 text-white':'bg-white text-slate-500'}`}>
                       時薪制
                     </button>
                   </div>
@@ -170,25 +177,25 @@ export default function SettingsModal({ staff, updateStaff, entityList, onClose 
                   <span className="text-slate-500 font-bold">$</span>
                   <input 
                     type="number"
-                    value={staff.base_salary} 
-                    onChange={(e)=>updateStaff(staff.id, 'base_salary', Number(e.target.value))}
+                    value={localStaff.base_salary} 
+                    onChange={(e)=>setLocalStaff({ ...localStaff, base_salary: Number(e.target.value) })}
                     className="bg-transparent font-bold w-full outline-none text-lg text-slate-800"
                     placeholder="輸入金額..."
                   />
                   <span className="text-xs text-slate-400">
-                    {staff.salary_mode === 'monthly' ? '元 / 月' : '元 / 時'}
+                    {localStaff.salary_mode === 'monthly' ? '元 / 月' : '元 / 時'}
                   </span>
                </div>
                {/* 🟢 只有在工時制度選擇「線上諮詢」時，才顯示專屬時薪設定 */}
-               {staff.work_rule === 'online_consultation' && (
+               {localStaff.work_rule === 'online_consultation' && (
                  <div className="flex items-center gap-2 border p-3 rounded-lg bg-white shadow-sm border-indigo-200 animate-fade-in">
                     <span className="text-indigo-600 font-bold text-sm">線上諮詢時薪</span>
                     <input
                       type="number"
-                      value={staff.online_hourly_rate ?? ''}
-                      onChange={(e)=>updateStaff(staff.id, 'online_hourly_rate', e.target.value === '' ? null : Number(e.target.value))}
+                      value={localStaff.online_hourly_rate ?? ''}
+                      onChange={(e)=>setLocalStaff({ ...localStaff, online_hourly_rate: e.target.value === '' ? null : Number(e.target.value) })}
                       className="bg-transparent font-bold w-full outline-none text-slate-800"
-                      placeholder={`未設定則依本薪 (${staff.salary_mode === 'monthly' ? Math.round((staff.base_salary || 0) / 240) : staff.base_salary})`}
+                      placeholder={`未設定則依本薪 (${localStaff.salary_mode === 'monthly' ? Math.round((localStaff.base_salary || 0) / 240) : localStaff.base_salary})`}
                     />
                     <span className="text-xs text-slate-400">元/時</span>
                  </div>
@@ -237,11 +244,11 @@ export default function SettingsModal({ staff, updateStaff, entityList, onClose 
              <div className="grid grid-cols-2 gap-4">
                <div>
                  <span className="text-xs text-orange-600 block mb-1">勞保自付</span>
-                 <input type="number" value={staff.insurance_labor} onChange={(e)=>updateStaff(staff.id, 'insurance_labor', Number(e.target.value))} className="border border-orange-200 p-2 rounded w-full bg-white"/>
+                 <input type="number" value={localStaff.insurance_labor} onChange={(e)=>setLocalStaff({ ...localStaff, insurance_labor: Number(e.target.value) })} className="border border-orange-200 p-2 rounded w-full bg-white"/>
                </div>
                <div>
                  <span className="text-xs text-orange-600 block mb-1">健保自付</span>
-                 <input type="number" value={staff.insurance_health} onChange={(e)=>updateStaff(staff.id, 'insurance_health', Number(e.target.value))} className="border border-orange-200 p-2 rounded w-full bg-white"/>
+                 <input type="number" value={localStaff.insurance_health} onChange={(e)=>setLocalStaff({ ...localStaff, insurance_health: Number(e.target.value) })} className="border border-orange-200 p-2 rounded w-full bg-white"/>
                </div>
              </div>
           </div>
@@ -249,9 +256,42 @@ export default function SettingsModal({ staff, updateStaff, entityList, onClose 
           <div className="pt-4 border-t flex justify-end">
              <button
                onClick={async () => {
-                 await updateStaff(staff.id, 'bonuses', localBonuses);
-                 await updateStaff(staff.id, 'default_deductions', localDeductions);
-                 onClose();
+                 try {
+                   const payload: any = {
+                     id: localStaff.id,
+                     entity: localStaff.entity,
+                     clock_in_calc_mode: localStaff.clock_in_calc_mode,
+                     work_rule: localStaff.work_rule,
+                     start_date: localStaff.start_date,
+                     annual_leave_history: localStaff.annual_leave_history,
+                     salary_mode: localStaff.salary_mode,
+                     base_salary: localStaff.base_salary,
+                     online_hourly_rate: localStaff.online_hourly_rate,
+                     insurance_labor: localStaff.insurance_labor,
+                     insurance_health: localStaff.insurance_health,
+                     bonuses: localBonuses,
+                     default_deductions: localDeductions,
+                   };
+                   if (isDoctor) {
+                     payload.doctor_guarantee_salary = localStaff.doctor_guarantee_salary;
+                     payload.doctor_hourly_rate = localStaff.doctor_hourly_rate;
+                   }
+                   const res = await fetch('/api/staff', {
+                     method: 'PATCH',
+                     headers: { 'Content-Type': 'application/json' },
+                     body: JSON.stringify(payload),
+                   });
+                   const json = await res.json();
+                   if (json.success !== false) {
+                     onSaveSuccess?.();
+                     onClose();
+                   } else {
+                     alert('儲存失敗: ' + (json.message || json.error || '未知錯誤'));
+                   }
+                 } catch (error: any) {
+                   console.error('Settings save error:', error);
+                   alert('儲存失敗: ' + error.message);
+                 }
                }}
                className="bg-slate-900 text-white px-8 py-2.5 rounded-xl font-bold hover:bg-black shadow-lg hover:shadow-xl transition transform active:scale-95"
              >

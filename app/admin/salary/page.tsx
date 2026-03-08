@@ -52,6 +52,8 @@ export default function SalaryPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isFetchingMonthData, setIsFetchingMonthData] = useState(false);
   const [hasConfirmedMonth, setHasConfirmedMonth] = useState(false);
+  const [showBatchLockModal, setShowBatchLockModal] = useState(false);
+  const [selectedLockIds, setSelectedLockIds] = useState<Set<string>>(new Set());
   const [lastMonthAdjustments, setLastMonthAdjustments] = useState<Record<string, any[]>>({});
 
   // 新增：篩選狀態
@@ -460,6 +462,40 @@ export default function SalaryPage() {
     }
   };
 
+  const lockMultipleEmployees = async () => {
+    if (selectedLockIds.size === 0) return;
+    setIsLoading(true);
+    try {
+      const recordsToLock = liveReports
+        .filter((r) => selectedLockIds.has(String(r.staff_id)))
+        .map((r) => ({
+          year_month: selectedMonth,
+          staff_id: r.staff_id,
+          staff_name: r.staff_name,
+          snapshot: r,
+        }));
+
+      const res = await fetch('/api/salary/history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ records: recordsToLock }),
+      });
+      const json = await res.json();
+      if (json.error) {
+        alert('批次封存失敗: ' + json.error);
+      } else {
+        await fetchLockedRecords();
+        setShowBatchLockModal(false);
+        setSelectedLockIds(new Set());
+        alert(`成功封存 ${recordsToLock.length} 筆資料！`);
+      }
+    } catch (error: any) {
+      alert('批次封存發生錯誤: ' + error.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // 解除單一員工封存
   const unlockEmployee = async (historyId: string | number) => {
     try {
@@ -668,6 +704,31 @@ export default function SalaryPage() {
         </div>
       </div>
 
+      {/* 🟢 表格控制列 */}
+      <div className="flex justify-between items-end mb-4 px-2 mt-6">
+        <div>
+          <h3 className="text-lg font-bold text-slate-800">薪資結算明細</h3>
+          <p className="text-xs text-slate-500">共 {liveReports.length} 筆資料</p>
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={() => {
+              const unlockedIds = liveReports.filter((r) => !r.is_locked).map((r) => String(r.staff_id));
+              if (unlockedIds.length === 0) {
+                alert('本月所有薪資皆已封存！');
+                return;
+              }
+              setSelectedLockIds(new Set(unlockedIds));
+              setShowBatchLockModal(true);
+            }}
+            disabled={liveReports.length === 0 || liveReports.every((r) => r.is_locked)}
+            className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-emerald-700 transition shadow-sm disabled:opacity-50"
+          >
+            🔒 批次封存
+          </button>
+        </div>
+      </div>
+
       <SalaryTable
         reports={filteredAndSortedReports}
         staffList={staffList}
@@ -691,6 +752,7 @@ export default function SalaryPage() {
           updateStaff={updateStaff}
           entityList={entityList}
           onClose={() => setSettingModalStaffId(null)}
+          onSaveSuccess={() => fetchStaffSettings()}
         />
       )}
 
@@ -718,6 +780,77 @@ export default function SalaryPage() {
           }}
           onClose={() => setAdjModalStaff(null)}
         />
+      )}
+
+      {/* 🟢 批次封存選擇器 Modal */}
+      {showBatchLockModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[85vh]">
+            <div className="bg-emerald-700 text-white p-4 flex justify-between items-center shrink-0">
+              <h3 className="font-bold flex items-center gap-2">🔒 選擇要封存的薪資單</h3>
+              <button onClick={() => setShowBatchLockModal(false)} className="hover:bg-white/20 p-1 rounded-full text-white">✕</button>
+            </div>
+
+            <div className="p-4 bg-emerald-50 border-b border-emerald-100 flex justify-between items-center shrink-0">
+              <span className="text-sm font-bold text-emerald-800">
+                已選擇: <span className="text-emerald-600 text-lg">{selectedLockIds.size}</span> 人
+              </span>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setSelectedLockIds(new Set(liveReports.filter((r) => !r.is_locked).map((r) => String(r.staff_id))))}
+                  className="text-xs font-bold text-emerald-700 bg-white border border-emerald-300 px-3 py-1.5 rounded hover:bg-emerald-100"
+                >全選</button>
+                <button
+                  onClick={() => setSelectedLockIds(new Set())}
+                  className="text-xs font-bold text-emerald-700 bg-white border border-emerald-300 px-3 py-1.5 rounded hover:bg-emerald-100"
+                >取消全選</button>
+              </div>
+            </div>
+
+            <div className="overflow-y-auto p-2 flex-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {liveReports.filter((r) => !r.is_locked).map((rpt, idx) => {
+                  const sid = String(rpt.staff_id);
+                  const isSelected = selectedLockIds.has(sid);
+                  return (
+                    <label
+                      key={idx}
+                      className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${isSelected ? 'bg-emerald-50 border-emerald-300 shadow-sm' : 'bg-white border-slate-200 hover:bg-slate-50 opacity-60'}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={(e) => {
+                          const newSet = new Set(selectedLockIds);
+                          if (e.target.checked) newSet.add(sid);
+                          else newSet.delete(sid);
+                          setSelectedLockIds(newSet);
+                        }}
+                        className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="font-bold text-slate-800 text-sm truncate">{rpt.staff_name}</div>
+                        <div className="text-[10px] text-slate-500 font-mono">實發: ${(rpt.net_pay ?? 0).toLocaleString()}</div>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="p-4 border-t border-slate-200 bg-white shrink-0 flex gap-3">
+              <button
+                onClick={() => setShowBatchLockModal(false)}
+                className="flex-1 py-3 rounded-xl font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition"
+              >取消</button>
+              <button
+                onClick={lockMultipleEmployees}
+                disabled={selectedLockIds.size === 0}
+                className="flex-[2] py-3 rounded-xl font-bold text-white bg-emerald-600 hover:bg-emerald-700 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
+              >確認封存 {selectedLockIds.size} 筆資料</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
