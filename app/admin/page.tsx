@@ -95,13 +95,18 @@ export default function AdminPage() {
     const IDLE_TIME = 30 * 60 * 1000; // 30 分鐘 (毫秒)
     const ACTIVITY_KEY = 'last_system_activity';
 
-    // 1. 初始化檢查：網頁載入時，先檢查上次活動時間
+    // 1. 初始化檢查：網頁重新載入時，檢查上次活動時間
     const checkOnMount = () => {
       const lastActivity = localStorage.getItem(ACTIVITY_KEY);
       if (lastActivity) {
         const elapsed = Date.now() - parseInt(lastActivity, 10);
         if (elapsed > IDLE_TIME) {
-          handleLogout(true); // 關掉網頁期間已經超時，直接踢出
+          // 🟢 靜默登出：如果是隔很久才開網頁，默默把他踢回登入頁，不要彈出警告干擾他
+          localStorage.removeItem(ACTIVITY_KEY);
+          supabase.auth.signOut().then(() => {
+            router.refresh();
+            router.push('/login');
+          });
           return true;
         }
       }

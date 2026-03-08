@@ -50,6 +50,7 @@ export default function SalaryPage() {
   const [entityList, setEntityList] = useState<Entity[]>([]);
   const [authChecked, setAuthChecked] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isFetchingMonthData, setIsFetchingMonthData] = useState(false);
   const [hasConfirmedMonth, setHasConfirmedMonth] = useState(false);
   const [lastMonthAdjustments, setLastMonthAdjustments] = useState<Record<string, any[]>>({});
 
@@ -91,24 +92,32 @@ export default function SalaryPage() {
     fetchStaffSettings();
   }, [authChecked]);
 
-  // 每次月份變更時，載入調整與已封存紀錄（換月時立刻清空舊有報表，避免畫面殘影與誤操作）
+  // 每次月份變更時，載入調整與已封存紀錄
   useEffect(() => {
     setLiveReports([]);
-    // 🟢 加入 !hasConfirmedMonth 攔截，未確認前不抓資料
     if (!authChecked || !selectedMonth || !hasConfirmedMonth) return;
+
     setIsLoading(true);
-    Promise.all([fetchAdjustments(), fetchLockedRecords()]);
+    setIsFetchingMonthData(true); // 🟢 上鎖：開始抓取 API 資料
+
+    Promise.all([fetchAdjustments(), fetchLockedRecords()]).finally(() => {
+      setIsFetchingMonthData(false); // 🟢 解鎖：所有 API 資料都確實回來了
+    });
   }, [selectedMonth, authChecked, hasConfirmedMonth]);
 
   // 當員工資料 / 調整 / 鎖定紀錄變動時，重新試算
   useEffect(() => {
-    // 🟢 加入 !hasConfirmedMonth 攔截
     if (!authChecked || !selectedMonth || !hasConfirmedMonth) return;
     if (staffList.length === 0) return;
+
+    // 🟢 終極攔截：如果 API 還在跑，絕對不准提早開始算薪水！
+    if (isFetchingMonthData) return;
+
+    setIsLoading(true); // 確保計算時遮罩是蓋著的
     performCalculation().finally(() => {
-      setIsLoading(false);
+      setIsLoading(false); // 🟢 真正試算完畢後，才把遮罩拿掉
     });
-  }, [staffList, adjustments, lockedRecords, selectedMonth, authChecked, hasConfirmedMonth]);
+  }, [staffList, adjustments, lockedRecords, selectedMonth, authChecked, hasConfirmedMonth, isFetchingMonthData]);
 
   const fetchSystemSettings = async () => {
     try {
