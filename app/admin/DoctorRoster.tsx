@@ -20,7 +20,6 @@ export default function DoctorRosterView() {
     const [closedDays, setClosedDays] = useState<string[]>([]);
     const [specialTypes, setSpecialTypes] = useState<string[]>([]);
     const [loading, setLoading] = useState(false);
-    const [hasConfirmedMonth, setHasConfirmedMonth] = useState(false);
     const [focusedDocId, setFocusedDocId] = useState<string | null>(null);
     const [stats, setStats] = useState<Record<string, { total: number, weekly: number[] }>>({});
 
@@ -59,9 +58,7 @@ export default function DoctorRosterView() {
     const formatTimeDisplay = (time: string) => time ? (time.startsWith('0') ? time.slice(1) : time) : '';
 
     useEffect(() => { loadInitialData(); }, []);
-    useEffect(() => {
-        if (hasConfirmedMonth) loadMonthData();
-    }, [currentDate, hasConfirmedMonth]);
+    useEffect(() => { loadMonthData(); }, [currentDate]);
     useEffect(() => { calculateStats(); }, [rosterData, currentDate]);
 
     // 🟢 優化：集中載入初始資料（醫師列表與系統設定）
@@ -369,38 +366,6 @@ export default function DoctorRosterView() {
 
     const weeks = generateCalendar();
     const DISPLAY_SHIFTS = [{ id: 'AM', label: '早診', color: 'text-blue-600 bg-blue-50 border-blue-100' }, { id: 'PM', label: '午診', color: 'text-orange-600 bg-orange-50 border-orange-100' }, { id: 'NIGHT', label: '晚診', color: 'text-purple-600 bg-purple-50 border-purple-100' }];
-
-    // 🟢 入口選擇畫面：如果還沒確認月份，顯示這個選擇器
-    if (!hasConfirmedMonth) {
-        return (
-            <div className="w-full flex items-center justify-center py-20 animate-fade-in min-h-[600px] bg-slate-50/50 rounded-3xl">
-                <div className="bg-white p-10 rounded-3xl shadow-xl border border-slate-100 max-w-md w-full flex flex-col items-center text-center">
-                    <div className="w-20 h-20 bg-teal-50 rounded-full flex items-center justify-center mb-6 shadow-inner">
-                        <Clock className="text-teal-600" size={40} />
-                    </div>
-                    <h2 className="text-2xl font-bold text-slate-800 mb-2">請選擇排班月份</h2>
-                    <p className="text-slate-500 text-sm mb-8">選擇您要檢視或編輯醫師班表的月份，系統將自動載入相關資料。</p>
-
-                    <input
-                        type="month"
-                        value={`${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`}
-                        onChange={(e) => {
-                            const [y, m] = e.target.value.split('-');
-                            if (y && m) setCurrentDate(new Date(Number(y), Number(m) - 1, 1));
-                        }}
-                        className="w-full text-center text-3xl font-black text-slate-700 bg-slate-50 border-2 border-teal-200 rounded-xl py-4 mb-8 outline-none focus:border-teal-500 focus:bg-white transition-all shadow-sm"
-                    />
-
-                    <button
-                        onClick={() => setHasConfirmedMonth(true)}
-                        className="w-full bg-teal-600 text-white font-bold text-lg py-4 rounded-xl hover:bg-teal-700 shadow-lg shadow-teal-200 transition transform active:scale-95 flex items-center justify-center gap-2"
-                    >
-                        <Stethoscope size={20} /> 開始載入班表
-                    </button>
-                </div>
-            </div>
-        );
-    }
 
     return (
         <div className="flex flex-col lg:flex-row gap-6 h-full animate-fade-in p-2 relative">
