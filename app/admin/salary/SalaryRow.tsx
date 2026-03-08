@@ -300,10 +300,10 @@ export default function SalaryRow({
                           {d.normalHours || '-'}
                         </td>
                         <td className="p-2 text-center text-orange-600 font-bold">
-                          {d.ot134 > 0 ? d.ot134.toFixed(1) : '-'}
+                          {d.ot134 > 0 ? d.ot134.toFixed(2) : '-'}
                         </td>
                         <td className="p-2 text-center text-orange-600 font-bold">
-                          {d.ot167 > 0 ? d.ot167.toFixed(1) : '-'}
+                          {d.ot167 > 0 ? d.ot167.toFixed(2) : '-'}
                         </td>
                         <td className="p-2 text-red-500 font-bold">{d.note}</td>
                       </tr>
@@ -358,7 +358,7 @@ export default function SalaryRow({
                   {rpt.period_ot_hours > 0 && (
                     <li className="flex justify-between text-orange-600 font-bold">
                       <span>
-                        週期總量超時 ({rpt.period_ot_hours.toFixed(1)}hr):
+                        週期總量超時 ({rpt.period_ot_hours.toFixed(2)}hr):
                       </span>
                       <span>(已計入加班)</span>
                     </li>

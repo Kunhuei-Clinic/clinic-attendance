@@ -272,8 +272,8 @@ function PrintContent({ report, yearMonth, clinicName }: any) {
                 <td className="p-1 font-mono text-[10px] text-slate-500 whitespace-nowrap">{rec.clockIn === '--:--' ? '-' : (rec.clockIn || '-')}</td>
                 <td className="p-1 text-center font-bold text-slate-800">{rec.totalHours > 0 ? rec.totalHours : '-'}</td>
                 <td className="p-1 text-center text-slate-400">{rec.normalHours > 0 ? rec.normalHours : '-'}</td>
-                <td className="p-1 text-center font-mono text-orange-600 print:text-black">{rec.ot134 > 0 ? rec.ot134.toFixed(1) : '-'}</td>
-                <td className="p-1 text-center font-mono text-orange-600 print:text-black">{rec.ot167 > 0 ? rec.ot167.toFixed(1) : '-'}</td>
+                <td className="p-1 text-center font-mono text-orange-600 print:text-black">{rec.ot134 > 0 ? rec.ot134.toFixed(2) : '-'}</td>
+                <td className="p-1 text-center font-mono text-orange-600 print:text-black">{rec.ot167 > 0 ? rec.ot167.toFixed(2) : '-'}</td>
                 <td className="p-1 text-[10px] truncate max-w-[120px]">
                   {rec.note && String(rec.note).includes('調移') ? (
                     <span className="text-indigo-600 font-bold">{rec.note}</span>
@@ -288,12 +288,12 @@ function PrintContent({ report, yearMonth, clinicName }: any) {
             <tr className="bg-slate-800 text-white font-bold print:bg-slate-200 print:text-black print:border-t-2 print:border-black">
               <td colSpan={3} className="p-1 text-right">總計:</td>
               {/* 🟢 將線上時數計入總工時與正常工時顯示 */}
-              <td className="p-1 text-center">{((report.total_work_hours ?? 0) + onlineHours).toFixed(1)}</td>
-              <td className="p-1 text-center">{((report.normal_hours ?? 0) + onlineHours).toFixed(1)}</td>
-              <td className="p-1 text-center text-orange-600">{total134 > 0 ? total134.toFixed(1) : '-'}</td>
-              <td className="p-1 text-center text-orange-600">{total167 > 0 ? total167.toFixed(1) : '-'}</td>
+              <td className="p-1 text-center">{((report.total_work_hours ?? 0) + onlineHours).toFixed(2)}</td>
+              <td className="p-1 text-center">{((report.normal_hours ?? 0) + onlineHours).toFixed(2)}</td>
+              <td className="p-1 text-center text-orange-600">{total134 > 0 ? total134.toFixed(2) : '-'}</td>
+              <td className="p-1 text-center text-orange-600">{total167 > 0 ? total167.toFixed(2) : '-'}</td>
               <td className="p-1 text-[10px] font-normal opacity-70 print:opacity-100 print:text-slate-600">
-                * 超時: {(report.period_ot_hours ?? 0).toFixed(1)} hr
+                * 超時: {(report.period_ot_hours ?? 0).toFixed(2)} hr
               </td>
             </tr>
           </tfoot>

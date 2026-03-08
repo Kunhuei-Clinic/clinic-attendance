@@ -295,8 +295,28 @@ export const calculateStaffSalary = (
 
       if (dayType === 'holiday') { 
         result.holiday_work_hours += dailyHours;
+
+        // 🟢 勞基法修正：前 8 小時算國定假日加倍，超過部分算一般加班
+        const normalWork = Math.min(dailyHours, dailyNormalLimit);
+        const otWork = Math.max(0, dailyHours - dailyNormalLimit);
+
+        // 前 8 小時的國定假日加給 (時薪與月薪皆再加發 1 倍)
         const multiplier = staff.salary_mode === 'hourly' ? 1 : (staff.salary_mode === 'monthly' ? 1 : 2);
-        result.holiday_pay += Math.round(dailyHours * hourlyRate * multiplier);
+        result.holiday_pay += Math.round(normalWork * hourlyRate * multiplier);
+        dailyRecord.normalHours = normalWork;
+
+        // 超過 8 小時的部分，落入 1.34 與 1.67 的一般加班費計算
+        if (otWork > 0) {
+          result.normal_ot_hours += otWork;
+          result.ot_pay += staff.salary_mode === 'hourly'
+            ? calculateTieredOtPremium(otWork, hourlyRate)
+            : calculateTieredOt(otWork, hourlyRate);
+
+          const { ot134, ot167 } = splitOtHours(otWork);
+          dailyRecord.ot134 = ot134;
+          dailyRecord.ot167 = ot167;
+        }
+
         dailyRecord.note = (dailyRecord.note || "") + " 國定假日";
 
       } else if (dayType === 'regular') { 
@@ -343,7 +363,7 @@ export const calculateStaffSalary = (
     const periodExcess = accumulatedNormalHours - monthlyStandardHours;
     result.period_ot_hours = periodExcess;
     result.ot_pay += staff.salary_mode === 'hourly' ? calculateTieredOtPremium(periodExcess, hourlyRate) : calculateTieredOt(periodExcess, hourlyRate);
-    result.warnings.push(`週期總量超標 ${periodExcess.toFixed(1)}hr`);
+    result.warnings.push(`週期總量超標 ${periodExcess.toFixed(2)}hr`);
   }
 
   result.total_work_hours = Math.round(result.total_work_hours * 100) / 100;
