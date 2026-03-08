@@ -49,6 +49,8 @@ export default function SalaryPage() {
   const [printReport, setPrintReport] = useState<any | null>(null);
   const [entityList, setEntityList] = useState<Entity[]>([]);
   const [authChecked, setAuthChecked] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [lastMonthAdjustments, setLastMonthAdjustments] = useState<Record<string, any[]>>({});
 
   // 新增：篩選狀態
   const [searchTerm, setSearchTerm] = useState('');
@@ -92,6 +94,7 @@ export default function SalaryPage() {
   useEffect(() => {
     setLiveReports([]);
     if (!authChecked || !selectedMonth) return;
+    setIsLoading(true); // 🟢 開始載入
     fetchAdjustments();
     fetchLockedRecords();
   }, [selectedMonth, authChecked]);
@@ -100,7 +103,9 @@ export default function SalaryPage() {
   useEffect(() => {
     if (!authChecked || !selectedMonth) return;
     if (staffList.length === 0) return;
-    performCalculation();
+    performCalculation().finally(() => {
+      setIsLoading(false); // 🟢 計算完成，關閉遮罩
+    });
   }, [staffList, adjustments, lockedRecords, selectedMonth, authChecked]);
 
   const fetchSystemSettings = async () => {
@@ -147,9 +152,8 @@ export default function SalaryPage() {
 
   const fetchAdjustments = async () => {
     try {
-      const res = await fetch(
-        `/api/salary/adjustments?year_month=${selectedMonth}`
-      );
+      // 抓取當月
+      const res = await fetch(`/api/salary/adjustments?year_month=${selectedMonth}`);
       const json = await res.json();
       const map: Record<string, any[]> = {};
       json.data?.forEach((item: any) => {
@@ -157,6 +161,17 @@ export default function SalaryPage() {
         map[item.staff_id].push(item);
       });
       setAdjustments(map);
+
+      // 抓取上個月 (供 0 元自動繼承使用)
+      const prevMonth = format(subMonths(new Date(`${selectedMonth}-01`), 1), 'yyyy-MM');
+      const prevRes = await fetch(`/api/salary/adjustments?year_month=${prevMonth}`);
+      const prevJson = await prevRes.json();
+      const prevMap: Record<string, any[]> = {};
+      prevJson.data?.forEach((item: any) => {
+        if (!prevMap[item.staff_id]) prevMap[item.staff_id] = [];
+        prevMap[item.staff_id].push(item);
+      });
+      setLastMonthAdjustments(prevMap);
     } catch (error: any) {
       console.error('Error fetching adjustments:', error);
     }
@@ -283,9 +298,9 @@ export default function SalaryPage() {
           total_deduction: deduction,
           net_pay: gross - deduction,
           fixed_bonus_details: staff.bonuses || [],
-          temp_bonus_details: myAdj.filter((a: any) => a.type === 'bonus'),
+          temp_bonus_details: myAdj.filter((a: any) => a.type === 'bonus' && Number(a.amount) !== 0),
           fixed_deduction_details: staff.default_deductions || [],
-          temp_deduction_details: myAdj.filter((a: any) => a.type === 'deduction'),
+          temp_deduction_details: myAdj.filter((a: any) => a.type === 'deduction' && Number(a.amount) !== 0),
         };
 
         const locked = lockedRecords.find(
@@ -525,6 +540,15 @@ export default function SalaryPage() {
 
   return (
     <div className="w-full animate-fade-in relative space-y-6">
+      {/* 🟢 全局載入遮罩 */}
+      {isLoading && (
+        <div className="absolute inset-0 z-40 bg-white/50 backdrop-blur-sm flex items-center justify-center rounded-2xl transition-all min-h-[500px]">
+          <div className="flex flex-col items-center gap-4 bg-white/95 p-8 rounded-2xl shadow-2xl border border-slate-100">
+            <div className="w-12 h-12 border-4 border-slate-200 border-t-blue-600 rounded-full animate-spin"></div>
+            <span className="text-slate-700 font-bold animate-pulse text-lg">資料讀取與薪資試算中...</span>
+          </div>
+        </div>
+      )}
       <div className="flex flex-col md:flex-row justify-between items-center bg-white p-5 rounded-2xl shadow-sm border border-slate-200 gap-4">
         <div className="flex items-center gap-4">
           <h2 className="text-2xl font-bold flex items-center gap-2 text-slate-800">
@@ -628,6 +652,7 @@ export default function SalaryPage() {
         <AdjustmentModal
           staff={adjModalStaff}
           adjustments={adjustments}
+          lastMonthAdjustments={lastMonthAdjustments}
           selectedMonth={selectedMonth}
           onSaveComplete={() => {
             fetchAdjustments();

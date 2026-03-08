@@ -41,6 +41,7 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
     // 🆕 一鍵排整天模式：勾選後，點「早班」可視為排整天 (早/午/晚)
     const [fullDayFromMorning, setFullDayFromMorning] = useState(false);
     const [activeStamp, setActiveStamp] = useState<DayType>('rest');
+    const [isLoading, setIsLoading] = useState(false);
 
     // 初始化
     useEffect(() => {
@@ -225,6 +226,7 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
 
     // 🟢 優化：集中載入當月資料（員工列表、班表、國定假日），使用 Promise.all 減少重繪
     const loadMonthData = async () => {
+        setIsLoading(true); // 🟢 開始載入
         try {
             const year = currentDate.getFullYear();
             const month = currentDate.getMonth() + 1;
@@ -291,6 +293,8 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
             setStaffList([]);
             setRosterMap({});
             setHolidays([]);
+        } finally {
+            setIsLoading(false); // 🟢 載入完成
         }
     };
 
@@ -530,7 +534,16 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
     if (!isMounted) return null;
 
     return (
-        <div className="w-full p-4 animate-fade-in pb-20">
+        <div className="w-full p-4 animate-fade-in pb-20 relative min-h-[600px]">
+            {/* 🟢 排班表專屬載入遮罩 */}
+            {isLoading && (
+                <div className="absolute inset-0 z-50 bg-white/50 backdrop-blur-sm flex items-center justify-center rounded-2xl transition-all">
+                    <div className="flex flex-col items-center gap-4 bg-white/95 p-8 rounded-2xl shadow-2xl border border-slate-100">
+                        <div className="w-12 h-12 border-4 border-slate-200 border-t-blue-600 rounded-full animate-spin"></div>
+                        <span className="text-slate-700 font-bold animate-pulse text-lg">班表資料載入與規則檢查中...</span>
+                    </div>
+                </div>
+            )}
             {/* Header Area */}
             <div className="flex flex-col md:flex-row justify-between mb-4 items-center gap-4">
                 <div className="flex items-center gap-4 bg-slate-100 p-1 rounded-full shadow-inner">

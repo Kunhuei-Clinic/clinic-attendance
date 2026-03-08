@@ -5,6 +5,7 @@ import React, { useState } from 'react';
 type AdjustmentModalProps = {
   staff: any;
   adjustments: Record<string, any[]>;
+  lastMonthAdjustments: Record<string, any[]>;
   selectedMonth: string;
   onSaveComplete: () => void;
   onClose: () => void;
@@ -16,12 +17,29 @@ const XIcon = () => (
   </svg>
 );
 
-export default function AdjustmentModal({ staff, adjustments, selectedMonth, onSaveComplete, onClose }: AdjustmentModalProps) {
+export default function AdjustmentModal({ staff, adjustments, lastMonthAdjustments, selectedMonth, onSaveComplete, onClose }: AdjustmentModalProps) {
   const staffId = String(staff.staff_id);
-  // 🟢 將資料複製一份到本地狀態，避免 onChange 一直觸發 API 造成卡頓與錯亂
-  const [localItems, setLocalItems] = useState<any[]>(
-    (adjustments[staffId] || []).map(a => ({ ...a, isNew: false, isDeleted: false, isEdited: false }))
-  );
+  // 🟢 將資料複製一份到本地狀態，並智能繼承上個月項目（同名 0 元）
+  const [localItems, setLocalItems] = useState<any[]>(() => {
+    const currentItems = (adjustments[staffId] || []).map(a => ({ ...a, isNew: false, isDeleted: false, isEdited: false }));
+    const prevItems = lastMonthAdjustments[staffId] || [];
+
+    const existingNames = new Set(currentItems.map(i => i.name));
+    prevItems.forEach(p => {
+      if (!existingNames.has(p.name)) {
+        currentItems.push({
+          id: Date.now() + Math.random(),
+          staff_id: staffId,
+          year_month: selectedMonth,
+          type: p.type,
+          name: p.name,
+          amount: 0,
+          isNew: true
+        });
+      }
+    });
+    return currentItems;
+  });
   const [isSaving, setIsSaving] = useState(false);
 
   const handleAdd = (type: 'bonus' | 'deduction') => {
