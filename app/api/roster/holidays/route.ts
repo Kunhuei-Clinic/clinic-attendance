@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
-import { getClinicIdFromRequest } from '@/lib/clinicHelper';
+import { requireOwnerAuth, authErrorToResponse, UnauthorizedError, ForbiddenError } from '@/lib/authHelper';
 
 /**
  * GET /api/roster/holidays
- * 查詢國定假日
+ * 查詢國定假日（僅 owner）
  * 
  * Query Parameters:
  *   - year: number (required)
@@ -12,14 +12,7 @@ import { getClinicIdFromRequest } from '@/lib/clinicHelper';
  */
 export async function GET(request: NextRequest) {
   try {
-    // 🟢 多租戶：取得當前使用者的 clinic_id
-    const clinicId = await getClinicIdFromRequest(request);
-    if (!clinicId) {
-      return NextResponse.json(
-        { data: [], error: '無法識別診所，請重新登入' },
-        { status: 401 }
-      );
-    }
+    const { clinicId } = await requireOwnerAuth(request);
 
     const searchParams = request.nextUrl.searchParams;
     const year = Number(searchParams.get('year'));
@@ -57,6 +50,10 @@ export async function GET(request: NextRequest) {
       data: (data || []).map(h => h.date)
     });
   } catch (error: any) {
+    if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
+      const { status, message } = authErrorToResponse(error);
+      return NextResponse.json({ data: [], error: message }, { status });
+    }
     console.error('Holidays API Error:', error);
     return NextResponse.json(
       { data: [], error: error.message || '伺服器錯誤' },
@@ -74,14 +71,7 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    // 🟢 多租戶：取得當前使用者的 clinic_id
-    const clinicId = await getClinicIdFromRequest(request);
-    if (!clinicId) {
-      return NextResponse.json(
-        { success: false, message: '無法識別診所，請重新登入' },
-        { status: 401 }
-      );
-    }
+    const { clinicId } = await requireOwnerAuth(request);
 
     const body = await request.json();
     const { date, name } = body;
@@ -116,6 +106,10 @@ export async function POST(request: NextRequest) {
       message: '新增成功'
     });
   } catch (error: any) {
+    if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
+      const { status, message } = authErrorToResponse(error);
+      return NextResponse.json({ success: false, message }, { status });
+    }
     console.error('Holidays POST API Error:', error);
     return NextResponse.json(
       { success: false, message: `處理失敗: ${error.message}` },
@@ -133,14 +127,7 @@ export async function POST(request: NextRequest) {
  */
 export async function DELETE(request: NextRequest) {
   try {
-    // 🟢 多租戶：取得當前使用者的 clinic_id
-    const clinicId = await getClinicIdFromRequest(request);
-    if (!clinicId) {
-      return NextResponse.json(
-        { success: false, message: '無法識別診所，請重新登入' },
-        { status: 401 }
-      );
-    }
+    const { clinicId } = await requireOwnerAuth(request);
 
     const searchParams = request.nextUrl.searchParams;
     const date = searchParams.get('date');
@@ -173,6 +160,10 @@ export async function DELETE(request: NextRequest) {
       message: '刪除成功'
     });
   } catch (error: any) {
+    if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
+      const { status, message } = authErrorToResponse(error);
+      return NextResponse.json({ success: false, message }, { status });
+    }
     console.error('Holidays DELETE API Error:', error);
     return NextResponse.json(
       { success: false, message: `刪除失敗: ${error.message}` },

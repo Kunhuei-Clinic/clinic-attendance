@@ -1,17 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
-import { getClinicIdFromRequest } from '@/lib/clinicHelper';
+import { requireOwnerAuth, authErrorToResponse, UnauthorizedError, ForbiddenError } from '@/lib/authHelper';
 
 export async function GET(request: NextRequest) {
   try {
-    // 🟢 多租戶：取得當前使用者的 clinic_id
-    const clinicId = await getClinicIdFromRequest(request);
-    if (!clinicId) {
-      return NextResponse.json(
-        { data: [], error: '無法識別診所，請重新登入' },
-        { status: 401 }
-      );
-    }
+    const { clinicId } = await requireOwnerAuth(request);
 
     const searchParams = request.nextUrl.searchParams;
     const yearMonth = searchParams.get('year_month');
@@ -40,6 +33,10 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ data: data || [] });
   } catch (error: any) {
+    if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
+      const { status, message } = authErrorToResponse(error);
+      return NextResponse.json({ data: [], error: message }, { status });
+    }
     console.error('Salary Adjustments API GET Error:', error);
     return NextResponse.json({ data: [], error: error.message || 'Server error' }, { status: 500 });
   }
@@ -47,14 +44,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    // 🟢 多租戶：取得當前使用者的 clinic_id
-    const clinicId = await getClinicIdFromRequest(request);
-    if (!clinicId) {
-      return NextResponse.json(
-        { error: '無法識別診所，請重新登入' },
-        { status: 401 }
-      );
-    }
+    const { clinicId } = await requireOwnerAuth(request);
 
     const body = await request.json();
     const { staff_id, year_month, type, name, amount } = body;
@@ -99,6 +89,10 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ data });
   } catch (error: any) {
+    if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
+      const { status, message } = authErrorToResponse(error);
+      return NextResponse.json({ error: message }, { status });
+    }
     console.error('Salary Adjustments API POST Error:', error);
     return NextResponse.json({ error: error.message || 'Server error' }, { status: 500 });
   }
@@ -106,14 +100,7 @@ export async function POST(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   try {
-    // 🟢 多租戶：取得當前使用者的 clinic_id
-    const clinicId = await getClinicIdFromRequest(request);
-    if (!clinicId) {
-      return NextResponse.json(
-        { error: '無法識別診所，請重新登入' },
-        { status: 401 }
-      );
-    }
+    const { clinicId } = await requireOwnerAuth(request);
 
     const body = await request.json();
     const { id, field, value } = body;
@@ -145,6 +132,10 @@ export async function PATCH(request: NextRequest) {
 
     return NextResponse.json({ data });
   } catch (error: any) {
+    if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
+      const { status, message } = authErrorToResponse(error);
+      return NextResponse.json({ error: message }, { status });
+    }
     console.error('Salary Adjustments API PATCH Error:', error);
     return NextResponse.json({ error: error.message || 'Server error' }, { status: 500 });
   }
@@ -152,14 +143,7 @@ export async function PATCH(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    // 🟢 多租戶：取得當前使用者的 clinic_id
-    const clinicId = await getClinicIdFromRequest(request);
-    if (!clinicId) {
-      return NextResponse.json(
-        { error: '無法識別診所，請重新登入' },
-        { status: 401 }
-      );
-    }
+    const { clinicId } = await requireOwnerAuth(request);
 
     const searchParams = request.nextUrl.searchParams;
     const id = searchParams.get('id');
@@ -182,6 +166,10 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (error: any) {
+    if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
+      const { status, message } = authErrorToResponse(error);
+      return NextResponse.json({ error: message }, { status });
+    }
     console.error('Salary Adjustments API DELETE Error:', error);
     return NextResponse.json({ error: error.message || 'Server error' }, { status: 500 });
   }

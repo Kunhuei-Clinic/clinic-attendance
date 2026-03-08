@@ -1,17 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
-import { getClinicIdFromRequest } from '@/lib/clinicHelper';
+import { requireOwnerAuth, authErrorToResponse, UnauthorizedError, ForbiddenError } from '@/lib/authHelper';
 
 export async function GET(request: NextRequest) {
   try {
-    // 🟢 多租戶：取得當前使用者的 clinic_id
-    const clinicId = await getClinicIdFromRequest(request);
-    if (!clinicId) {
-      return NextResponse.json(
-        { error: '無法識別診所，請重新登入' },
-        { status: 401 }
-      );
-    }
+    const { clinicId } = await requireOwnerAuth(request);
 
     const searchParams = request.nextUrl.searchParams;
     const month = searchParams.get('month'); // Format: yyyy-MM
@@ -100,6 +93,10 @@ export async function GET(request: NextRequest) {
       monthlyStandardHours,
     });
   } catch (error: any) {
+    if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
+      const { status, message } = authErrorToResponse(error);
+      return NextResponse.json({ error: message }, { status });
+    }
     console.error('Salary Calculate API GET Error:', error);
     return NextResponse.json({ error: error.message || 'Server error' }, { status: 500 });
   }

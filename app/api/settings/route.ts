@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
-import { getClinicIdFromRequest } from '@/lib/clinicHelper';
+import { requireOwnerAuth, authErrorToResponse, UnauthorizedError, ForbiddenError } from '@/lib/authHelper';
 
 /**
  * GET /api/settings
- * 取得系統設定
+ * 取得系統設定（僅 owner）
  * 
  * Query Parameters:
  *   - key: string (optional, 取得特定設定)
@@ -12,14 +12,7 @@ import { getClinicIdFromRequest } from '@/lib/clinicHelper';
  */
 export async function GET(request: NextRequest) {
   try {
-    // 🟢 多租戶：取得當前使用者的 clinic_id
-    const clinicId = await getClinicIdFromRequest(request);
-    if (!clinicId) {
-      return NextResponse.json(
-        { data: [], error: '無法識別診所，請重新登入' },
-        { status: 401 }
-      );
-    }
+    const { clinicId } = await requireOwnerAuth(request);
 
     const searchParams = request.nextUrl.searchParams;
     const type = searchParams.get('type');
@@ -76,6 +69,10 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ data: data || [] });
   } catch (error: any) {
+    if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
+      const { status, message } = authErrorToResponse(error);
+      return NextResponse.json({ data: [], error: message }, { status });
+    }
     console.error('Settings API Error:', error);
     return NextResponse.json(
       { data: [], error: error.message || '伺服器錯誤' },
@@ -101,14 +98,7 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    // 🟢 多租戶：取得當前使用者的 clinic_id
-    const clinicId = await getClinicIdFromRequest(request);
-    if (!clinicId) {
-      return NextResponse.json(
-        { success: false, message: '無法識別診所，請重新登入' },
-        { status: 401 }
-      );
-    }
+    const { clinicId } = await requireOwnerAuth(request);
 
     const body = await request.json();
 
@@ -183,6 +173,10 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, message: '設定已更新' });
   } catch (error: any) {
+    if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
+      const { status, message } = authErrorToResponse(error);
+      return NextResponse.json({ success: false, message }, { status });
+    }
     console.error('Settings POST API Error:', error);
     return NextResponse.json(
       { success: false, message: `處理失敗: ${error.message}` },
