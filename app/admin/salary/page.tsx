@@ -560,11 +560,11 @@ export default function SalaryPage() {
           <h2 className="text-2xl font-bold text-slate-800 mb-2">請選擇薪資月份</h2>
           <p className="text-slate-500 text-sm mb-8">選擇您要檢視或結算薪資的月份，系統將自動載入考勤資料並進行試算。</p>
 
-          {/* 🟢 帶有左右快速切換的月份選擇器 */}
-          <div className="flex items-center gap-3 w-full mb-8">
+          {/* 🟢 帶有左右快速切換的月份選擇器（對稱版面） */}
+          <div className="flex items-center justify-center gap-3 w-full mb-8">
             <button
               onClick={() => setSelectedMonth(prev => format(subMonths(new Date(`${prev}-01`), 1), 'yyyy-MM'))}
-              className="p-4 bg-slate-50 hover:bg-blue-50 rounded-xl border border-slate-200 hover:border-blue-200 text-slate-500 hover:text-blue-600 transition shadow-sm"
+              className="w-14 h-14 flex items-center justify-center flex-shrink-0 bg-slate-50 hover:bg-blue-50 rounded-xl border border-slate-200 hover:border-blue-200 text-slate-500 hover:text-blue-600 transition shadow-sm"
               title="上個月"
             >
               <ChevronLeft size={24} />
@@ -573,11 +573,11 @@ export default function SalaryPage() {
               type="month"
               value={selectedMonth}
               onChange={(e) => setSelectedMonth(e.target.value)}
-              className="flex-1 text-center text-3xl font-black text-slate-700 bg-white border-2 border-slate-200 rounded-xl py-4 px-2 outline-none focus:border-blue-500 focus:shadow-md transition-all shadow-sm"
+              className="w-[200px] sm:w-[220px] text-center text-2xl sm:text-3xl font-black text-slate-700 bg-white border-2 border-slate-200 rounded-xl py-4 px-3 outline-none focus:border-blue-500 focus:shadow-md transition-all shadow-sm"
             />
             <button
               onClick={() => setSelectedMonth(prev => format(addMonths(new Date(`${prev}-01`), 1), 'yyyy-MM'))}
-              className="p-4 bg-slate-50 hover:bg-blue-50 rounded-xl border border-slate-200 hover:border-blue-200 text-slate-500 hover:text-blue-600 transition shadow-sm"
+              className="w-14 h-14 flex items-center justify-center flex-shrink-0 bg-slate-50 hover:bg-blue-50 rounded-xl border border-slate-200 hover:border-blue-200 text-slate-500 hover:text-blue-600 transition shadow-sm"
               title="下個月"
             >
               <ChevronRight size={24} />
@@ -615,28 +615,30 @@ export default function SalaryPage() {
         </div>
 
         <div className="flex flex-col md:flex-row items-center gap-3">
-          {/* 月份切換器 */}
-          <div className="flex items-center bg-slate-50 rounded-xl border border-slate-200 p-1">
+          {/* 月份切換器（對稱） */}
+          <div className="flex items-center bg-slate-50 rounded-xl border border-slate-200 p-1.5">
             <button
               onClick={() => changeMonth(-1)}
-              className="p-2 hover:bg-white hover:shadow-sm rounded-lg text-slate-500"
+              className="w-10 h-10 flex items-center justify-center hover:bg-white hover:shadow-sm rounded-lg text-slate-500 transition-colors"
+              title="上個月"
             >
-              <ChevronLeft size={16} />
+              <ChevronLeft size={18} />
             </button>
-            <div className="flex items-center gap-2 px-2">
-              <Calendar size={16} className="text-slate-400" />
+            <div className="flex items-center gap-2 px-3 min-w-[140px] justify-center">
+              <Calendar size={16} className="text-slate-400 flex-shrink-0" />
               <input
                 type="month"
                 value={selectedMonth}
                 onChange={(e) => setSelectedMonth(e.target.value)}
-                className="bg-transparent font-bold text-slate-700 outline-none w-32 text-center"
+                className="bg-transparent font-bold text-slate-700 outline-none w-28 text-center"
               />
             </div>
             <button
               onClick={() => changeMonth(1)}
-              className="p-2 hover:bg-white hover:shadow-sm rounded-lg text-slate-500"
+              className="w-10 h-10 flex items-center justify-center hover:bg-white hover:shadow-sm rounded-lg text-slate-500 transition-colors"
+              title="下個月"
             >
-              <ChevronRight size={16} />
+              <ChevronRight size={18} />
             </button>
           </div>
 

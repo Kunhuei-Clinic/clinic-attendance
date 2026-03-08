@@ -1,10 +1,10 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Stethoscope, Settings, Printer, Save, X, Trash2, Lock, Unlock, FileEdit, Landmark, PenLine, Sparkles, ShieldAlert, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Stethoscope, Settings, Printer, Save, X, Trash2, Lock, Unlock, FileEdit, Landmark, PenLine, ShieldAlert, ChevronLeft, ChevronRight } from 'lucide-react';
 import PayslipModal from '@/app/admin/doctor-salary/PayslipModal';
 
-type Item = { id: number; name: string; amount: number; rate?: number };
+type Item = { id: string | number; name: string; amount: number; rate?: number };
 
 const DEFAULT_BASE_PAY = {
     mode: 'guarantee', licenseFee: 0, guarantee: 0, hourlyRate: 0,
@@ -71,13 +71,15 @@ export default function DoctorSalaryView() {
     const [currentMonth, setCurrentMonth] = useState(new Date().toISOString().slice(0, 7));
     const [ppfTargetMonth, setPpfTargetMonth] = useState('');
     const [doctors, setDoctors] = useState<any[]>([]);
-    const [selectedDoctorId, setSelectedDoctorId] = useState<number | null>(null);
+    const [selectedDoctorId, setSelectedDoctorId] = useState<string | null>(null);
     const [rosterList, setRosterList] = useState<any[]>([]);
     const [basePayData, setBasePayData] = useState<any>(DEFAULT_BASE_PAY);
     
     const [ppfData, setPpfData] = useState(() => ({ ...DEFAULT_PPF_DATA }));
 
     const [isSaving, setIsSaving] = useState(false);
+    const [hasConfirmedMonth, setHasConfirmedMonth] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
     const [showSettings, setShowSettings] = useState(false);
     const [showPayslip, setShowPayslip] = useState(false);
 
@@ -92,12 +94,13 @@ export default function DoctorSalaryView() {
 
     useEffect(() => {
         resetForm();
-        if (!selectedDoctorId || !currentMonth || !ppfTargetMonth) return;
+        if (!selectedDoctorId || !currentMonth || !ppfTargetMonth || !hasConfirmedMonth) return;
 
         const doctor = doctors.find((d: any) => d.id === selectedDoctorId);
         if (!doctor) return;
 
         let cancelled = false;
+        setIsLoading(true);
 
         const run = async () => {
             try {
@@ -158,8 +161,8 @@ export default function DoctorSalaryView() {
                     return;
                 }
 
-                const ensureId = (arr: any[], base: number) =>
-                    (Array.isArray(arr) ? arr : []).map((x: any, i: number) => ({ ...x, id: x?.id ?? base + i + Math.random() }));
+                const ensureId = (arr: any[]) =>
+                    (Array.isArray(arr) ? arr : []).map((x: any) => ({ ...x, id: x?.id ?? crypto.randomUUID() }));
                 if (rec) {
                     setPpfData({
                         patient_count: Number(rec.patient_count) || 0,
@@ -167,16 +170,16 @@ export default function DoctorSalaryView() {
                         reg_fee_deduction: Number(rec.reg_fee_deduction) || 0,
                         clinic_days: Number(rec.clinic_days) || 0,
                         transfer_amount: Number(rec.transfer_amount) || 0,
-                        self_pay_items: ensureId(rec.self_pay_items || [], Date.now()),
-                        extra_items: ensureId(rec.extra_items || [], Date.now() + 1e6),
+                        self_pay_items: ensureId(rec.self_pay_items || []),
+                        extra_items: ensureId(rec.extra_items || []),
                         past_base_salary: rec.base_salary_at_time != null ? Number(rec.base_salary_at_time) : historicalBasePay,
                         status: (rec.status as 'draft' | 'locked') || 'draft'
                     });
                 } else {
                     let templateItems: Item[] = [];
                     if (doctor?.doctor_self_pay_template && Array.isArray(doctor.doctor_self_pay_template)) {
-                        templateItems = doctor.doctor_self_pay_template.map((t: any, idx: number) => ({
-                            id: Date.now() + idx + Math.random(),
+                        templateItems = doctor.doctor_self_pay_template.map((t: any) => ({
+                            id: crypto.randomUUID(),
                             name: t.name || '自費',
                             amount: 0,
                             rate: t.rate ?? 30
@@ -242,9 +245,11 @@ export default function DoctorSalaryView() {
             }
         };
 
-        run();
+        run().finally(() => {
+            if (!cancelled) setIsLoading(false);
+        });
         return () => { cancelled = true; };
-    }, [selectedDoctorId, currentMonth, ppfTargetMonth, doctors]);
+    }, [selectedDoctorId, currentMonth, ppfTargetMonth, doctors, hasConfirmedMonth]);
 
     const fetchDoctors = async () => {
         try {
@@ -252,7 +257,7 @@ export default function DoctorSalaryView() {
             const json = await res.json();
             if (json.data) {
                 setDoctors(json.data);
-                if (json.data.length > 0) setSelectedDoctorId((prev: number | null) => prev ?? json.data[0].id);
+                if (json.data.length > 0) setSelectedDoctorId((prev: string | null) => prev ?? json.data[0].id);
             }
         } catch (error: any) {
             console.error('Error fetching doctors:', error);
@@ -261,7 +266,7 @@ export default function DoctorSalaryView() {
 
     const updateItem = (listName: 'self_pay_items'|'extra_items', i: number, f: string, v: any) => { const n = [...ppfData[listName]] as any[]; n[i] = { ...n[i], [f]: v }; setPpfData(p => ({ ...p, [listName]: n })); };
     const removeItem = (listName: 'self_pay_items'|'extra_items', i: number) => { setPpfData(p => ({ ...p, [listName]: p[listName].filter((_, x) => x !== i) })); };
-    const addItem = (listName: 'self_pay_items'|'extra_items') => { setPpfData(p => ({ ...p, [listName]: [...p[listName], { id: Date.now(), name: listName==='extra_items'?'項目':'自費', amount: 0, rate: listName==='self_pay_items'?30:undefined }] })); };
+    const addItem = (listName: 'self_pay_items'|'extra_items') => { setPpfData(p => ({ ...p, [listName]: [...p[listName], { id: crypto.randomUUID(), name: listName==='extra_items'?'項目':'自費', amount: 0, rate: listName==='self_pay_items'?30:undefined }] })); };
 
     // 切換月份函數
     const changeMonth = (direction: 'prev' | 'next') => {
@@ -358,8 +363,61 @@ export default function DoctorSalaryView() {
         }
     };
 
+    // 🟢 入口選擇畫面（Launchpad）
+    if (!hasConfirmedMonth) {
+        return (
+            <div className="w-full flex items-center justify-center py-20 animate-fade-in min-h-[600px] bg-slate-50/50 rounded-3xl">
+                <div className="bg-white p-10 rounded-3xl shadow-xl border border-slate-100 max-w-md w-full flex flex-col items-center text-center">
+                    <div className="w-20 h-20 bg-teal-50 rounded-full flex items-center justify-center mb-6 shadow-inner">
+                        <Landmark className="text-teal-600" size={40} />
+                    </div>
+                    <h2 className="text-2xl font-bold text-slate-800 mb-2">請選擇醫師發薪月份</h2>
+                    <p className="text-slate-500 text-sm mb-8">選擇您要結算薪資的月份，系統將自動載入 PPF 業績與出勤班表。</p>
+
+                    <div className="flex items-center gap-3 w-full mb-8">
+                        <button
+                            onClick={() => changeMonth('prev')}
+                            className="p-4 bg-slate-50 hover:bg-teal-50 rounded-xl border border-slate-200 hover:border-teal-200 text-slate-500 hover:text-teal-600 transition shadow-sm flex-shrink-0"
+                            title="上個月"
+                        >
+                            <ChevronLeft size={24} />
+                        </button>
+                        <input
+                            type="month"
+                            value={currentMonth}
+                            onChange={(e) => setCurrentMonth(e.target.value)}
+                            className="flex-1 min-w-0 text-center text-2xl md:text-3xl font-black text-slate-700 bg-white border-2 border-teal-200 rounded-xl py-4 px-2 outline-none focus:border-teal-500 focus:shadow-md transition-all shadow-sm"
+                        />
+                        <button
+                            onClick={() => changeMonth('next')}
+                            className="p-4 bg-slate-50 hover:bg-teal-50 rounded-xl border border-slate-200 hover:border-teal-200 text-slate-500 hover:text-teal-600 transition shadow-sm flex-shrink-0"
+                            title="下個月"
+                        >
+                            <ChevronRight size={24} />
+                        </button>
+                    </div>
+
+                    <button
+                        onClick={() => setHasConfirmedMonth(true)}
+                        className="w-full bg-teal-600 text-white font-bold text-lg py-4 rounded-xl hover:bg-teal-700 shadow-lg shadow-teal-200 transition transform active:scale-95 flex items-center justify-center gap-2"
+                    >
+                        <Stethoscope size={20} /> 開始載入與結算
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
     return (
-        <div className="w-full animate-fade-in p-4 pb-24">
+        <div className="w-full animate-fade-in p-4 pb-24 relative min-h-[600px]">
+            {isLoading && (
+                <div className="absolute inset-0 z-50 bg-white/50 backdrop-blur-sm flex items-center justify-center rounded-2xl transition-all">
+                    <div className="flex flex-col items-center gap-4 bg-white/95 p-8 rounded-2xl shadow-2xl border border-slate-100">
+                        <div className="w-12 h-12 border-4 border-slate-200 border-t-teal-600 rounded-full animate-spin"></div>
+                        <span className="text-slate-700 font-bold animate-pulse text-lg">PPF 業績與薪資試算中...</span>
+                    </div>
+                </div>
+            )}
             <div className="flex justify-between items-center mb-6 bg-white p-4 rounded-xl shadow-sm border">
                 <h2 className="text-xl font-bold flex items-center gap-2 text-slate-800"><Stethoscope className="text-teal-600" /> 醫師薪資結算</h2>
                 <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-lg border">
