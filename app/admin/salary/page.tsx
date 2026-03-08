@@ -540,7 +540,7 @@ export default function SalaryPage() {
     );
   }
 
-  // 🟢 入口選擇畫面：如果還沒確認月份，顯示這個漂亮的選擇器
+  // 🟢 入口選擇畫面
   if (authChecked && !hasConfirmedMonth) {
     return (
       <div className="w-full flex items-center justify-center py-20 animate-fade-in min-h-[600px] bg-slate-50/50 rounded-3xl">
@@ -551,12 +551,29 @@ export default function SalaryPage() {
           <h2 className="text-2xl font-bold text-slate-800 mb-2">請選擇薪資月份</h2>
           <p className="text-slate-500 text-sm mb-8">選擇您要檢視或結算薪資的月份，系統將自動載入考勤資料並進行試算。</p>
 
-          <input
-            type="month"
-            value={selectedMonth}
-            onChange={(e) => setSelectedMonth(e.target.value)}
-            className="w-full text-center text-3xl font-black text-slate-700 bg-slate-50 border-2 border-slate-200 rounded-xl py-4 mb-8 outline-none focus:border-blue-500 focus:bg-white transition-all shadow-sm"
-          />
+          {/* 🟢 帶有左右快速切換的月份選擇器 */}
+          <div className="flex items-center gap-3 w-full mb-8">
+            <button
+              onClick={() => setSelectedMonth(prev => format(subMonths(new Date(`${prev}-01`), 1), 'yyyy-MM'))}
+              className="p-4 bg-slate-50 hover:bg-blue-50 rounded-xl border border-slate-200 hover:border-blue-200 text-slate-500 hover:text-blue-600 transition shadow-sm"
+              title="上個月"
+            >
+              <ChevronLeft size={24} />
+            </button>
+            <input
+              type="month"
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              className="flex-1 text-center text-3xl font-black text-slate-700 bg-white border-2 border-slate-200 rounded-xl py-4 px-2 outline-none focus:border-blue-500 focus:shadow-md transition-all shadow-sm"
+            />
+            <button
+              onClick={() => setSelectedMonth(prev => format(addMonths(new Date(`${prev}-01`), 1), 'yyyy-MM'))}
+              className="p-4 bg-slate-50 hover:bg-blue-50 rounded-xl border border-slate-200 hover:border-blue-200 text-slate-500 hover:text-blue-600 transition shadow-sm"
+              title="下個月"
+            >
+              <ChevronRight size={24} />
+            </button>
+          </div>
 
           <button
             onClick={() => setHasConfirmedMonth(true)}

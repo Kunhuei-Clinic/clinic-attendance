@@ -375,12 +375,29 @@ export default function DoctorSalaryPage() {
                     <h2 className="text-2xl font-bold text-slate-800 mb-2">請選擇醫師發薪月份</h2>
                     <p className="text-slate-500 text-sm mb-8">選擇您要結算薪資的月份，系統將自動載入 PPF 業績與出勤班表。</p>
 
-                    <input
-                        type="month"
-                        value={currentMonth}
-                        onChange={(e) => setCurrentMonth(e.target.value)}
-                        className="w-full text-center text-3xl font-black text-slate-700 bg-slate-50 border-2 border-teal-200 rounded-xl py-4 mb-8 outline-none focus:border-teal-500 focus:bg-white transition-all shadow-sm"
-                    />
+                    {/* 🟢 帶有左右快速切換的月份選擇器 */}
+                    <div className="flex items-center gap-3 w-full mb-8">
+                        <button
+                            onClick={() => changeMonth('prev')}
+                            className="p-4 bg-slate-50 hover:bg-teal-50 rounded-xl border border-slate-200 hover:border-teal-200 text-slate-500 hover:text-teal-600 transition shadow-sm"
+                            title="上個月"
+                        >
+                            <ChevronLeft size={24} />
+                        </button>
+                        <input
+                            type="month"
+                            value={currentMonth}
+                            onChange={(e) => setCurrentMonth(e.target.value)}
+                            className="flex-1 text-center text-3xl font-black text-slate-700 bg-white border-2 border-teal-200 rounded-xl py-4 px-2 outline-none focus:border-teal-500 focus:shadow-md transition-all shadow-sm"
+                        />
+                        <button
+                            onClick={() => changeMonth('next')}
+                            className="p-4 bg-slate-50 hover:bg-teal-50 rounded-xl border border-slate-200 hover:border-teal-200 text-slate-500 hover:text-teal-600 transition shadow-sm"
+                            title="下個月"
+                        >
+                            <ChevronRight size={24} />
+                        </button>
+                    </div>
 
                     <button
                         onClick={() => setHasConfirmedMonth(true)}
