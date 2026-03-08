@@ -144,7 +144,13 @@ function PrintContent({ report, yearMonth, clinicName }: any) {
                   ) : (
                     <>
                       <Row label="本薪 (月薪)" amount={report.base_pay} />
-                      {(report.ot_pay > 0) && <Row label="加班費合計" amount={report.ot_pay} sub={`共 ${(report.normal_ot_hours ?? 0) + (report.rest_work_hours ?? 0)}hr`} />}
+                      {(report.ot_pay > 0) && (
+                        <Row
+                          label="加班費合計"
+                          amount={report.ot_pay}
+                          sub={`共 ${(report.normal_ot_hours ?? 0) + (report.rest_work_hours ?? 0)}hr (換算時薪 $${Math.round(report.base_pay / 240)})`}
+                        />
+                      )}
                       <Row label="假日加給" amount={report.holiday_pay} />
                     </>
                   )}

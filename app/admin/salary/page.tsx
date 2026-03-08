@@ -625,12 +625,11 @@ export default function SalaryPage() {
               <ChevronLeft size={18} />
             </button>
             <div className="flex items-center gap-2 px-3 min-w-[140px] justify-center">
-              <Calendar size={16} className="text-slate-400 flex-shrink-0" />
               <input
                 type="month"
                 value={selectedMonth}
                 onChange={(e) => setSelectedMonth(e.target.value)}
-                className="bg-transparent font-bold text-slate-700 outline-none w-28 text-center"
+                className="bg-transparent font-bold text-slate-700 outline-none w-32 text-center cursor-pointer"
               />
             </div>
             <button

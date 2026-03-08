@@ -343,8 +343,8 @@ export default function SalaryRow({
                         <span>本薪 (月薪):</span>
                         <span className="font-mono font-bold">${rpt.base_pay}</span>
                       </li>
-                      <li className="flex justify-between">
-                        <span>加班費 ({(rpt.normal_ot_hours ?? 0) + (rpt.rest_work_hours ?? 0)}hr):</span>
+                      <li className="flex justify-between text-slate-600">
+                        <span>加班費 ({(rpt.normal_ot_hours ?? 0) + (rpt.rest_work_hours ?? 0)}hr @ ${Math.round(rpt.base_pay / 240)}):</span>
                         <span className="font-mono">${rpt.ot_pay}</span>
                       </li>
                       {rpt.holiday_pay > 0 && (
