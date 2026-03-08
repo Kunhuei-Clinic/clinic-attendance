@@ -50,6 +50,7 @@ export default function SalaryPage() {
   const [entityList, setEntityList] = useState<Entity[]>([]);
   const [authChecked, setAuthChecked] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [hasConfirmedMonth, setHasConfirmedMonth] = useState(false);
   const [lastMonthAdjustments, setLastMonthAdjustments] = useState<Record<string, any[]>>({});
 
   // 新增：篩選狀態
@@ -93,20 +94,21 @@ export default function SalaryPage() {
   // 每次月份變更時，載入調整與已封存紀錄（換月時立刻清空舊有報表，避免畫面殘影與誤操作）
   useEffect(() => {
     setLiveReports([]);
-    if (!authChecked || !selectedMonth) return;
-    setIsLoading(true); // 🟢 開始載入
-    fetchAdjustments();
-    fetchLockedRecords();
-  }, [selectedMonth, authChecked]);
+    // 🟢 加入 !hasConfirmedMonth 攔截，未確認前不抓資料
+    if (!authChecked || !selectedMonth || !hasConfirmedMonth) return;
+    setIsLoading(true);
+    Promise.all([fetchAdjustments(), fetchLockedRecords()]);
+  }, [selectedMonth, authChecked, hasConfirmedMonth]);
 
   // 當員工資料 / 調整 / 鎖定紀錄變動時，重新試算
   useEffect(() => {
-    if (!authChecked || !selectedMonth) return;
+    // 🟢 加入 !hasConfirmedMonth 攔截
+    if (!authChecked || !selectedMonth || !hasConfirmedMonth) return;
     if (staffList.length === 0) return;
     performCalculation().finally(() => {
-      setIsLoading(false); // 🟢 計算完成，關閉遮罩
+      setIsLoading(false);
     });
-  }, [staffList, adjustments, lockedRecords, selectedMonth, authChecked]);
+  }, [staffList, adjustments, lockedRecords, selectedMonth, authChecked, hasConfirmedMonth]);
 
   const fetchSystemSettings = async () => {
     try {
@@ -534,6 +536,35 @@ export default function SalaryPage() {
     return (
       <div className="w-full flex items-center justify-center py-20">
         <div className="text-slate-400">檢查權限中...</div>
+      </div>
+    );
+  }
+
+  // 🟢 入口選擇畫面：如果還沒確認月份，顯示這個漂亮的選擇器
+  if (authChecked && !hasConfirmedMonth) {
+    return (
+      <div className="w-full flex items-center justify-center py-20 animate-fade-in min-h-[600px] bg-slate-50/50 rounded-3xl">
+        <div className="bg-white p-10 rounded-3xl shadow-xl border border-slate-100 max-w-md w-full flex flex-col items-center text-center">
+          <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center mb-6 shadow-inner">
+            <Calendar className="text-blue-600" size={40} />
+          </div>
+          <h2 className="text-2xl font-bold text-slate-800 mb-2">請選擇薪資月份</h2>
+          <p className="text-slate-500 text-sm mb-8">選擇您要檢視或結算薪資的月份，系統將自動載入考勤資料並進行試算。</p>
+
+          <input
+            type="month"
+            value={selectedMonth}
+            onChange={(e) => setSelectedMonth(e.target.value)}
+            className="w-full text-center text-3xl font-black text-slate-700 bg-slate-50 border-2 border-slate-200 rounded-xl py-4 mb-8 outline-none focus:border-blue-500 focus:bg-white transition-all shadow-sm"
+          />
+
+          <button
+            onClick={() => setHasConfirmedMonth(true)}
+            className="w-full bg-blue-600 text-white font-bold text-lg py-4 rounded-xl hover:bg-blue-700 shadow-lg shadow-blue-200 transition transform active:scale-95 flex items-center justify-center gap-2"
+          >
+            <DollarSign size={20} /> 開始載入與結算
+          </button>
+        </div>
       </div>
     );
   }
