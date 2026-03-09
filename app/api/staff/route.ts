@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { getClinicIdFromRequest } from '@/lib/clinicHelper';
-import { createServerClient } from '@supabase/ssr';
-import { cookies } from 'next/headers';
+import { requireManagerOrOwnerAuth, UnauthorizedError, ForbiddenError } from '@/lib/authHelper';
 
 /**
  * GET /api/staff
@@ -23,65 +22,40 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // 取得目前使用者的角色（owner / manager / staff 等）
-    const cookieStore = cookies();
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          get(name: string) {
-            return cookieStore.get(name)?.value;
-          },
-          set(name: string, value: string, options: any) {
-            cookieStore.set({ name, value, ...options });
-          },
-          remove(name: string, options: any) {
-            cookieStore.set({ name, value: '', ...options });
-          },
-        },
-      }
-    );
+    // 🟢 嘗試判斷是否為 owner，但不阻擋（Portal 無 JWT 時會降級為一般成員）
+    let isOwner = false;
+    try {
+      const { clinicId: authClinicId, userId } = await requireManagerOrOwnerAuth(request);
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json(
-        { data: [], error: '無法識別使用者，請重新登入' },
-        { status: 401 }
-      );
-    }
-
-    const userId = user.id;
-
-    // 1) Super Admin 視同 owner，給完整欄位
-    const { data: superAdmin } = await supabaseAdmin
-      .from('super_admins')
-      .select('user_id')
-      .eq('user_id', userId)
-      .single();
-
-    let userRole: string | null = null;
-    if (superAdmin) {
-      userRole = 'owner';
-    } else {
-      // 2) 一般診所成員：從 clinic_members 取得 role
-      const { data: member } = await supabaseAdmin
-        .from('clinic_members')
-        .select('role')
+      // Super Admin 或在該診所為 owner/boss 視為 owner 權限（可看未遮罩資料）
+      const { data: superAdmin } = await supabaseAdmin
+        .from('super_admins')
+        .select('user_id')
         .eq('user_id', userId)
-        .eq('clinic_id', clinicId)
         .single();
 
-      if (!member) {
-        return NextResponse.json(
-          { data: [], error: '您沒有此診所權限' },
-          { status: 403 }
-        );
-      }
+      if (superAdmin) {
+        isOwner = true;
+      } else {
+        const { data: member } = await supabaseAdmin
+          .from('clinic_members')
+          .select('role')
+          .eq('user_id', userId)
+          .eq('clinic_id', authClinicId)
+          .single();
 
-      userRole = (member as { role?: string | null }).role ?? null;
+        const role = (member as { role?: string | null } | null)?.role ?? null;
+        isOwner = role === 'owner' || role === 'boss';
+      }
+    } catch (e) {
+      // 🟢 若無法取得登入身分（例如 Portal 訪客），視為非 owner，僅套用資料遮罩，不回傳 401
+      if (e instanceof UnauthorizedError || e instanceof ForbiddenError) {
+        isOwner = false;
+      } else {
+        // 其他錯誤也不阻擋 GET，只在 console 記錄
+        console.error('Soft auth check for /api/staff failed:', e);
+        isOwner = false;
+      }
     }
 
     const searchParams = request.nextUrl.searchParams;
@@ -115,7 +89,7 @@ export async function GET(request: NextRequest) {
     let safeData: any[] = data || [];
 
     // 🟢 若不是 owner，則剔除所有敏感欄位（僅回傳排班所需欄位）
-    if (userRole !== 'owner') {
+    if (!isOwner) {
       safeData = safeData.map((staff: any) => ({
         id: staff.id,
         name: staff.name,
