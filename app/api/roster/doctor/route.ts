@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { getClinicIdFromRequest } from '@/lib/clinicHelper';
-import { requireManagerOrOwnerAuth, authErrorToResponse, UnauthorizedError, ForbiddenError } from '@/lib/authHelper';
+import { requireOwnerAuth, authErrorToResponse, UnauthorizedError, ForbiddenError } from '@/lib/authHelper';
 
 /**
  * GET /api/roster/doctor
@@ -101,8 +101,8 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    // 🟢 僅允許負責人或排班主管操作醫師班表
-    const { clinicId } = await requireManagerOrOwnerAuth(request);
+    // 🟢 僅允許負責人操作醫師班表
+    const { clinicId } = await requireOwnerAuth(request);
 
     const body = await request.json();
     const {
@@ -221,8 +221,8 @@ export async function POST(request: NextRequest) {
  */
 export async function DELETE(request: NextRequest) {
   try {
-    // 🟢 僅允許負責人或排班主管刪除醫師班表
-    const { clinicId } = await requireManagerOrOwnerAuth(request);
+    // 🟢 僅允許負責人刪除醫師班表
+    const { clinicId } = await requireOwnerAuth(request);
 
     const searchParams = request.nextUrl.searchParams;
     const id = searchParams.get('id');
@@ -292,8 +292,8 @@ export async function DELETE(request: NextRequest) {
  */
 export async function PATCH(request: NextRequest) {
   try {
-    // 🟢 僅允許負責人或排班主管批次複製醫師班表
-    const { clinicId } = await requireManagerOrOwnerAuth(request);
+    // 🟢 僅允許負責人批次複製醫師班表
+    const { clinicId } = await requireOwnerAuth(request);
 
     const body = await request.json();
     const { sourceStart, targetStart, days } = body;

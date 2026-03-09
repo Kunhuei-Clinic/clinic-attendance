@@ -27,6 +27,7 @@ const supabase = createBrowserClient(
 
 import StaffRosterView from './roster/StaffRosterView';
 import DoctorRosterView from './DoctorRoster';
+import DoctorRosterPrint from './DoctorRosterPrint';
 import LaborRulesView from './LaborRules';
 import AttendanceView from './AttendanceView';
 import SalaryView from '@/components/views/SalaryView';
@@ -378,7 +379,7 @@ export default function AdminPage() {
                         : 'text-slate-500 hover:bg-slate-50'
                     }`}
                   >
-                    <Stethoscope size={16} /> 醫師排班
+                    <Stethoscope size={16} /> 醫師診次表
                   </button>
                 </>
               )}
@@ -392,8 +393,9 @@ export default function AdminPage() {
             {activeTab === 'staff_roster' && (authLevel === 'boss' || authLevel === 'manager') && (
               <StaffRosterView authLevel={authLevel} />
             )}
-            {activeTab === 'doctor_roster' && (authLevel === 'boss' || authLevel === 'manager') && (
-              <DoctorRosterView />
+            {activeTab === 'doctor_roster' && authLevel === 'boss' && <DoctorRosterView />}
+            {activeTab === 'doctor_roster' && authLevel === 'manager' && (
+              <DoctorRosterPrint onClose={() => setActiveTab('staff_roster')} />
             )}
             {activeTab === 'labor_rules' && authLevel === 'boss' && <LaborRulesView />}
             {activeTab === 'salary' && authLevel === 'boss' && <SalaryView />}
