@@ -412,37 +412,31 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
         };
 
         const isActive = nextShifts.includes(shiftConfig.code);
-
-        // 🆕 一鍵排整天：啟用時，點第一個班別視為整天
         const isFirstShift = shiftsConfig.length > 0 && shiftConfig.code === shiftsConfig[0].code;
 
         if (fullDayFromMorning && isFirstShift) {
             const allCodes = shiftsConfig.map(s => s.code);
-            const isFullDayActive = allCodes.every(c => nextShifts.includes(c));
+            // 判斷是否「已經是滿班」
+            const isFullDayActive = allCodes.every(c => currentData.shifts.includes(c));
 
             if (isFullDayActive) {
-                // 已是整天班，再點一次則全部清空
+                // 取消整天：清空該日的所有班別與 details
                 nextShifts = [];
-                Object.keys(nextDetails).forEach(code => {
+                allCodes.forEach(code => {
                     delete nextDetails[code];
                 });
             } else {
-                // 將當天所有班別都排上
+                // 排滿整天：補齊所有班別與對應的 details
                 nextShifts = [...allCodes];
-                Object.keys(nextDetails).forEach(code => {
-                    delete nextDetails[code];
-                });
                 shiftsConfig.forEach(s => {
                     nextDetails[s.code] = { start: s.start, end: s.end };
                 });
             }
         } else {
             if (isActive) {
-                // 移除班別
                 nextShifts = nextShifts.filter(s => s !== shiftConfig.code);
                 delete nextDetails[shiftConfig.code];
             } else {
-                // 新增班別：Snapshot 當下的時間設定 📸
                 nextShifts.push(shiftConfig.code);
                 nextDetails[shiftConfig.code] = { start: shiftConfig.start, end: shiftConfig.end };
             }
@@ -451,7 +445,7 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
         updateRoster(staffId, dateStr, nextShifts, currentData.day_type, nextDetails);
     };
 
-    // 🟢 核心功能更新：將 shift_details 寫入資料庫（支援動態班別代號）
+    // 🟢 核心功能更新：將 shift_details 寫入資料庫（支援動態班別代號），並在失敗時回滾 UI
     const updateRoster = async (
         staffId: string,
         dateStr: string,
@@ -460,7 +454,9 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
         details: Record<string, { start: string; end: string }> = {},
     ) => {
         const key = `${staffId}_${dateStr}`;
+        const previousData = rosterMap[key];
 
+        // 樂觀更新 UI
         setRosterMap(prev => ({ ...prev, [key]: { shifts, day_type: dayType, shift_details: details } }));
 
         try {
@@ -478,9 +474,23 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
             const result = await response.json();
             if (!result.success) {
                 console.error('Update roster error:', result.message);
+                alert(`排班寫入失敗: ${result.message}`);
+                // 🟢 失敗時回滾 UI
+                setRosterMap(prev => ({
+                    ...prev,
+                    [key]:
+                        previousData || { shifts: [], day_type: 'normal', shift_details: {} },
+                }));
             }
         } catch (error) {
             console.error('Update roster error:', error);
+            alert('網路連線異常，排班未儲存');
+            // 🟢 失敗時回滾 UI
+            setRosterMap(prev => ({
+                ...prev,
+                [key]:
+                    previousData || { shifts: [], day_type: 'normal', shift_details: {} },
+            }));
         }
     };
 
