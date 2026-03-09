@@ -126,65 +126,52 @@ export async function POST(request: NextRequest) {
       maxEnd = null;
     }
 
-    // 🟢 多租戶：將 clinic_id 合併到 payload 中（不讓前端傳入）
-    const payload: any = {
-      staff_id: staff_id,
-      date,
-      shifts: shifts || [],
-      day_type: day_type || 'normal',
-      shift_details: shift_details || {},
-      clinic_id: clinicId // 🟢 自動填入，不讓前端傳入
-    };
-
-    if (minStart && maxEnd) {
-      payload.start_time = minStart;
-      payload.end_time = maxEnd;
-    }
-
-    // 檢查是否已存在（加上 clinic_id 驗證）
-    const { data: existing } = await supabaseAdmin
+    // 🟢 原子化清理：先刪除當日該員工在此診所的所有舊紀錄（消滅幽靈資料與重複資料）
+    const { error: deleteError } = await supabaseAdmin
       .from('roster')
-      .select('id')
+      .delete()
+      .eq('clinic_id', clinicId)
       .eq('staff_id', staff_id)
-      .eq('date', date)
-      .eq('clinic_id', clinicId) // 🟢 確保只查詢該診所的班表
-      .single();
+      .eq('date', date);
 
-    let error;
-    if (existing) {
-      // 如果沒有班次且是正常日，刪除
-      if ((!shifts || shifts.length === 0) && day_type === 'normal') {
-        const { error: deleteError } = await supabaseAdmin
-          .from('roster')
-          .delete()
-          .eq('id', existing.id)
-          .eq('clinic_id', clinicId); // 🟢 確保只刪除該診所的班表
-        error = deleteError;
-      } else {
-        // 更新
-        const { error: updateError } = await supabaseAdmin
-          .from('roster')
-          .update(payload)
-          .eq('id', existing.id)
-          .eq('clinic_id', clinicId); // 🟢 確保只更新該診所的班表
-        error = updateError;
-      }
-    } else {
-      // 新增（僅在有班次或非正常日時）
-      if ((shifts && shifts.length > 0) || day_type !== 'normal') {
-        const { error: insertError } = await supabaseAdmin
-          .from('roster')
-          .insert([payload]);
-        error = insertError;
-      }
-    }
-
-    if (error) {
-      console.error('Save staff roster error:', error);
+    if (deleteError) {
+      console.error('Clean old staff roster error:', deleteError);
       return NextResponse.json(
-        { success: false, message: `儲存失敗: ${error.message}` },
+        { success: false, message: `清理舊班表失敗: ${deleteError.message}` },
         { status: 500 }
       );
+    }
+
+    // 判斷是否需要寫入新資料：僅在「有班次」或「特殊假別」時才寫入
+    const hasShifts = Array.isArray(shifts) && shifts.length > 0;
+    const isSpecialDay = day_type && day_type !== 'normal';
+
+    if (hasShifts || isSpecialDay) {
+      const payload: any = {
+        staff_id,
+        date,
+        shifts: hasShifts ? shifts : [],
+        day_type: day_type || 'normal',
+        shift_details: shift_details || {},
+        clinic_id: clinicId,
+      };
+
+      if (minStart && maxEnd) {
+        payload.start_time = minStart;
+        payload.end_time = maxEnd;
+      }
+
+      const { error: insertError } = await supabaseAdmin
+        .from('roster')
+        .insert([payload]);
+
+      if (insertError) {
+        console.error('Save staff roster error:', insertError);
+        return NextResponse.json(
+          { success: false, message: `儲存失敗: ${insertError.message}` },
+          { status: 500 }
+        );
+      }
     }
 
     return NextResponse.json({

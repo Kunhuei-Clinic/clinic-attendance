@@ -19,6 +19,7 @@ type RosterTableProps = {
     weekDays: string[];
     rosterMap: Record<string, RosterData>;
     holidays: string[];
+    isEditMode: boolean;
     complianceErrors: Record<string, string[]>;
     shiftsConfig: ShiftConfig[];
     calculateStats: (staffId: string) => { totalDays: number; totalHours: number };
@@ -36,6 +37,7 @@ export default function RosterTable({
     weekDays,
     rosterMap,
     holidays,
+    isEditMode,
     complianceErrors,
     shiftsConfig,
     calculateStats,
@@ -77,8 +79,12 @@ export default function RosterTable({
                                 return (
                                     <th
                                         key={d.dateStr}
-                                        onClick={() => toggleGlobalHoliday(d.dateStr)}
-                                        className={`border p-1 text-center w-[42px] cursor-pointer select-none hover:bg-slate-100 transition ${headerClasses}`}
+                                        onClick={() => isEditMode && toggleGlobalHoliday(d.dateStr)}
+                                        className={`border p-1 text-center w-[42px] select-none transition ${
+                                            isEditMode
+                                                ? 'cursor-pointer hover:bg-slate-100'
+                                                : 'cursor-not-allowed opacity-70'
+                                        } ${headerClasses}`}
                                         title={isHoliday ? '點擊取消國定假日' : '點擊設為國定假日'}
                                     >
                                         <div className="text-[10px] leading-tight opacity-80">
@@ -148,8 +154,10 @@ export default function RosterTable({
                                                 className={`border p-0.5 text-center align-top h-[76px] relative w-[42px] overflow-hidden ${cellBg}`}
                                             >
                                                 <button
-                                                    onClick={() => applyDayTypeStamp(staff.id, d.dateStr)}
-                                                    className={`w-full h-5 shrink-0 rounded-sm text-[10px] font-bold mb-0.5 transition-colors ${btnClass}`}
+                                                    onClick={() => isEditMode && applyDayTypeStamp(staff.id, d.dateStr)}
+                                                    className={`w-full h-5 shrink-0 rounded-sm text-[10px] font-bold mb-0.5 transition-colors ${
+                                                        btnClass
+                                                    } ${!isEditMode ? 'opacity-60 cursor-not-allowed' : ''}`}
                                                 >
                                                     {btnText}
                                                 </button>
@@ -159,12 +167,14 @@ export default function RosterTable({
                                                         return (
                                                             <button
                                                                 key={shift.id}
-                                                                onClick={() => toggleShift(staff.id, d.dateStr, shift)}
+                                                                onClick={() =>
+                                                                    isEditMode && toggleShift(staff.id, d.dateStr, shift)
+                                                                }
                                                                 className={`flex-1 w-full flex items-center justify-center transition-all min-h-[14px] text-[10px] leading-none ${
                                                                     isSelected
                                                                         ? 'bg-blue-500 text-white shadow-inner font-bold'
                                                                         : 'bg-transparent text-slate-400 hover:bg-slate-200'
-                                                                }`}
+                                                                } ${!isEditMode ? 'opacity-60 cursor-not-allowed' : ''}`}
                                                                 title={`${shift.name} (${shift.start}-${shift.end})`}
                                                             >
                                                                 {isSelected ? shift.code : ''}

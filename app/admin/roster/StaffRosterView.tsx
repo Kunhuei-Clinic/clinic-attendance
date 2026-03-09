@@ -42,6 +42,7 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
     const [fullDayFromMorning, setFullDayFromMorning] = useState(false);
     const [activeStamp, setActiveStamp] = useState<DayType>('rest');
     const [isLoading, setIsLoading] = useState(false);
+    const [isEditMode, setIsEditMode] = useState(false);
 
     // 初始化
     useEffect(() => {
@@ -277,7 +278,9 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
                     if (r.day_type === 'shifted') day_type = 'shifted';
 
                     const shift_details = r.shift_details || {};
-                    map[`${r.staff_id}_${r.date}`] = { shifts, day_type, shift_details };
+                    const cleanDate = r.date ? String(r.date).split('T')[0] : '';
+                    if (!cleanDate) return;
+                    map[`${r.staff_id}_${cleanDate}`] = { shifts, day_type, shift_details };
                 });
             }
             setRosterMap(map);
@@ -368,6 +371,10 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
     };
 
     const toggleGlobalHoliday = async (dateStr: string) => {
+        if (!isEditMode) {
+            alert('請先點擊右上角開啟「編輯模式」才能修改班表！');
+            return;
+        }
         if (authLevel !== 'boss') return;
 
         try {
@@ -394,6 +401,10 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
     };
 
     const applyDayTypeStamp = async (staffId: string, dateStr: string) => {
+        if (!isEditMode) {
+            alert('請先點擊右上角開啟「編輯模式」才能修改班表！');
+            return;
+        }
         const key = `${staffId}_${dateStr}`;
         const currentData = rosterMap[key] || { shifts: [], day_type: 'normal' };
 
@@ -403,6 +414,10 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
     };
 
     const toggleShift = async (staffId: string, dateStr: string, shiftConfig: ShiftConfig) => {
+        if (!isEditMode) {
+            alert('請先點擊右上角開啟「編輯模式」才能修改班表！');
+            return;
+        }
         const key = `${staffId}_${dateStr}`;
         const currentData = rosterMap[key] || { shifts: [], day_type: 'normal', shift_details: {} };
 
@@ -630,6 +645,26 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
                         })}
                     </div>
 
+                    {/* 🆕 編輯模式切換 */}
+                    <button
+                        onClick={() => setIsEditMode(!isEditMode)}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold shadow transition ${
+                            isEditMode
+                                ? 'bg-amber-500 text-white hover:bg-amber-600 animate-pulse'
+                                : 'bg-white border border-slate-300 text-slate-600 hover:bg-slate-50'
+                        }`}
+                    >
+                        {isEditMode ? (
+                            <>
+                                <span>✏️</span> 編輯模式中 (點擊關閉)
+                            </>
+                        ) : (
+                            <>
+                                <span>🔒</span> 瀏覽模式 (點擊解鎖編輯)
+                            </>
+                        )}
+                    </button>
+
                     {/* 🟢 營業時間設定按鈕 */}
                     <button
                         onClick={() => setShowTimeModal(true)}
@@ -685,6 +720,7 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
                         weekDays={weekDays}
                         rosterMap={rosterMap}
                         holidays={holidays}
+                        isEditMode={isEditMode}
                         complianceErrors={complianceErrors}
                         shiftsConfig={shiftsConfig}
                         calculateStats={calculateStats}
