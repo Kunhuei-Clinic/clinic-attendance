@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { requireOwnerAuth, authErrorToResponse, UnauthorizedError, ForbiddenError } from '@/lib/authHelper';
+import { getClinicIdFromRequest } from '@/lib/clinicHelper';
 
 /**
  * GET /api/settings
@@ -12,7 +13,14 @@ import { requireOwnerAuth, authErrorToResponse, UnauthorizedError, ForbiddenErro
  */
 export async function GET(request: NextRequest) {
   try {
-    const { clinicId } = await requireOwnerAuth(request);
+    // 🟢 放寬為：只要是該診所成員即可讀取設定（供 Portal / 班表使用）
+    const clinicId = await getClinicIdFromRequest(request);
+    if (!clinicId) {
+      return NextResponse.json(
+        { data: [], error: '無法識別診所，請重新登入' },
+        { status: 401 }
+      );
+    }
 
     const searchParams = request.nextUrl.searchParams;
     const type = searchParams.get('type');

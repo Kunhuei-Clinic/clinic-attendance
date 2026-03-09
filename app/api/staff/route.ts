@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { getClinicIdFromRequest } from '@/lib/clinicHelper';
+import { createServerClient } from '@supabase/ssr';
+import { cookies } from 'next/headers';
 
 /**
  * GET /api/staff
@@ -19,6 +21,67 @@ export async function GET(request: NextRequest) {
         { data: [], error: '無法識別診所，請重新登入' },
         { status: 401 }
       );
+    }
+
+    // 取得目前使用者的角色（owner / manager / staff 等）
+    const cookieStore = cookies();
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            return cookieStore.get(name)?.value;
+          },
+          set(name: string, value: string, options: any) {
+            cookieStore.set({ name, value, ...options });
+          },
+          remove(name: string, options: any) {
+            cookieStore.set({ name, value: '', ...options });
+          },
+        },
+      }
+    );
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json(
+        { data: [], error: '無法識別使用者，請重新登入' },
+        { status: 401 }
+      );
+    }
+
+    const userId = user.id;
+
+    // 1) Super Admin 視同 owner，給完整欄位
+    const { data: superAdmin } = await supabaseAdmin
+      .from('super_admins')
+      .select('user_id')
+      .eq('user_id', userId)
+      .single();
+
+    let userRole: string | null = null;
+    if (superAdmin) {
+      userRole = 'owner';
+    } else {
+      // 2) 一般診所成員：從 clinic_members 取得 role
+      const { data: member } = await supabaseAdmin
+        .from('clinic_members')
+        .select('role')
+        .eq('user_id', userId)
+        .eq('clinic_id', clinicId)
+        .single();
+
+      if (!member) {
+        return NextResponse.json(
+          { data: [], error: '您沒有此診所權限' },
+          { status: 403 }
+        );
+      }
+
+      userRole = (member as { role?: string | null }).role ?? null;
     }
 
     const searchParams = request.nextUrl.searchParams;
@@ -49,7 +112,22 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    return NextResponse.json({ data: data || [] });
+    let safeData: any[] = data || [];
+
+    // 🟢 若不是 owner，則剔除所有敏感欄位（僅回傳排班所需欄位）
+    if (userRole !== 'owner') {
+      safeData = safeData.map((staff: any) => ({
+        id: staff.id,
+        name: staff.name,
+        role: staff.role,
+        entity: staff.entity,
+        display_order: staff.display_order,
+        is_active: staff.is_active,
+        start_date: staff.start_date,
+      }));
+    }
+
+    return NextResponse.json({ data: safeData });
   } catch (error: any) {
     console.error('Staff API Error:', error);
     return NextResponse.json(
