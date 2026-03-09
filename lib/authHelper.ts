@@ -20,6 +20,7 @@ export class UnauthorizedError extends Error {
 }
 
 export type RequireOwnerAuthResult = { clinicId: string; userId: string };
+export type RequireManagerOrOwnerAuthResult = { clinicId: string; userId: string };
 
 /**
  * 嚴格驗證：僅允許 system_role 為 owner（或平台 super_admin）的請求通過。
@@ -116,6 +117,107 @@ export async function requireOwnerAuth(request: NextRequest): Promise<RequireOwn
   const role = (member as { role?: string }).role;
   if (role !== 'owner' && role !== 'boss') {
     throw new ForbiddenError('僅負責人可執行此操作');
+  }
+
+  return { clinicId: member.clinic_id, userId };
+}
+
+/**
+ * 驗證：允許 owner / boss / manager（以及 super_admin）操作指定診所資料。
+ * 回傳該使用者在當前診所的 clinic_id 與 userId。
+ *
+ * - Super Admin：視同最高權限，可操作任一院區。
+ * - 一般使用者：必須在目標診所的 clinic_members 中，角色為 owner / boss / manager 才放行。
+ */
+export async function requireManagerOrOwnerAuth(
+  request: NextRequest
+): Promise<RequireManagerOrOwnerAuthResult> {
+  const cookieStore = cookies();
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value;
+        },
+        set(name: string, value: string, options: Record<string, unknown>) {
+          cookieStore.set({ name, value, ...options });
+        },
+        remove(name: string, options: Record<string, unknown>) {
+          cookieStore.set({ name, value: '', ...options });
+        },
+      },
+    }
+  );
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    throw new UnauthorizedError('無法識別診所，請重新登入');
+  }
+
+  const userId = user.id;
+  const targetClinicId = request.headers.get('x-clinic-id') || cookieStore.get('active_clinic_id')?.value;
+
+  // 1. 平台總管 (Super Admin) 視同 owner/manager，允許操作任一院區
+  const { data: superAdmin } = await supabaseAdmin
+    .from('super_admins')
+    .select('user_id')
+    .eq('user_id', userId)
+    .single();
+
+  if (superAdmin) {
+    if (targetClinicId) {
+      return { clinicId: targetClinicId, userId };
+    }
+    const { data: first } = await supabaseAdmin
+      .from('clinic_members')
+      .select('clinic_id')
+      .eq('user_id', userId)
+      .limit(1)
+      .single();
+    if (first?.clinic_id) {
+      return { clinicId: first.clinic_id, userId };
+    }
+    throw new UnauthorizedError('無法識別診所，請重新登入');
+  }
+
+  const isManagerLevel = (role?: string | null) =>
+    role === 'owner' || role === 'boss' || role === 'manager';
+
+  // 2. 一般使用者：必須在診所中為 owner / boss / manager
+  if (!targetClinicId) {
+    const { data: first } = await supabaseAdmin
+      .from('clinic_members')
+      .select('clinic_id, role')
+      .eq('user_id', userId)
+      .limit(1)
+      .single();
+    if (!first?.clinic_id) {
+      throw new UnauthorizedError('無法識別診所，請重新登入');
+    }
+    const role = (first as { role?: string }).role;
+    if (!isManagerLevel(role)) {
+      throw new ForbiddenError('僅負責人或排班主管可執行此操作');
+    }
+    return { clinicId: first.clinic_id, userId };
+  }
+
+  const { data: member } = await supabaseAdmin
+    .from('clinic_members')
+    .select('clinic_id, role')
+    .eq('user_id', userId)
+    .eq('clinic_id', targetClinicId)
+    .single();
+
+  if (!member) {
+    throw new ForbiddenError('您沒有此院區的存取權限');
+  }
+
+  const role = (member as { role?: string }).role;
+  if (!isManagerLevel(role)) {
+    throw new ForbiddenError('僅負責人或排班主管可執行此操作');
   }
 
   return { clinicId: member.clinic_id, userId };

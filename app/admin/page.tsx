@@ -359,12 +359,28 @@ export default function AdminPage() {
                 </>
               )}
               {authLevel === 'manager' && (
-                <button
-                  onClick={() => setActiveTab('staff_roster')}
-                  className="px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 whitespace-nowrap bg-purple-100 text-purple-700"
-                >
-                  <Calendar size={16} /> 員工排班
-                </button>
+                <>
+                  <button
+                    onClick={() => setActiveTab('staff_roster')}
+                    className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 whitespace-nowrap ${
+                      activeTab === 'staff_roster'
+                        ? 'bg-purple-100 text-purple-700'
+                        : 'text-slate-500 hover:bg-slate-50'
+                    }`}
+                  >
+                    <Calendar size={16} /> 員工排班
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('doctor_roster')}
+                    className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 whitespace-nowrap ${
+                      activeTab === 'doctor_roster'
+                        ? 'bg-teal-100 text-teal-700'
+                        : 'text-slate-500 hover:bg-slate-50'
+                    }`}
+                  >
+                    <Stethoscope size={16} /> 醫師排班
+                  </button>
+                </>
               )}
             </div>
           </div>
@@ -376,7 +392,9 @@ export default function AdminPage() {
             {activeTab === 'staff_roster' && (authLevel === 'boss' || authLevel === 'manager') && (
               <StaffRosterView authLevel={authLevel} />
             )}
-            {activeTab === 'doctor_roster' && authLevel === 'boss' && <DoctorRosterView />}
+            {activeTab === 'doctor_roster' && (authLevel === 'boss' || authLevel === 'manager') && (
+              <DoctorRosterView />
+            )}
             {activeTab === 'labor_rules' && authLevel === 'boss' && <LaborRulesView />}
             {activeTab === 'salary' && authLevel === 'boss' && <SalaryView />}
             {activeTab === 'settings' && authLevel === 'boss' && <SettingsView />}

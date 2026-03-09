@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
-import { requireOwnerAuth, authErrorToResponse, UnauthorizedError, ForbiddenError } from '@/lib/authHelper';
+import { requireManagerOrOwnerAuth, authErrorToResponse, UnauthorizedError, ForbiddenError } from '@/lib/authHelper';
+import { getClinicIdFromRequest } from '@/lib/clinicHelper';
 
 /**
  * GET /api/roster/holidays
- * 查詢國定假日（僅 owner）
+ * 查詢國定假日（任一登入成員，只要屬於該診所）
  * 
  * Query Parameters:
  *   - year: number (required)
@@ -12,7 +13,13 @@ import { requireOwnerAuth, authErrorToResponse, UnauthorizedError, ForbiddenErro
  */
 export async function GET(request: NextRequest) {
   try {
-    const { clinicId } = await requireOwnerAuth(request);
+    const clinicId = await getClinicIdFromRequest(request);
+    if (!clinicId) {
+      return NextResponse.json(
+        { data: [], error: '無法識別診所，請重新登入' },
+        { status: 401 }
+      );
+    }
 
     const searchParams = request.nextUrl.searchParams;
     const year = Number(searchParams.get('year'));
@@ -50,10 +57,6 @@ export async function GET(request: NextRequest) {
       data: (data || []).map(h => h.date)
     });
   } catch (error: any) {
-    if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
-      const { status, message } = authErrorToResponse(error);
-      return NextResponse.json({ data: [], error: message }, { status });
-    }
     console.error('Holidays API Error:', error);
     return NextResponse.json(
       { data: [], error: error.message || '伺服器錯誤' },
@@ -71,7 +74,7 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    const { clinicId } = await requireOwnerAuth(request);
+    const { clinicId } = await requireManagerOrOwnerAuth(request);
 
     const body = await request.json();
     const { date, name } = body;
@@ -127,7 +130,7 @@ export async function POST(request: NextRequest) {
  */
 export async function DELETE(request: NextRequest) {
   try {
-    const { clinicId } = await requireOwnerAuth(request);
+    const { clinicId } = await requireManagerOrOwnerAuth(request);
 
     const searchParams = request.nextUrl.searchParams;
     const date = searchParams.get('date');

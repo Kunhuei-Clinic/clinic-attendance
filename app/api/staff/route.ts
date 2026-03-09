@@ -96,7 +96,16 @@ export async function POST(request: NextRequest) {
     }
 
     // 🟢 多租戶：移除前端可能傳入的 clinic_id，由後端自動填入
-    const { clinic_id, enable_login, login_email, login_password, system_role, ...staffData } = body;
+    const {
+      clinic_id,
+      enable_login,
+      login_email,
+      login_password,
+      system_role,
+      bank_info,
+      id_number,
+      ...staffData
+    } = body;
 
     // 🟢 處理密碼欄位：若前端沒傳 password，後端自動補上預設值 '0000'
     const password = staffData.password?.trim() || '0000';
@@ -136,7 +145,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 🟢 3. 儲存員工資料到 staff 表格（並綁定 auth_user_id）
-    const payload = {
+    const payload: any = {
       ...staffData,
       clinic_id: clinicId,
       entity: staffData.entity || 'clinic',
@@ -145,6 +154,14 @@ export async function POST(request: NextRequest) {
       email: login_email?.trim() || staffData.email || null,
       auth_user_id: finalAuthUserId
     };
+
+    if (bank_info !== undefined) {
+      payload.bank_info = bank_info;
+    }
+
+    if (id_number !== undefined) {
+      payload.id_number = id_number;
+    }
 
     const { error } = await supabaseAdmin
       .from('staff')
@@ -202,6 +219,8 @@ export async function PATCH(request: NextRequest) {
       new_password,
       system_role,
       auth_user_id: bodyAuthUserId,
+      bank_info,
+      id_number,
       ...updateData
     } = body;
 
@@ -329,6 +348,14 @@ export async function PATCH(request: NextRequest) {
       ...updateData,
       clinic_id: clinicId
     };
+
+    if (bank_info !== undefined) {
+      payload.bank_info = bank_info;
+    }
+
+    if (id_number !== undefined) {
+      payload.id_number = id_number;
+    }
 
     if (updateData.entity !== undefined) {
       payload.entity = updateData.entity || 'clinic';

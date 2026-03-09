@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { getClinicIdFromRequest } from '@/lib/clinicHelper';
+import { requireManagerOrOwnerAuth, authErrorToResponse, UnauthorizedError, ForbiddenError } from '@/lib/authHelper';
 
 /**
  * GET /api/roster/staff
@@ -77,14 +78,8 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    // 🟢 多租戶：取得當前使用者的 clinic_id
-    const clinicId = await getClinicIdFromRequest(request);
-    if (!clinicId) {
-      return NextResponse.json(
-        { success: false, message: '無法識別診所，請重新登入' },
-        { status: 401 }
-      );
-    }
+    // 🟢 僅允許負責人或排班主管操作班表
+    const { clinicId } = await requireManagerOrOwnerAuth(request);
 
     const body = await request.json();
     const {
@@ -197,6 +192,10 @@ export async function POST(request: NextRequest) {
       message: '儲存成功'
     });
   } catch (error: any) {
+    if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
+      const { status, message } = authErrorToResponse(error);
+      return NextResponse.json({ success: false, message }, { status });
+    }
     console.error('Staff roster POST API Error:', error);
     return NextResponse.json(
       { success: false, message: `處理失敗: ${error.message}` },
