@@ -125,12 +125,29 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
             // 編輯模式：密碼預設空白，避免誤改
             const defaultRole = loadedJobTitles[0]?.name || '護理師';
             const defaultEntity = loadedEntities[0]?.id || 'clinic';
+
+            // 🟢 嘗試從既有資料還原銀行資訊（bank_info 優先，其次為舊的單一 bank_account）
+            let bankInfo: any = {};
+            if (initialData.bank_info) {
+              try {
+                bankInfo =
+                  typeof initialData.bank_info === 'string'
+                    ? JSON.parse(initialData.bank_info)
+                    : initialData.bank_info;
+              } catch {
+                bankInfo = {};
+              }
+            }
+
             setEditData({
               ...initialData,
               role: initialData.role || defaultRole,
               entity: initialData.entity || defaultEntity,
               password: '', // 🟢 編輯模式：密碼預設空白
-              system_role: initialData.system_role || 'staff'
+              system_role: initialData.system_role || 'staff',
+              bank_code: bankInfo.bank_code || '',
+              branch_code: bankInfo.branch_code || '',
+              account_number: bankInfo.account_number || ''
             });
             // 登入權限：已有 auth_user_id 表示已開通
             if (initialData.auth_user_id) {
@@ -161,6 +178,9 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
               address: '',
               emergency_contact: '',
               bank_account: '',
+              bank_code: '',
+              branch_code: '',
+              account_number: '',
               id_number: '',
               system_role: 'staff'
             });
@@ -175,7 +195,25 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
           setJobTitles(DEFAULT_JOB_TITLES);
           setEntities(FALLBACK_ENTITIES);
           if (initialData) {
-            setEditData({ ...initialData, password: '', system_role: initialData.system_role || 'staff' });
+            let bankInfo: any = {};
+            if (initialData.bank_info) {
+              try {
+                bankInfo =
+                  typeof initialData.bank_info === 'string'
+                    ? JSON.parse(initialData.bank_info)
+                    : initialData.bank_info;
+              } catch {
+                bankInfo = {};
+              }
+            }
+            setEditData({
+              ...initialData,
+              password: '',
+              system_role: initialData.system_role || 'staff',
+              bank_code: bankInfo.bank_code || '',
+              branch_code: bankInfo.branch_code || '',
+              account_number: bankInfo.account_number || ''
+            });
             if (initialData.auth_user_id) {
               setEnableLogin(true);
               setLoginEmail(initialData.email || initialData.login_email || '');
@@ -201,6 +239,9 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
               address: '',
               emergency_contact: '',
               bank_account: '',
+              bank_code: '',
+              branch_code: '',
+              account_number: '',
               id_number: '',
               system_role: 'staff'
             });
@@ -269,6 +310,16 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
     // 接續儲存時清除 ref，避免下次儲存誤跳過
     sudoVerifiedRef.current = false;
 
+    // 🟢 若有輸入結構化銀行資料，順便組出傳統 bank_account 字串（維持相容）
+    const structuredBankParts = [
+      editData.bank_code?.trim() || '',
+      editData.branch_code?.trim() || '',
+      editData.account_number?.trim() || ''
+    ].filter(Boolean);
+    const combinedBankAccount =
+      editData.bank_account?.trim() ||
+      (structuredBankParts.length > 0 ? structuredBankParts.join('-') : null);
+
     const payload: any = {
       name: editData.name,
       role: editData.role,
@@ -282,7 +333,12 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
       phone: editData.phone.trim(),
       address: editData.address || null,
       emergency_contact: editData.emergency_contact || null,
-      bank_account: editData.bank_account || null,
+      bank_account: combinedBankAccount,
+      bank_info: {
+        bank_code: editData.bank_code?.trim() || null,
+        branch_code: editData.branch_code?.trim() || null,
+        account_number: editData.account_number?.trim() || null
+      },
       id_number: editData.id_number || null,
       enable_login: enableLogin,
       new_password: newPassword,
@@ -728,13 +784,33 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-slate-500 mb-1">銀行帳號</label>
-                      <input 
-                        type="text" 
-                        value={editData.bank_account || ''} 
-                        onChange={e => setEditData({...editData, bank_account: e.target.value})} 
+                      <label className="block text-xs font-bold text-slate-500 mb-1">銀行代碼</label>
+                      <input
+                        type="text"
+                        value={editData.bank_code || ''}
+                        onChange={e => setEditData({ ...editData, bank_code: e.target.value })}
                         className="w-full border p-2 rounded bg-white"
-                        placeholder="例：123-456-7890123"
+                        placeholder="例：808"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 mb-1">分行代碼</label>
+                      <input
+                        type="text"
+                        value={editData.branch_code || ''}
+                        onChange={e => setEditData({ ...editData, branch_code: e.target.value })}
+                        className="w-full border p-2 rounded bg-white"
+                        placeholder="例：0123"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-xs font-bold text-slate-500 mb-1">銀行帳號</label>
+                      <input
+                        type="text"
+                        value={editData.account_number || ''}
+                        onChange={e => setEditData({ ...editData, account_number: e.target.value })}
+                        className="w-full border p-2 rounded bg-white"
+                        placeholder="例：1234567890123"
                       />
                     </div>
                   </div>

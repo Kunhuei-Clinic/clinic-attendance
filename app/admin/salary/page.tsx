@@ -290,6 +290,19 @@ export default function SalaryPage() {
           tempDeduction +
           calc.leave_deduction;
 
+        const net_pay = gross - deduction;
+
+        // 🟢 抓取當月是否有手動設定的「匯款金額」
+        const transferSetting = myAdj.find((a: any) => a.type === 'transfer_setting');
+
+        let transfer_amount = net_pay; // 預設全額匯款
+        let cash_amount = 0; // 預設無現金
+
+        if (transferSetting && transferSetting.amount >= 0) {
+          transfer_amount = Math.min(Number(transferSetting.amount), net_pay); // 匯款不能超過實發總額
+          cash_amount = net_pay - transfer_amount;
+        }
+
         let mergedReport: any = {
           ...calc,
           staff_id: staff.id,
@@ -309,7 +322,9 @@ export default function SalaryPage() {
           temp_deduction_pay: tempDeduction,
           gross_pay: gross,
           total_deduction: deduction,
-          net_pay: gross - deduction,
+          net_pay,
+          transfer_amount,
+          cash_amount,
           fixed_bonus_details: staff.bonuses || [],
           temp_bonus_details: myAdj.filter((a: any) => a.type === 'bonus' && Number(a.amount) !== 0),
           fixed_deduction_details: staff.default_deductions || [],
@@ -331,6 +346,8 @@ export default function SalaryPage() {
             temp_bonus_details: [],
             fixed_deduction_details: [],
             temp_deduction_details: [],
+            transfer_amount: 0,
+            cash_amount: 0,
             ...snap,
           };
 
@@ -774,6 +791,7 @@ export default function SalaryPage() {
           adjustments={adjustments}
           lastMonthAdjustments={lastMonthAdjustments}
           selectedMonth={selectedMonth}
+          netPay={adjModalStaff.net_pay}
           onSaveComplete={() => {
             fetchAdjustments();
             setAdjModalStaff(null);

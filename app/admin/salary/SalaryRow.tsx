@@ -177,9 +177,20 @@ export default function SalaryRow({
 
         {/* 實發金額 */}
         <td className="p-4 text-right align-top">
-          <span className="font-bold text-2xl text-green-700 bg-green-50 px-3 py-1 rounded-lg border border-green-200 block whitespace-nowrap shadow-sm">
+          <span className="font-bold text-2xl text-green-700 bg-green-50 px-3 py-1 rounded-lg border border-green-200 block whitespace-nowrap shadow-sm mb-1">
             ${rpt.net_pay.toLocaleString()}
           </span>
+          {/* 🟢 顯示匯款與現金拆分 */}
+          {rpt.cash_amount > 0 && (
+            <div className="text-[10px] text-slate-500 font-mono flex flex-col items-end gap-0.5 mt-1">
+              <span className="bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded">
+                匯款: ${rpt.transfer_amount.toLocaleString()}
+              </span>
+              <span className="bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded">
+                現金: ${rpt.cash_amount.toLocaleString()}
+              </span>
+            </div>
+          )}
         </td>
 
         {/* 功能區 */}

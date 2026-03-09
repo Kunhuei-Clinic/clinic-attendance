@@ -7,6 +7,7 @@ type AdjustmentModalProps = {
   adjustments: Record<string, any[]>;
   lastMonthAdjustments: Record<string, any[]>;
   selectedMonth: string;
+  netPay: number; // 🟢 新增此參數來顯示目前總薪資
   onSaveComplete: () => void;
   onClose: () => void;
 };
@@ -17,7 +18,7 @@ const XIcon = () => (
   </svg>
 );
 
-export default function AdjustmentModal({ staff, adjustments, lastMonthAdjustments, selectedMonth, onSaveComplete, onClose }: AdjustmentModalProps) {
+export default function AdjustmentModal({ staff, adjustments, lastMonthAdjustments, selectedMonth, netPay, onSaveComplete, onClose }: AdjustmentModalProps) {
   const staffId = String(staff.staff_id);
   // 🟢 將資料複製一份到本地狀態，並智能繼承上個月項目（同名 0 元）
   const [localItems, setLocalItems] = useState<any[]>(() => {
@@ -179,6 +180,46 @@ export default function AdjustmentModal({ staff, adjustments, lastMonthAdjustmen
               </div>
             ))}
           </div>
+        </div>
+
+        {/* 🟢 匯款與現金分配區 */}
+        <div className="mb-6 bg-blue-50/50 p-4 rounded-lg border border-blue-100">
+          <h4 className="font-bold text-blue-800 text-sm mb-3">🏦 本月發放方式分配 (實發總額: ${netPay.toLocaleString()})</h4>
+          <div className="flex items-center gap-4">
+            <div className="flex-1">
+              <label className="text-xs text-blue-600 font-bold block mb-1">自訂匯款金額</label>
+              <input
+                type="number"
+                value={localItems.find(i => i.type === 'transfer_setting')?.amount ?? netPay}
+                onChange={e => {
+                  const val = Number(e.target.value);
+                  const existing = localItems.find(i => i.type === 'transfer_setting');
+                  if (existing) {
+                    handleUpdate(existing.id, 'amount', val);
+                  } else {
+                    setLocalItems([...localItems, {
+                      id: Date.now() + Math.random(),
+                      staff_id: staffId,
+                      year_month: selectedMonth,
+                      type: 'transfer_setting',
+                      name: '匯款金額設定',
+                      amount: val,
+                      isNew: true
+                    }]);
+                  }
+                }}
+                className="w-full border border-blue-200 p-2 rounded text-right font-mono font-bold text-blue-800 bg-white"
+              />
+            </div>
+            <div className="text-xl text-slate-300 font-light pt-4">+</div>
+            <div className="flex-1">
+              <label className="text-xs text-green-600 font-bold block mb-1">剩餘現金發放</label>
+              <div className="w-full border border-green-200 p-2 rounded text-right font-mono font-bold text-green-700 bg-green-50">
+                ${Math.max(0, netPay - (localItems.find(i => i.type === 'transfer_setting')?.amount ?? netPay)).toLocaleString()}
+              </div>
+            </div>
+          </div>
+          <p className="text-[10px] text-slate-400 mt-2">* 若不調整，系統預設全額匯款。</p>
         </div>
 
         <div className="flex justify-end pt-2">
