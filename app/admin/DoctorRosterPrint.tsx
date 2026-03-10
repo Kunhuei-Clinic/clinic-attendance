@@ -22,6 +22,10 @@ export default function DoctorRosterPrint({ onClose }: { onClose: () => void }) 
     
     const [showDate, setShowDate] = useState(true);
     const [clinicName, setClinicName] = useState("坤暉診所");
+    const [titleSuffix, setTitleSuffix] = useState("門診時間表");
+    const [defaultSubtitle, setDefaultSubtitle] = useState("常規門診表");
+    const [footerText, setFooterText] = useState("※ 請於門診結束前 15 分鐘完成掛號手續");
+    const [isSavingSettings, setIsSavingSettings] = useState(false);
     const [duration, setDuration] = useState<7 | 14>(7); // 1週或2週
     const [showSpecialTags, setShowSpecialTags] = useState(true);
     const [showSubstitution, setShowSubstitution] = useState(true);
@@ -94,6 +98,24 @@ export default function DoctorRosterPrint({ onClose }: { onClose: () => void }) 
                 setClosedDays([]);
             } else {
                 setClosedDays(closedResult.data || []);
+            }
+
+            // 讀取門診表列印文字設定
+            try {
+                const settingsRes = await fetch('/api/settings');
+                const settingsJson = await settingsRes.json();
+                if (settingsJson.data) {
+                    const printSettingsItem = settingsJson.data.find((item: any) => item.key === 'doctor_print_settings');
+                    if (printSettingsItem && printSettingsItem.value) {
+                        const parsed = JSON.parse(printSettingsItem.value);
+                        if (parsed.titleSuffix) setTitleSuffix(parsed.titleSuffix);
+                        if (parsed.defaultSubtitle) setDefaultSubtitle(parsed.defaultSubtitle);
+                        if (parsed.footerText) setFooterText(parsed.footerText);
+                        if (parsed.clinicName) setClinicName(parsed.clinicName);
+                    }
+                }
+            } catch (e) {
+                console.error("讀取列印設定失敗", e);
             }
         } catch (error) {
             console.error('Fetch data error:', error);
@@ -169,6 +191,25 @@ export default function DoctorRosterPrint({ onClose }: { onClose: () => void }) 
         setTargetDate(d);
     };
 
+    const handleSaveSettings = async () => {
+        setIsSavingSettings(true);
+        try {
+            await fetch('/api/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    type: 'doctor_print_settings',
+                    settings: { clinicName, titleSuffix, defaultSubtitle, footerText }
+                })
+            });
+            alert('已將目前的文字設定儲存為本院區預設值！');
+        } catch (error) {
+            alert('儲存失敗');
+        } finally {
+            setIsSavingSettings(false);
+        }
+    };
+
     return (
         <div className="fixed inset-0 bg-black/80 z-50 flex flex-col items-center justify-center p-4 backdrop-blur-sm">
             <div className="bg-white w-full max-w-5xl p-4 rounded-t-xl border-b flex flex-wrap justify-between items-center gap-4">
@@ -201,9 +242,44 @@ export default function DoctorRosterPrint({ onClose }: { onClose: () => void }) 
                         <input type="checkbox" checked={showSubstitution} onChange={e => setShowSubstitution(e.target.checked)} className="w-4 h-4"/> 
                         顯示異動資訊
                     </label>
-                    <div className="flex items-center gap-1">
-                        <span className="text-sm">標題:</span>
-                        <input value={clinicName} onChange={e => setClinicName(e.target.value)} className="border rounded px-2 py-1 text-sm w-32"/>
+                    <div className="flex flex-wrap items-center gap-3 bg-slate-50 p-2 rounded-lg border border-slate-200">
+                        <div className="flex items-center gap-1">
+                            <span className="text-xs font-bold text-slate-500">標題:</span>
+                            <input 
+                                value={clinicName} 
+                                onChange={e => setClinicName(e.target.value)} 
+                                className="border border-slate-300 rounded px-1.5 py-1 text-xs w-20 outline-none focus:border-teal-500"
+                            />
+                            <input 
+                                value={titleSuffix} 
+                                onChange={e => setTitleSuffix(e.target.value)} 
+                                className="border border-slate-300 rounded px-1.5 py-1 text-xs w-24 outline-none focus:border-teal-500"
+                            />
+                        </div>
+                        <div className="flex items-center gap-1">
+                            <span className="text-xs font-bold text-slate-500">副標題:</span>
+                            <input 
+                                value={defaultSubtitle} 
+                                onChange={e => setDefaultSubtitle(e.target.value)} 
+                                disabled={showDate} 
+                                className="border border-slate-300 rounded px-1.5 py-1 text-xs w-24 outline-none disabled:bg-slate-100 disabled:text-slate-400"
+                            />
+                        </div>
+                        <div className="flex items-center gap-1">
+                            <span className="text-xs font-bold text-slate-500">頁尾:</span>
+                            <input 
+                                value={footerText} 
+                                onChange={e => setFooterText(e.target.value)} 
+                                className="border border-slate-300 rounded px-1.5 py-1 text-xs w-40 outline-none"
+                            />
+                        </div>
+                        <button 
+                            onClick={handleSaveSettings} 
+                            disabled={isSavingSettings} 
+                            className="bg-teal-600 hover:bg-teal-700 text-white px-3 py-1 rounded text-xs font-bold transition disabled:opacity-60 disabled:cursor-not-allowed"
+                        >
+                            {isSavingSettings ? '儲存中...' : '儲存為預設'}
+                        </button>
                     </div>
                     <button onClick={handleDownload} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2">
                         <Download size={16}/> 下載圖片
@@ -218,8 +294,10 @@ export default function DoctorRosterPrint({ onClose }: { onClose: () => void }) 
             <div className="flex-1 overflow-auto bg-gray-500/50 w-full max-w-5xl p-8 flex justify-center items-start">
                 <div ref={printRef} className="bg-white p-10 shadow-2xl min-w-[1000px]">
                     <div className="text-center mb-8 border-b-4 border-teal-600 pb-4">
-                        <h1 className="text-5xl font-black text-slate-800 tracking-widest mb-2">{clinicName} 門診時間表</h1>
-                        <p className="text-xl text-slate-500 font-bold tracking-widest mt-2">{showDate ? `${startDateStr.replace(/-/g,'.')} - ${endDateStr.replace(/-/g,'.')}` : '常規門診表'}</p>
+                        <h1 className="text-5xl font-black text-slate-800 tracking-widest mb-2">{clinicName} {titleSuffix}</h1>
+                        <p className="text-xl text-slate-500 font-bold tracking-widest mt-2">
+                            {showDate ? `${startDateStr.replace(/-/g,'.')} - ${endDateStr.replace(/-/g,'.')}` : defaultSubtitle}
+                        </p>
                     </div>
 
                     {weekChunks.map((weekDays, weekIdx) => {
@@ -281,19 +359,26 @@ export default function DoctorRosterPrint({ onClose }: { onClose: () => void }) 
                                                                             </span>
                                                                             {/* 特殊門診標籤 */}
                                                                             {showSpecialTags && w.special_tags && w.special_tags.length > 0 && (
-                                                                                <div className="flex flex-col items-center gap-0.5 mt-1">
-                                                                                    {w.special_tags.map((tag: string, tagIdx: number) => (
-                                                                                        <span 
-                                                                                            key={tagIdx} 
-                                                                                            className={`text-[10px] font-bold whitespace-nowrap scale-90 origin-center ${
-                                                                                                w.is_dedicated 
-                                                                                                    ? 'text-pink-600' 
-                                                                                                    : 'text-orange-600'
-                                                                                            }`}
-                                                                                        >
-                                                                                            {w.is_dedicated ? `${tag}專診` : `暨 ${tag}`}
-                                                                                        </span>
-                                                                                    ))}
+                                                                                <div className="flex flex-col items-center gap-[2px] mt-1 w-full overflow-visible">
+                                                                                    {w.special_tags.map((tag: string, tagIdx: number) => {
+                                                                                        const fullText = w.is_dedicated ? `${tag}專診` : `暨 ${tag}`;
+                                                                                        // 超過 6 個字啟動字距緊縮與微調字級
+                                                                                        const isLong = fullText.length > 6; 
+                                                                                        return (
+                                                                                            <span 
+                                                                                                key={tagIdx} 
+                                                                                                className={`whitespace-nowrap font-bold px-0.5 rounded ${
+                                                                                                    isLong ? 'tracking-tighter text-[10.5px]' : 'text-[11px]'
+                                                                                                } ${
+                                                                                                    w.is_dedicated 
+                                                                                                        ? 'text-pink-600 bg-pink-50' 
+                                                                                                        : 'text-orange-600 bg-orange-50'
+                                                                                                }`}
+                                                                                            >
+                                                                                                {fullText}
+                                                                                            </span>
+                                                                                        );
+                                                                                    })}
                                                                                 </div>
                                                                             )}
                                                                             {/* 異動資訊 */}
@@ -316,7 +401,7 @@ export default function DoctorRosterPrint({ onClose }: { onClose: () => void }) 
                             </div>
                         );
                     })}
-                    <div className="mt-6 text-center font-bold text-slate-500">※ 請於門診結束前 15 分鐘完成掛號手續</div>
+                    <div className="mt-6 text-center font-bold text-slate-500">{footerText}</div>
                 </div>
             </div>
         </div>

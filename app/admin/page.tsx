@@ -119,18 +119,41 @@ export default function AdminPage() {
     // 2. 活動更新器：記錄最新活動時間到硬碟
     let timeoutId: NodeJS.Timeout;
     const updateActivity = () => {
-      localStorage.setItem(ACTIVITY_KEY, Date.now().toString());
+      const now = Date.now();
+      const lastActivityStr = localStorage.getItem(ACTIVITY_KEY);
 
-      // 重置計時器 (網頁開著的時候使用)
+      // 🟢 關鍵修復：在更新時間之前，先檢查是否已經超時（對抗瀏覽器休眠）
+      if (lastActivityStr) {
+        const elapsed = now - parseInt(lastActivityStr, 10);
+        if (elapsed > IDLE_TIME) {
+          handleLogout(true);
+          return; // 已經超時，立刻停止更新並登出
+        }
+      }
+
+      // 未超時，才更新為最新時間並重置計時器
+      localStorage.setItem(ACTIVITY_KEY, now.toString());
       clearTimeout(timeoutId);
       timeoutId = setTimeout(() => {
         handleLogout(true);
       }, IDLE_TIME);
     };
 
+    // 🟢 新增：分頁喚醒偵測 (對抗手機鎖屏或切換分頁)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        const now = Date.now();
+        const lastActivityStr = localStorage.getItem(ACTIVITY_KEY);
+        if (lastActivityStr && (now - parseInt(lastActivityStr, 10) > IDLE_TIME)) {
+          handleLogout(true);
+        }
+      }
+    };
+
     // 3. 綁定監聽事件
     const events = ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'];
     events.forEach(event => window.addEventListener(event, updateActivity));
+    document.addEventListener('visibilitychange', handleVisibilityChange); // 綁定喚醒事件
 
     // 初始呼叫一次
     updateActivity();
@@ -139,6 +162,7 @@ export default function AdminPage() {
     return () => {
       clearTimeout(timeoutId);
       events.forEach(event => window.removeEventListener(event, updateActivity));
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [authLevel]);
 
