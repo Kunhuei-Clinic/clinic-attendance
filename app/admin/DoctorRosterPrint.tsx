@@ -198,8 +198,8 @@ export default function DoctorRosterPrint({ onClose }: { onClose: () => void }) 
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    type: 'doctor_print_settings',
-                    settings: { clinicName, titleSuffix, defaultSubtitle, footerText }
+                    key: 'doctor_print_settings',
+                    value: JSON.stringify({ clinicName, titleSuffix, defaultSubtitle, footerText })
                 })
             });
             alert('已將目前的文字設定儲存為本院區預設值！');
@@ -212,82 +212,76 @@ export default function DoctorRosterPrint({ onClose }: { onClose: () => void }) 
 
     return (
         <div className="fixed inset-0 bg-black/80 z-50 flex flex-col items-center justify-center p-4 backdrop-blur-sm">
-            <div className="bg-white w-full max-w-5xl p-4 rounded-t-xl border-b flex flex-wrap justify-between items-center gap-4">
-                <div className="flex items-center gap-4">
-                    <h3 className="font-bold text-lg flex items-center gap-2"><Settings/> 門診表設定</h3>
-                    <div className="flex items-center bg-slate-100 rounded-lg p-1">
-                        <button onClick={handlePrevPeriod} className="p-1 hover:bg-white rounded shadow-sm"><ChevronLeft/></button>
-                        <span className="px-3 font-mono text-sm font-bold">{startDateStr} ~ {endDateStr}</span>
-                        <button onClick={handleNextPeriod} className="p-1 hover:bg-white rounded shadow-sm"><ChevronRight/></button>
-                    </div>
-                    <select 
-                        value={duration} 
-                        onChange={(e) => setDuration(Number(e.target.value) as 7 | 14)}
-                        className="border rounded px-2 py-1 text-sm font-bold bg-white"
-                    >
-                        <option value={7}>1 週 (7 天)</option>
-                        <option value={14}>2 週 (14 天)</option>
-                    </select>
-                </div>
-                <div className="flex items-center gap-4 flex-wrap">
-                    <label className="flex items-center gap-1 text-sm cursor-pointer select-none">
-                        <input type="checkbox" checked={showDate} onChange={e => setShowDate(e.target.checked)} className="w-4 h-4"/> 
-                        顯示日期
-                    </label>
-                    <label className="flex items-center gap-1 text-sm cursor-pointer select-none">
-                        <input type="checkbox" checked={showSpecialTags} onChange={e => setShowSpecialTags(e.target.checked)} className="w-4 h-4"/> 
-                        顯示特殊門診
-                    </label>
-                    <label className="flex items-center gap-1 text-sm cursor-pointer select-none">
-                        <input type="checkbox" checked={showSubstitution} onChange={e => setShowSubstitution(e.target.checked)} className="w-4 h-4"/> 
-                        顯示異動資訊
-                    </label>
-                    <div className="flex flex-wrap items-center gap-3 bg-slate-50 p-2 rounded-lg border border-slate-200">
-                        <div className="flex items-center gap-1">
-                            <span className="text-xs font-bold text-slate-500">標題:</span>
-                            <input 
-                                value={clinicName} 
-                                onChange={e => setClinicName(e.target.value)} 
-                                className="border border-slate-300 rounded px-1.5 py-1 text-xs w-20 outline-none focus:border-teal-500"
-                            />
-                            <input 
-                                value={titleSuffix} 
-                                onChange={e => setTitleSuffix(e.target.value)} 
-                                className="border border-slate-300 rounded px-1.5 py-1 text-xs w-24 outline-none focus:border-teal-500"
-                            />
+            <div className="bg-white w-full max-w-5xl p-4 rounded-t-xl border-b flex flex-col gap-4">
+                {/* 上排：主控制列 */}
+                <div className="flex flex-wrap justify-between items-center gap-4">
+                    <div className="flex items-center gap-3 flex-wrap">
+                        <h3 className="font-bold text-lg flex items-center gap-2"><Settings size={20}/> 門診表設定</h3>
+                        <div className="flex items-center bg-slate-100 rounded-lg p-1 ml-2">
+                            <button onClick={handlePrevPeriod} className="p-1 hover:bg-white rounded shadow-sm"><ChevronLeft size={16}/></button>
+                            <span className="px-3 font-mono text-sm font-bold">{startDateStr} ~ {endDateStr}</span>
+                            <button onClick={handleNextPeriod} className="p-1 hover:bg-white rounded shadow-sm"><ChevronRight size={16}/></button>
                         </div>
-                        <div className="flex items-center gap-1">
-                            <span className="text-xs font-bold text-slate-500">副標題:</span>
-                            <input 
-                                value={defaultSubtitle} 
-                                onChange={e => setDefaultSubtitle(e.target.value)} 
-                                disabled={showDate} 
-                                className="border border-slate-300 rounded px-1.5 py-1 text-xs w-24 outline-none disabled:bg-slate-100 disabled:text-slate-400"
-                            />
-                        </div>
-                        <div className="flex items-center gap-1">
-                            <span className="text-xs font-bold text-slate-500">頁尾:</span>
-                            <input 
-                                value={footerText} 
-                                onChange={e => setFooterText(e.target.value)} 
-                                className="border border-slate-300 rounded px-1.5 py-1 text-xs w-40 outline-none"
-                            />
-                        </div>
-                        <button 
-                            onClick={handleSaveSettings} 
-                            disabled={isSavingSettings} 
-                            className="bg-teal-600 hover:bg-teal-700 text-white px-3 py-1 rounded text-xs font-bold transition disabled:opacity-60 disabled:cursor-not-allowed"
+                        <select 
+                            value={duration} 
+                            onChange={(e) => setDuration(Number(e.target.value) as 7 | 14)}
+                            className="border border-slate-300 rounded px-2 py-1.5 text-sm font-bold bg-white focus:border-teal-500 outline-none"
                         >
-                            {isSavingSettings ? '儲存中...' : '儲存為預設'}
+                            <option value={7}>1 週 (7 天)</option>
+                            <option value={14}>2 週 (14 天)</option>
+                        </select>
+                        
+                        {/* 🟢 打勾選項移到時間篩選器右側 */}
+                        <div className="flex items-center gap-4 ml-2 border-l-2 border-slate-200 pl-4">
+                            <label className="flex items-center gap-1.5 text-sm font-medium cursor-pointer text-slate-700 hover:text-teal-700 transition">
+                                <input type="checkbox" checked={showDate} onChange={e => setShowDate(e.target.checked)} className="w-4 h-4 accent-teal-600"/> 顯示日期
+                            </label>
+                            <label className="flex items-center gap-1.5 text-sm font-medium cursor-pointer text-slate-700 hover:text-teal-700 transition">
+                                <input type="checkbox" checked={showSpecialTags} onChange={e => setShowSpecialTags(e.target.checked)} className="w-4 h-4 accent-teal-600"/> 顯示特殊門診
+                            </label>
+                            <label className="flex items-center gap-1.5 text-sm font-medium cursor-pointer text-slate-700 hover:text-teal-700 transition">
+                                <input type="checkbox" checked={showSubstitution} onChange={e => setShowSubstitution(e.target.checked)} className="w-4 h-4 accent-teal-600"/> 顯示異動
+                            </label>
+                        </div>
+                    </div>
+                    
+                    {/* 🟢 下載與關閉按鈕靠最右 */}
+                    <div className="flex items-center gap-2">
+                        <button onClick={handleDownload} className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-sm font-bold flex items-center gap-1.5 transition shadow-sm">
+                            <Download size={16}/> 圖片
+                        </button>
+                        <button onClick={handleDownloadPDF} className="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg text-sm font-bold flex items-center gap-1.5 transition shadow-sm">
+                            <FileText size={16}/> PDF
+                        </button>
+                        <div className="w-px h-6 bg-slate-300 mx-1"></div>
+                        <button onClick={onClose} className="p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 rounded-full transition" title="關閉">
+                            <X size={24}/>
                         </button>
                     </div>
-                    <button onClick={handleDownload} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2">
-                        <Download size={16}/> 下載圖片
+                </div>
+
+                {/* 下排：文字客製化設定區 */}
+                <div className="flex flex-wrap items-center gap-3 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                    <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-bold text-slate-500">主標題:</span>
+                        <input value={clinicName} onChange={e => setClinicName(e.target.value)} className="border border-slate-300 rounded px-2 py-1 text-sm w-28 outline-none focus:border-teal-500 shadow-inner"/>
+                        <input value={titleSuffix} onChange={e => setTitleSuffix(e.target.value)} className="border border-slate-300 rounded px-2 py-1 text-sm w-32 outline-none focus:border-teal-500 shadow-inner"/>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-bold text-slate-500">副標題:</span>
+                        <input value={defaultSubtitle} onChange={e => setDefaultSubtitle(e.target.value)} disabled={showDate} className="border border-slate-300 rounded px-2 py-1 text-sm w-32 outline-none disabled:bg-slate-200 disabled:text-slate-400 shadow-inner"/>
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-1 min-w-[200px]">
+                        <span className="text-xs font-bold text-slate-500">頁尾:</span>
+                        <input value={footerText} onChange={e => setFooterText(e.target.value)} className="border border-slate-300 rounded px-2 py-1 text-sm w-full outline-none focus:border-teal-500 shadow-inner"/>
+                    </div>
+                    <button 
+                        onClick={handleSaveSettings} 
+                        disabled={isSavingSettings} 
+                        className="bg-teal-600 hover:bg-teal-700 text-white px-4 py-1.5 rounded-md text-sm font-bold transition disabled:opacity-60 disabled:cursor-not-allowed shadow-sm ml-auto"
+                    >
+                        {isSavingSettings ? '儲存中...' : '儲存為預設'}
                     </button>
-                    <button onClick={handleDownloadPDF} className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2">
-                        <FileText size={16}/> 下載 PDF
-                    </button>
-                    <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full"><X/></button>
                 </div>
             </div>
 
@@ -346,34 +340,32 @@ export default function DoctorRosterPrint({ onClose }: { onClose: () => void }) 
 
                                                     return (
                                                         <td key={idx} className="border border-slate-400 align-middle p-2 hover:bg-slate-50/10">
-                                                            <div className="flex flex-col gap-3 h-full justify-center">
+                                                            {/* 🟢 拉大不同醫師的間距 (gap-6)，並加上下 padding */}
+                                                            <div className="flex flex-col gap-6 h-full justify-center py-2">
                                                                 {workers.map(w => {
                                                                     const doc = doctors.find(d => d.id === w.doctor_id);
                                                                     return (
-                                                                        <div key={w.id} className="flex flex-col items-center">
-                                                                            <span className={`text-xl font-bold leading-tight ${w.is_dedicated ? 'text-purple-700' : 'text-slate-800'}`}>
+                                                                        // 🟢 縮減醫師內部姓名、時間、標籤的間距，讓資訊更緊湊
+                                                                        <div key={w.id} className="flex flex-col items-center leading-tight">
+                                                                            <span className={`text-xl font-bold ${w.is_dedicated ? 'text-purple-700' : 'text-slate-800'}`}>
                                                                                 {doc?.name}
                                                                             </span>
-                                                                            <span className="text-xs font-mono text-slate-500 px-1.5 py-0.5 mt-1 whitespace-nowrap">
+                                                                            <span className="text-xs font-mono text-slate-500 px-1.5 mt-0.5 whitespace-nowrap">
                                                                                 {fmtTime(w.start_time)}-{fmtTime(w.end_time)}
                                                                             </span>
                                                                             {/* 特殊門診標籤 */}
                                                                             {showSpecialTags && w.special_tags && w.special_tags.length > 0 && (
-                                                                                <div className="flex flex-col items-center gap-[2px] mt-1 w-full overflow-visible">
+                                                                                <div className="flex flex-col items-center gap-[1px] mt-0.5 w-full overflow-visible">
                                                                                     {w.special_tags.map((tag: string, tagIdx: number) => {
                                                                                         const fullText = w.is_dedicated ? `${tag}專診` : `暨 ${tag}`;
-                                                                                        // 超過 6 個字啟動字距緊縮與微調字級
                                                                                         const isLong = fullText.length > 6; 
                                                                                         return (
+                                                                                            // 🟢 移除 bg-orange-50 與 bg-pink-50，保留顏色字體
                                                                                             <span 
                                                                                                 key={tagIdx} 
                                                                                                 className={`whitespace-nowrap font-bold px-0.5 rounded ${
                                                                                                     isLong ? 'tracking-tighter text-[10.5px]' : 'text-[11px]'
-                                                                                                } ${
-                                                                                                    w.is_dedicated 
-                                                                                                        ? 'text-pink-600 bg-pink-50' 
-                                                                                                        : 'text-orange-600 bg-orange-50'
-                                                                                                }`}
+                                                                                                } ${w.is_dedicated ? 'text-pink-600' : 'text-orange-600'}`}
                                                                                             >
                                                                                                 {fullText}
                                                                                             </span>
@@ -383,7 +375,7 @@ export default function DoctorRosterPrint({ onClose }: { onClose: () => void }) 
                                                                             )}
                                                                             {/* 異動資訊 */}
                                                                             {showSubstitution && w.is_substitution && (
-                                                                                <span className="text-xs font-bold text-purple-600 mt-0.5">
+                                                                                <span className="text-[10px] font-bold text-purple-600 mt-1">
                                                                                     門診異動
                                                                                 </span>
                                                                             )}
