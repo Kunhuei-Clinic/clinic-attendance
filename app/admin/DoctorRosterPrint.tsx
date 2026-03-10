@@ -29,6 +29,7 @@ export default function DoctorRosterPrint({ onClose }: { onClose: () => void }) 
     const [duration, setDuration] = useState<7 | 14>(7); // 1週或2週
     const [showSpecialTags, setShowSpecialTags] = useState(true);
     const [showSubstitution, setShowSubstitution] = useState(true);
+    const [isLoading, setIsLoading] = useState(true);
 
     const printRef = useRef<HTMLDivElement>(null);
 
@@ -67,6 +68,7 @@ export default function DoctorRosterPrint({ onClose }: { onClose: () => void }) 
     };
 
     const fetchData = async () => {
+        setIsLoading(true);
         try {
             const chunks = getWeekChunks(targetDate, duration);
             const allDates = chunks.flat();
@@ -120,6 +122,8 @@ export default function DoctorRosterPrint({ onClose }: { onClose: () => void }) 
         } catch (error) {
             console.error('Fetch data error:', error);
             alert('載入資料失敗');
+        } finally {
+            setIsLoading(false);
         }
     };
 
@@ -212,16 +216,31 @@ export default function DoctorRosterPrint({ onClose }: { onClose: () => void }) 
 
     return (
         <div className="fixed inset-0 bg-black/80 z-50 flex flex-col items-center justify-center p-4 backdrop-blur-sm">
-            <div className="bg-white w-full max-w-5xl p-4 rounded-t-xl border-b flex flex-col gap-4">
-                {/* 上排：主控制列 */}
-                <div className="flex flex-wrap justify-between items-center gap-4">
+            <div className="bg-white w-full max-w-[1200px] p-4 rounded-t-xl border-b flex flex-col gap-4 relative">
+                {/* 獨立的關閉按鈕，絕對不會被擠下去 */}
+                <button onClick={onClose} className="absolute top-4 right-4 p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 rounded-full transition" title="關閉">
+                    <X size={26}/>
+                </button>
+
+                {/* 上排：主控制列 (加入 pr-12 避開關閉按鈕) */}
+                <div className="flex flex-wrap justify-between items-center gap-4 pr-12">
                     <div className="flex items-center gap-3 flex-wrap">
                         <h3 className="font-bold text-lg flex items-center gap-2"><Settings size={20}/> 門診表設定</h3>
-                        <div className="flex items-center bg-slate-100 rounded-lg p-1 ml-2">
-                            <button onClick={handlePrevPeriod} className="p-1 hover:bg-white rounded shadow-sm"><ChevronLeft size={16}/></button>
-                            <span className="px-3 font-mono text-sm font-bold">{startDateStr} ~ {endDateStr}</span>
-                            <button onClick={handleNextPeriod} className="p-1 hover:bg-white rounded shadow-sm"><ChevronRight size={16}/></button>
+                        
+                        {/* 🟢 日期選擇器：可以直接點擊挑選日期 */}
+                        <div className="flex items-center bg-slate-100 rounded-lg p-1 ml-2 border border-slate-200">
+                            <button onClick={handlePrevPeriod} className="p-1 hover:bg-white rounded shadow-sm transition"><ChevronLeft size={16}/></button>
+                            <input 
+                                type="date" 
+                                value={getLocalDateString(targetDate)}
+                                onChange={(e) => {
+                                    if(e.target.value) setTargetDate(new Date(e.target.value));
+                                }}
+                                className="px-2 font-mono text-sm font-bold bg-transparent outline-none cursor-pointer text-slate-700"
+                            />
+                            <button onClick={handleNextPeriod} className="p-1 hover:bg-white rounded shadow-sm transition"><ChevronRight size={16}/></button>
                         </div>
+                        
                         <select 
                             value={duration} 
                             onChange={(e) => setDuration(Number(e.target.value) as 7 | 14)}
@@ -231,31 +250,25 @@ export default function DoctorRosterPrint({ onClose }: { onClose: () => void }) 
                             <option value={14}>2 週 (14 天)</option>
                         </select>
                         
-                        {/* 🟢 打勾選項移到時間篩選器右側 */}
                         <div className="flex items-center gap-4 ml-2 border-l-2 border-slate-200 pl-4">
                             <label className="flex items-center gap-1.5 text-sm font-medium cursor-pointer text-slate-700 hover:text-teal-700 transition">
                                 <input type="checkbox" checked={showDate} onChange={e => setShowDate(e.target.checked)} className="w-4 h-4 accent-teal-600"/> 顯示日期
                             </label>
                             <label className="flex items-center gap-1.5 text-sm font-medium cursor-pointer text-slate-700 hover:text-teal-700 transition">
-                                <input type="checkbox" checked={showSpecialTags} onChange={e => setShowSpecialTags(e.target.checked)} className="w-4 h-4 accent-teal-600"/> 顯示特殊門診
+                                <input type="checkbox" checked={showSpecialTags} onChange={e => setShowSpecialTags(e.target.checked)} className="w-4 h-4 accent-teal-600"/> 特殊門診
                             </label>
                             <label className="flex items-center gap-1.5 text-sm font-medium cursor-pointer text-slate-700 hover:text-teal-700 transition">
-                                <input type="checkbox" checked={showSubstitution} onChange={e => setShowSubstitution(e.target.checked)} className="w-4 h-4 accent-teal-600"/> 顯示異動
+                                <input type="checkbox" checked={showSubstitution} onChange={e => setShowSubstitution(e.target.checked)} className="w-4 h-4 accent-teal-600"/> 異動
                             </label>
                         </div>
                     </div>
                     
-                    {/* 🟢 下載與關閉按鈕靠最右 */}
                     <div className="flex items-center gap-2">
                         <button onClick={handleDownload} className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-sm font-bold flex items-center gap-1.5 transition shadow-sm">
                             <Download size={16}/> 圖片
                         </button>
                         <button onClick={handleDownloadPDF} className="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg text-sm font-bold flex items-center gap-1.5 transition shadow-sm">
                             <FileText size={16}/> PDF
-                        </button>
-                        <div className="w-px h-6 bg-slate-300 mx-1"></div>
-                        <button onClick={onClose} className="p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 rounded-full transition" title="關閉">
-                            <X size={24}/>
                         </button>
                     </div>
                 </div>
@@ -285,8 +298,18 @@ export default function DoctorRosterPrint({ onClose }: { onClose: () => void }) 
                 </div>
             </div>
 
-            <div className="flex-1 overflow-auto bg-gray-500/50 w-full max-w-5xl p-8 flex justify-center items-start">
-                <div ref={printRef} className="bg-white p-10 shadow-2xl min-w-[1000px]">
+            <div className="flex-1 overflow-auto bg-gray-500/50 w-full max-w-[1200px] p-8 flex justify-center items-start relative">
+                {/* 🟢 Loading 毛玻璃遮罩 */}
+                {isLoading && (
+                    <div className="absolute inset-0 z-20 bg-white/60 backdrop-blur-sm flex items-center justify-center">
+                        <div className="flex flex-col items-center gap-3 bg-white p-6 rounded-2xl shadow-xl">
+                            <div className="w-10 h-10 border-4 border-teal-200 border-t-teal-600 rounded-full animate-spin"></div>
+                            <span className="text-teal-700 font-bold">載入班表資料中...</span>
+                        </div>
+                    </div>
+                )}
+                
+                <div ref={printRef} className={`bg-white p-10 shadow-2xl min-w-[1000px] transition-opacity ${isLoading ? 'opacity-30' : 'opacity-100'}`}>
                     <div className="text-center mb-8 border-b-4 border-teal-600 pb-4">
                         <h1 className="text-5xl font-black text-slate-800 tracking-widest mb-2">{clinicName} {titleSuffix}</h1>
                         <p className="text-xl text-slate-500 font-bold tracking-widest mt-2">
