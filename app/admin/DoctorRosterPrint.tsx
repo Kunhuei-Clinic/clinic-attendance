@@ -309,7 +309,7 @@ export default function DoctorRosterPrint({ onClose }: { onClose: () => void }) 
                     </div>
                 )}
                 
-                <div ref={printRef} className={`bg-white p-10 shadow-2xl min-w-[1000px] transition-opacity ${isLoading ? 'opacity-30' : 'opacity-100'}`}>
+                <div ref={printRef} className={`bg-white p-10 shadow-2xl min-w-[1000px] transition-opacity duration-300 ${isLoading ? 'opacity-30' : 'opacity-100'}`}>
                     <div className="text-center mb-8 border-b-4 border-teal-600 pb-4">
                         <h1 className="text-5xl font-black text-slate-800 tracking-widest mb-2">{clinicName} {titleSuffix}</h1>
                         <p className="text-xl text-slate-500 font-bold tracking-widest mt-2">
@@ -398,7 +398,7 @@ export default function DoctorRosterPrint({ onClose }: { onClose: () => void }) 
                                                                             )}
                                                                             {/* 異動資訊 */}
                                                                             {showSubstitution && w.is_substitution && (
-                                                                                <span className="text-[10px] font-bold text-purple-600 mt-1">
+                                                                                <span className="text-[11px] font-bold text-purple-600 mt-1">
                                                                                     門診異動
                                                                                 </span>
                                                                             )}

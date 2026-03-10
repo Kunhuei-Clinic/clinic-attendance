@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
-import { requireOwnerAuth, authErrorToResponse, UnauthorizedError, ForbiddenError } from '@/lib/authHelper';
+import { requireOwnerAuth, requireManagerOrOwnerAuth, authErrorToResponse, UnauthorizedError, ForbiddenError } from '@/lib/authHelper';
 import { getClinicIdFromRequest } from '@/lib/clinicHelper';
 
 /**
@@ -106,7 +106,7 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    const { clinicId } = await requireOwnerAuth(request);
+    const { clinicId } = await requireManagerOrOwnerAuth(request);
 
     const body = await request.json();
 
