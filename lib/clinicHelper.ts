@@ -3,12 +3,25 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 
+/**
+ * 依優先順序取得診所 ID（SaaS 統一識別碼）：
+ * 1. Request Headers (x-clinic-id)
+ * 2. Cookies (clinic_id)
+ * 3. URL Query (clinic_id 或 clinicId)
+ * 確保 Web / Mobile / Postman 等情境都能正確識別診所。
+ */
 export async function getClinicIdFromRequest(request: NextRequest): Promise<string | null> {
-  // 🟢 移到 try 外面
   const cookieStore = cookies();
 
+  // 步驟 0：依優先順序取得「原始」診所 ID（不依賴 Session）
+  const headerClinicId = request.headers.get('x-clinic-id')?.trim() || null;
+  const cookieClinicId = cookieStore.get('clinic_id')?.value?.trim() || null;
+  const searchParams = request.nextUrl.searchParams;
+  const queryClinicId = searchParams.get('clinic_id') || searchParams.get('clinicId') || null;
+
+  const rawClinicId = headerClinicId || cookieClinicId || queryClinicId || null;
+
   try {
-    // 🟢 使用最新 SSR 標準讀取 User
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -17,7 +30,6 @@ export async function getClinicIdFromRequest(request: NextRequest): Promise<stri
           get(name: string) {
             return cookieStore.get(name)?.value;
           },
-          // 🟢 必須補上這兩段，SSR 登入才不會失效
           set(name: string, value: string, options: any) {
             cookieStore.set({ name, value, ...options });
           },
@@ -32,9 +44,9 @@ export async function getClinicIdFromRequest(request: NextRequest): Promise<stri
 
     if (user) {
       const userId = user.id;
-      const targetClinicId = request.headers.get('x-clinic-id') || cookieStore.get('active_clinic_id')?.value;
+      const targetClinicId = rawClinicId;
 
-      // 1. 檢查是否為平台總管 (Super Admin)
+      // 1. 平台總管 (Super Admin) 視同可操作任一院區
       const { data: superAdmin } = await supabaseAdmin
         .from('super_admins')
         .select('user_id')
@@ -45,7 +57,7 @@ export async function getClinicIdFromRequest(request: NextRequest): Promise<stri
         return targetClinicId || null;
       }
 
-      // 2. 一般連鎖老闆/員工的嚴格驗證
+      // 2. 一般連鎖老闆/員工：若有目標診所則驗證是否為該診所成員
       if (targetClinicId) {
         const { data: memberRecord } = await supabaseAdmin
           .from('clinic_members')
@@ -59,7 +71,7 @@ export async function getClinicIdFromRequest(request: NextRequest): Promise<stri
         }
       }
 
-      // 3. 預設降級：抓取他名下的第一家合法診所
+      // 3. 預設降級：取該使用者名下第一家合法診所
       const { data: firstValidClinic } = await supabaseAdmin
         .from('clinic_members')
         .select('clinic_id')
@@ -70,10 +82,8 @@ export async function getClinicIdFromRequest(request: NextRequest): Promise<stri
       if (firstValidClinic?.clinic_id) return firstValidClinic.clinic_id;
     }
 
-    // 🟢 若 Session 找不到（例如 Portal 用戶），允許從 URL 參數獲取
-    const searchParams = request.nextUrl.searchParams;
-    const paramClinicId = searchParams.get('clinicId') || searchParams.get('clinic_id');
-    if (paramClinicId) return paramClinicId;
+    // 4. 無 Supabase Session（例如 Portal 僅用 Cookie/Query）：直接回傳已取得的診所 ID
+    if (rawClinicId) return rawClinicId;
 
     return null;
   } catch (error) {

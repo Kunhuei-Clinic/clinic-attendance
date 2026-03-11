@@ -42,11 +42,11 @@ export async function POST(request: NextRequest) {
       .eq('is_active', true)
       .single();
 
-    // 比對：若找不到人 -> 回傳 404
+    // 比對：若找不到人 -> 回傳 404（明確錯誤以利排查）
     if (fetchError || !staff) {
       console.error('[LINE Bind] 找不到員工:', fetchError);
       return NextResponse.json(
-        { success: false, error: '找不到員工資料' },
+        { success: false, error: '員工 ID 不匹配或該診所無此員工，請確認手機號碼與診所連結', code: 'staff_id_mismatch' },
         { status: 404 }
       );
     }
@@ -92,10 +92,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 驗證 clinic_id 是否存在
+    // 驗證 clinic_id 是否存在（明確錯誤以利排查）
     if (!staff.clinic_id) {
       return NextResponse.json(
-        { success: false, error: '員工未關聯到診所，請聯繫管理員' },
+        { success: false, error: '缺少診所別：員工未關聯到診所，請聯繫管理員', code: 'missing_clinic' },
         { status: 400 }
       );
     }
@@ -112,24 +112,30 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    // 4. Session：綁定成功後直接建立 Cookie (含 staff_id, clinic_id)
-    // 設定 staff_id cookie（用於識別當前登入的員工）
+    // 4. Session：綁定成功後直接建立 Cookie（與網頁登入 / line-check 一致：staff_id, clinic_id, staff_role）
     response.cookies.set('staff_id', staff.id, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       path: '/',
-      maxAge: 60 * 60 * 24 * 30, // 30 天
+      maxAge: 60 * 60 * 24 * 30,
       sameSite: 'lax'
     });
-
-    // 設定 clinic_id cookie（用於多租戶識別）
     response.cookies.set('clinic_id', staff.clinic_id, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       path: '/',
-      maxAge: 60 * 60 * 24 * 30, // 30 天
+      maxAge: 60 * 60 * 24 * 30,
       sameSite: 'lax'
     });
+    if (staff.role) {
+      response.cookies.set('staff_role', staff.role, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        path: '/',
+        maxAge: 60 * 60 * 24 * 30,
+        sameSite: 'lax'
+      });
+    }
 
     console.log('[LINE Bind] ✅ 綁定成功:', {
       staff_id: staff.id,

@@ -16,23 +16,24 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin';
  */
 export async function GET(request: NextRequest) {
   try {
-    // 🔒 步驟 1: 身份驗證 - 從 Cookie 取得 clinic_id 與 staff_id
+    // 🔒 步驟 1: 身份驗證 - 從 Cookie 取得 clinic_id 與 staff_id（與 Auth 統一命名）
     const staffIdCookie = request.cookies.get('staff_id');
     const clinicIdCookie = request.cookies.get('clinic_id');
+    const searchParams = request.nextUrl.searchParams;
+    const queryClinicId = searchParams.get('clinic_id') || searchParams.get('clinicId');
 
-    if (!staffIdCookie || !clinicIdCookie) {
+    if (!staffIdCookie?.value) {
       return NextResponse.json(
-        { success: false, error: '未登入或 Session 已過期，請重新登入' },
+        { success: false, error: '員工未登入或 Session 已過期，請重新登入', code: 'missing_staff' },
         { status: 401 }
       );
     }
-
     const staffId = staffIdCookie.value;
-    const clinicId = clinicIdCookie.value;
 
-    if (!staffId || !clinicId) {
+    const clinicId = clinicIdCookie?.value?.trim() || queryClinicId?.trim() || null;
+    if (!clinicId) {
       return NextResponse.json(
-        { success: false, error: '無效的 Session 資料' },
+        { success: false, error: '缺少診所別，無法辨識診所，請重新登入或從正確連結進入', code: 'missing_clinic' },
         { status: 401 }
       );
     }
@@ -47,7 +48,7 @@ export async function GET(request: NextRequest) {
 
     if (staffError || !staff) {
       return NextResponse.json(
-        { success: false, error: '找不到該員工或權限不足' },
+        { success: false, error: '員工 ID 不匹配或該診所無此員工，請確認登入身分', code: 'staff_id_mismatch' },
         { status: 403 }
       );
     }
@@ -60,7 +61,6 @@ export async function GET(request: NextRequest) {
     }
 
     // 🔒 步驟 3: 取得 Query Parameters
-    const searchParams = request.nextUrl.searchParams;
     const type = searchParams.get('type') as 'home' | 'history' | 'roster' | 'leave' | 'salary' | null;
     const month = searchParams.get('month');
 

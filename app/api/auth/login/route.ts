@@ -74,10 +74,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 5. 驗證 clinic_id 是否存在
+    // 5. 驗證 clinic_id 是否存在（明確錯誤以利排查）
     if (!matchedStaff.clinic_id) {
       return NextResponse.json(
-        { success: false, message: '員工未關聯到診所，請聯繫管理員' },
+        { success: false, message: '缺少診所別：員工未關聯到診所，請聯繫管理員', code: 'missing_clinic' },
         { status: 400 }
       );
     }

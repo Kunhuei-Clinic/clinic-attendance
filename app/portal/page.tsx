@@ -163,14 +163,15 @@ export default function EmployeePortal() {
           const checkResult = await checkRes.json();
 
           if (checkResult.bound && checkResult.staff) {
-            // 已綁定：進入系統
+            // 已綁定：進入系統（同步設定 clinicId 以利後續 API 參數備援）
             console.log('[Portal] ✅ 已綁定:', checkResult.staff);
             setStaffUser(checkResult.staff);
+            if (checkResult.staff.clinic_id) setClinicId(checkResult.staff.clinic_id);
             setStep('portal');
             
             // 載入資料
-            await fetchTodayLogs(checkResult.staff.id);
-            await fetchHomeDataWithStaffId(checkResult.staff.id);
+            await fetchTodayLogs(checkResult.staff.id, checkResult.staff.clinic_id ?? clinicId);
+            await fetchHomeDataWithStaffId(checkResult.staff.id, checkResult.staff.clinic_id ?? clinicId);
           } else {
             // 未綁定：進入綁定模式
             console.log('[Portal] ⚠️ 未綁定，進入綁定模式');
@@ -191,10 +192,12 @@ export default function EmployeePortal() {
               if (testResult.data && testResult.data.profile) {
                 // 已有有效 Cookie，直接進入系統
                 console.log('[Portal] ✅ 已有有效 Cookie，直接進入系統');
-                setStaffUser(testResult.data.profile);
+                const profile = testResult.data.profile;
+                setStaffUser(profile);
+                if (profile.clinic_id) setClinicId(profile.clinic_id);
                 setStep('portal');
-                await fetchTodayLogs(testResult.data.profile.id);
-                await fetchHomeDataWithStaffId(testResult.data.profile.id);
+                await fetchTodayLogs(profile.id, profile.clinic_id ?? clinicId);
+                await fetchHomeDataWithStaffId(profile.id, profile.clinic_id ?? clinicId);
           return;
         }
             }
@@ -244,14 +247,15 @@ export default function EmployeePortal() {
       const result = await response.json();
 
       if (result.success && result.staff) {
-        // 登入成功：進入系統
+        // 登入成功：進入系統（同步設定 clinicId）
         console.log('[Portal] ✅ 登入成功:', result.staff);
         setStaffUser(result.staff);
+        if (result.staff.clinic_id) setClinicId(result.staff.clinic_id);
         setStep('portal');
 
         // 載入資料
-        await fetchTodayLogs(result.staff.id);
-        await fetchHomeDataWithStaffId(result.staff.id);
+        await fetchTodayLogs(result.staff.id, result.staff.clinic_id ?? clinicId);
+        await fetchHomeDataWithStaffId(result.staff.id, result.staff.clinic_id ?? clinicId);
       } else {
         setLoginError('登入失敗，請稍後再試');
       }
@@ -310,14 +314,15 @@ export default function EmployeePortal() {
       const result = await response.json();
 
       if (result.success && result.staff) {
-        // 綁定成功：進入系統
+        // 綁定成功：進入系統（clinicId 已從 URL 或表單帶入）
         console.log('[Portal] ✅ 綁定成功:', result.staff);
         setStaffUser(result.staff);
+        if (result.staff.clinic_id) setClinicId(result.staff.clinic_id);
         setStep('portal');
 
         // 載入資料
-        await fetchTodayLogs(result.staff.id);
-        await fetchHomeDataWithStaffId(result.staff.id);
+        await fetchTodayLogs(result.staff.id, result.staff.clinic_id ?? clinicId);
+        await fetchHomeDataWithStaffId(result.staff.id, result.staff.clinic_id ?? clinicId);
       } else {
         setBindError('綁定失敗，請稍後再試');
       }
@@ -337,11 +342,12 @@ export default function EmployeePortal() {
     if (view === 'profile') fetchProfile();
   }, [view, selectedMonth, staffUser, step]);
 
-  const fetchTodayLogs = async (staffId: number) => {
+  const fetchTodayLogs = async (staffId: string, clinicIdParam?: string) => {
     try {
       const ym = new Date().toISOString().slice(0, 7);
+      const clinicQ = clinicIdParam ? `&clinic_id=${encodeURIComponent(clinicIdParam)}` : '';
       const response = await fetch(
-        `/api/portal/data?type=history&staffId=${staffId}&month=${ym}`,
+        `/api/portal/data?type=history&staffId=${staffId}&month=${ym}${clinicQ}`,
         {
           credentials: 'include',
         }
@@ -372,8 +378,9 @@ export default function EmployeePortal() {
 
   const fetchHistory = async () => {
     try {
+      const clinicQ = (clinicId || staffUser?.clinic_id) ? `&clinic_id=${encodeURIComponent(clinicId || staffUser?.clinic_id || '')}` : '';
       const response = await fetch(
-        `/api/portal/data?type=history&staffId=${staffUser.id}&month=${selectedMonth}`,
+        `/api/portal/data?type=history&staffId=${staffUser.id}&month=${selectedMonth}${clinicQ}`,
         {
           credentials: 'include',
         }
@@ -394,8 +401,9 @@ export default function EmployeePortal() {
 
   const fetchRoster = async () => {
     try {
+      const clinicQ = (clinicId || staffUser?.clinic_id) ? `&clinic_id=${encodeURIComponent(clinicId || staffUser?.clinic_id || '')}` : '';
       const response = await fetch(
-        `/api/portal/data?type=roster&staffId=${staffUser.id}`,
+        `/api/portal/data?type=roster&staffId=${staffUser.id}${clinicQ}`,
         {
           credentials: 'include',
         }
@@ -425,8 +433,9 @@ export default function EmployeePortal() {
 
   const fetchLeaveHistory = async () => {
     try {
+      const clinicQ = (clinicId || staffUser?.clinic_id) ? `&clinic_id=${encodeURIComponent(clinicId || staffUser?.clinic_id || '')}` : '';
       const response = await fetch(
-        `/api/portal/data?type=leave&staffId=${staffUser.id}`,
+        `/api/portal/data?type=leave&staffId=${staffUser.id}${clinicQ}`,
         {
           credentials: 'include',
         }
@@ -455,10 +464,11 @@ export default function EmployeePortal() {
     }
   };
 
-  const fetchHomeDataWithStaffId = async (staffId: number) => {
+  const fetchHomeDataWithStaffId = async (staffId: string, clinicIdParam?: string) => {
     try {
+      const clinicQ = clinicIdParam ? `&clinic_id=${encodeURIComponent(clinicIdParam)}` : '';
       const response = await fetch(
-        `/api/portal/data?type=home&staffId=${staffId}`,
+        `/api/portal/data?type=home&staffId=${staffId}${clinicQ}`,
         {
           credentials: 'include',
         }
@@ -504,14 +514,15 @@ export default function EmployeePortal() {
 
   const fetchHomeData = async () => {
     if (!staffUser?.id) return;
-    await fetchHomeDataWithStaffId(staffUser.id);
+    await fetchHomeDataWithStaffId(staffUser.id, clinicId || staffUser?.clinic_id);
   };
 
   const fetchProfile = async () => {
     if (!staffUser?.id) return;
     try {
+      const clinicQ = (clinicId || staffUser?.clinic_id) ? `&clinic_id=${encodeURIComponent(clinicId || staffUser?.clinic_id || '')}` : '';
       const response = await fetch(
-        `/api/portal/data?type=home&staffId=${staffUser.id}`,
+        `/api/portal/data?type=home&staffId=${staffUser.id}${clinicQ}`,
         {
           credentials: 'include',
         }
@@ -931,7 +942,7 @@ export default function EmployeePortal() {
         if (!result.success) throw new Error(result.message || '打卡失敗');
         alert('下班打卡成功！');
       }
-      await fetchTodayLogs(staffUser.id);
+      await fetchTodayLogs(staffUser.id, clinicId || staffUser?.clinic_id);
       setGpsStatus('idle');
       setBypassMode(false);
     } catch (err: any) {

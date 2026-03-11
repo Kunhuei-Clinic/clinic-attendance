@@ -46,7 +46,7 @@ export async function GET(request: Request) {
       .single();
 
     let dbRole = 'staff';
-    let activeClinicId = cookieStore.get('active_clinic_id')?.value ?? null;
+    let activeClinicId = cookieStore.get('clinic_id')?.value ?? null;
 
     // 2. 查詢該員工的權限（若無 Cookie 則取第一個診所）
     if (activeClinicId) {
@@ -99,10 +99,11 @@ export async function GET(request: Request) {
     const response = NextResponse.json(responseData);
 
     if (activeClinicId) {
-      response.cookies.set('active_clinic_id', activeClinicId, {
+      response.cookies.set('clinic_id', activeClinicId, {
         path: '/',
         maxAge: 30 * 24 * 60 * 60,
-        httpOnly: false,
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax'
       });
     }

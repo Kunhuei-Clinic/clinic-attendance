@@ -52,7 +52,7 @@ export default function SuperAdminPortal() {
   // 🟢 核心切換邏輯：種下 Cookie 並跳轉
   const handleEnterClinic = (clinicId: string, clinicName: string) => {
     // 寫入 Cookie (有效期 30 天)，讓後端 getClinicIdFromRequest 讀取
-    document.cookie = `active_clinic_id=${clinicId}; path=/; max-age=2592000;`;
+    document.cookie = `clinic_id=${clinicId}; path=/; max-age=2592000;`;
     alert(`切換至：${clinicName}`);
     router.push('/admin'); // 跳轉回一般的診所後台
   };

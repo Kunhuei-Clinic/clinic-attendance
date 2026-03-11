@@ -60,7 +60,7 @@ export async function requireOwnerAuth(request: NextRequest): Promise<RequireOwn
   }
 
   const userId = user.id;
-  const targetClinicId = request.headers.get('x-clinic-id') || cookieStore.get('active_clinic_id')?.value;
+  const targetClinicId = request.headers.get('x-clinic-id') || cookieStore.get('clinic_id')?.value;
 
   // 1. 平台總管 (Super Admin) 視同 owner，允許操作任一院區
   const { data: superAdmin } = await supabaseAdmin
@@ -158,7 +158,7 @@ export async function requireManagerOrOwnerAuth(
   }
 
   const userId = user.id;
-  const targetClinicId = request.headers.get('x-clinic-id') || cookieStore.get('active_clinic_id')?.value;
+  const targetClinicId = request.headers.get('x-clinic-id') || cookieStore.get('clinic_id')?.value;
 
   // 1. 平台總管 (Super Admin) 視同 owner/manager，允許操作任一院區
   const { data: superAdmin } = await supabaseAdmin
@@ -284,7 +284,7 @@ export async function checkSalaryAccess(
   }
 
   const userId = user.id;
-  const targetClinicId = request.headers.get('x-clinic-id') || cookieStore.get('active_clinic_id')?.value;
+  const targetClinicId = request.headers.get('x-clinic-id') || cookieStore.get('clinic_id')?.value;
 
   // 1. Super Admin 視同 owner
   const { data: superAdmin } = await supabaseAdmin

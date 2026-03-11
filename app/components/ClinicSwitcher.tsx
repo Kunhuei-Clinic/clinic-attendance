@@ -14,7 +14,7 @@ export default function ClinicSwitcher() {
     // 讀取目前的 Cookie，知道現在是在哪家分院
     const cookies = document.cookie.split('; ');
     const activeCookie = cookies.find((row) =>
-      row.startsWith('active_clinic_id=')
+      row.startsWith('clinic_id=')
     );
     if (activeCookie) {
       setActiveId(activeCookie.split('=')[1]);
@@ -44,7 +44,7 @@ export default function ClinicSwitcher() {
     if (!newClinicId) return;
 
     // 🟢 寫入 Cookie (有效期 30 天)，這是切換分院的靈魂！
-    document.cookie = `active_clinic_id=${newClinicId}; path=/; max-age=2592000;`;
+    document.cookie = `clinic_id=${newClinicId}; path=/; max-age=2592000;`;
 
     // 強制重整畫面，讓所有 API 帶著新 Cookie 重新出發，撈取新診所的資料
     window.location.reload();

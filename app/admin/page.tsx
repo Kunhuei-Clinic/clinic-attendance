@@ -59,7 +59,7 @@ export default function AdminPage() {
   // 診所名稱
   const [clinicName, setClinicName] = useState('診所');
 
-  // 檢查認證狀態（後端已於 Response Header 設定 active_clinic_id Cookie）
+  // 檢查認證狀態（後端已於 Response Header 設定 clinic_id Cookie）
   useEffect(() => {
     const checkAuth = async () => {
       try {
