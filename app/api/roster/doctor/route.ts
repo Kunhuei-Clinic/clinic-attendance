@@ -17,13 +17,18 @@ import { requireOwnerAuth, authErrorToResponse, UnauthorizedError, ForbiddenErro
  */
 export async function GET(request: NextRequest) {
   try {
-    // 🟢 多租戶：取得當前使用者的 clinic_id
-    const clinicId = await getClinicIdFromRequest(request);
+    // 🟢 修正：強化多租戶識別，支援從參數獲取 clinicId（Portal 端備援）
+    let clinicId = await getClinicIdFromRequest(request);
+
     if (!clinicId) {
-      return NextResponse.json(
-        { data: [], error: '無法識別診所，請重新登入' },
-        { status: 401 }
-      );
+      const searchParams = request.nextUrl.searchParams;
+      clinicId = searchParams.get('clinicId') || searchParams.get('clinic_id') || undefined;
+      if (!clinicId) {
+        return NextResponse.json(
+          { data: [], error: '無法識別診所，請重新登入' },
+          { status: 401 }
+        );
+      }
     }
 
     const searchParams = request.nextUrl.searchParams;

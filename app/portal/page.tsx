@@ -1150,10 +1150,10 @@ export default function EmployeePortal() {
   // 主畫面：各 View + 底部導航
   return (
     <div className="relative">
-      {/* Home */}
+      {/* Home：優先使用 API 回傳的 profile（含 admin_role），主管儀表板才能正確顯示 */}
       {view === 'home' && (
         <HomeView
-          staffUser={staffUser}
+          staffUser={profile || staffUser}
           isWorking={isWorking}
           logs={logs}
           gpsStatus={gpsStatus}

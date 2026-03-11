@@ -13,13 +13,18 @@ import { requireManagerOrOwnerAuth, authErrorToResponse, UnauthorizedError, Forb
  */
 export async function GET(request: NextRequest) {
   try {
-    // 🟢 多租戶：取得當前使用者的 clinic_id
-    const clinicId = await getClinicIdFromRequest(request);
+    // 🟢 修正：強化診所識別邏輯，支援 Portal 端手機登入
+    let clinicId = await getClinicIdFromRequest(request);
+
     if (!clinicId) {
-      return NextResponse.json(
-        { data: [], error: '無法識別診所，請重新登入' },
-        { status: 401 }
-      );
+      const searchParams = request.nextUrl.searchParams;
+      clinicId = searchParams.get('clinicId') || searchParams.get('clinic_id') || undefined;
+      if (!clinicId) {
+        return NextResponse.json(
+          { data: [], error: '無法識別診所，請重新登入' },
+          { status: 401 }
+        );
+      }
     }
 
     const searchParams = request.nextUrl.searchParams;
