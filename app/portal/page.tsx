@@ -64,6 +64,7 @@ export default function EmployeePortal() {
   const [gpsStatus, setGpsStatus] = useState<GpsStatus>('idle');
   const [dist, setDist] = useState(0);
   const [bypassMode, setBypassMode] = useState(false);
+  const [isPunching, setIsPunching] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState(
     new Date().toISOString().slice(0, 7),
   );
@@ -777,79 +778,96 @@ export default function EmployeePortal() {
   };
 
   const executeClock = async (action: 'in' | 'out') => {
-    const isVip =
-      staffUser.role === '醫師' || staffUser.role === '主管';
+    if (isPunching) return;
+    setIsPunching(true);
+    try {
+      const isVip =
+        staffUser.role === '醫師' || staffUser.role === '主管';
 
-    if (action === 'out' && logs.length > 0 && logs[0].clock_in_time) {
-      const clockInTime = new Date(logs[0].clock_in_time);
-      const now = new Date();
-      const workHours =
-        (now.getTime() - clockInTime.getTime()) /
-        (1000 * 60 * 60);
-      const threshold = overtimeSettings?.threshold || 9;
+      if (action === 'out' && logs.length > 0 && logs[0].clock_in_time) {
+        const clockInTime = new Date(logs[0].clock_in_time);
+        const now = new Date();
+        const workHours =
+          (now.getTime() - clockInTime.getTime()) /
+          (1000 * 60 * 60);
+        const threshold = overtimeSettings?.threshold || 9;
 
-      if (workHours > threshold) {
-        setPendingClockOut({
-          lat: null,
-          lng: null,
-          isBypass: false,
-        });
-        setShowOvertimeConfirm(true);
+        if (workHours > threshold) {
+          setPendingClockOut({
+            lat: null,
+            lng: null,
+            isBypass: false,
+          });
+          setShowOvertimeConfirm(true);
+          setIsPunching(false);
+          return;
+        }
+      }
+
+      if (isVip || bypassMode) {
+        try {
+          await submitLog(action, null, null, bypassMode, false);
+        } finally {
+          setIsPunching(false);
+        }
         return;
       }
-    }
-
-    if (isVip || bypassMode) {
-      await submitLog(action, null, null, bypassMode, false);
-      return;
-    }
-    setGpsStatus('locating');
-    if (!navigator.geolocation) {
-      alert('GPS 未開');
-      setGpsStatus('error');
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        const { latitude, longitude } = pos.coords;
-        const d = getDist(latitude, longitude, CLINIC_LAT, CLINIC_LNG);
-        setDist(Math.round(d));
-        if (d <= ALLOWED_RADIUS) {
-          setGpsStatus('ok');
-          if (
-            action === 'out' &&
-            logs.length > 0 &&
-            logs[0].clock_in_time
-          ) {
-            const clockInTime = new Date(logs[0].clock_in_time);
-            const now = new Date();
-            const workHours =
-              (now.getTime() - clockInTime.getTime()) /
-              (1000 * 60 * 60);
-            const threshold = overtimeSettings?.threshold || 9;
-            if (workHours > threshold) {
-              setPendingClockOut({
-                lat: latitude,
-                lng: longitude,
-                isBypass: false,
-              });
-              setShowOvertimeConfirm(true);
-              return;
-            }
-          }
-          await submitLog(action, latitude, longitude, false, false);
-        } else {
-          setGpsStatus('out_of_range');
-          alert(`距離太遠 (${Math.round(d)}m)`);
-        }
-      },
-      (err) => {
-        console.error(err);
+      setGpsStatus('locating');
+      if (!navigator.geolocation) {
+        alert('GPS 未開');
         setGpsStatus('error');
-        alert('定位失敗');
-      },
-      { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 },
-    );
+        setIsPunching(false);
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          try {
+            const { latitude, longitude } = pos.coords;
+            const d = getDist(latitude, longitude, CLINIC_LAT, CLINIC_LNG);
+            setDist(Math.round(d));
+            if (d <= ALLOWED_RADIUS) {
+              setGpsStatus('ok');
+              if (
+                action === 'out' &&
+                logs.length > 0 &&
+                logs[0].clock_in_time
+              ) {
+                const clockInTime = new Date(logs[0].clock_in_time);
+                const now = new Date();
+                const workHours =
+                  (now.getTime() - clockInTime.getTime()) /
+                  (1000 * 60 * 60);
+                const threshold = overtimeSettings?.threshold || 9;
+                if (workHours > threshold) {
+                  setPendingClockOut({
+                    lat: latitude,
+                    lng: longitude,
+                    isBypass: false,
+                  });
+                  setShowOvertimeConfirm(true);
+                  return;
+                }
+              }
+              await submitLog(action, latitude, longitude, false, false);
+            } else {
+              setGpsStatus('out_of_range');
+              alert(`距離太遠 (${Math.round(d)}m)`);
+            }
+          } finally {
+            setIsPunching(false);
+          }
+        },
+        (err) => {
+          console.error(err);
+          setGpsStatus('error');
+          alert('定位失敗');
+          setIsPunching(false);
+        },
+        { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 },
+      );
+    } catch (e) {
+      setIsPunching(false);
+    }
   };
 
   const submitLog = async (
@@ -1159,6 +1177,7 @@ export default function EmployeePortal() {
           gpsStatus={gpsStatus}
           announcements={announcements}
           managerStats={managerStats}
+          isPunching={isPunching}
           onClockIn={() => executeClock('in')}
           onClockOut={() => executeClock('out')}
           bypassMode={bypassMode}

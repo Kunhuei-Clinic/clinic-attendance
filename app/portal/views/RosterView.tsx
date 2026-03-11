@@ -148,7 +148,7 @@ export default function RosterView({ rosterData, staffUser }: RosterViewProps) {
                 // 🟢 醫師門診模式：讀取醫師班表
                 await Promise.all([
                     fetchDoctorRoster(),
-                    fetchClosedDays()
+                    fetchClosedDays(true)
                 ]);
             } else {
                 // 一般人員模式：讀取一般員工班表
@@ -252,6 +252,17 @@ export default function RosterView({ rosterData, staffUser }: RosterViewProps) {
             fetchDoctorRoster();
         }
     }, [doctorStaff, activeTab, currentDate]);
+
+    // 🟢 自動捲動到今日欄位
+    useEffect(() => {
+        if (!isLoading && todayStr) {
+            const t = setTimeout(() => {
+                const el = document.getElementById(`day-col-${todayStr}`);
+                if (el) el.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+            }, 300);
+            return () => clearTimeout(t);
+        }
+    }, [isLoading, activeTab, todayStr]);
 
     const fetchGlobalSettings = async () => {
         try {
@@ -563,14 +574,17 @@ export default function RosterView({ rosterData, staffUser }: RosterViewProps) {
         }
     };
 
-    // 🟢 載入醫師班表
+    // 🟢 載入醫師班表（未來 4 週，使用 startDate/endDate）
     const fetchDoctorRoster = async () => {
         if (!currentDate) return;
         try {
-            const year = currentDate.getFullYear();
-            const month = currentDate.getMonth() + 1;
+            const startD = new Date();
+            const endD = new Date();
+            endD.setDate(endD.getDate() + 28);
+            const startDate = `${startD.getFullYear()}-${String(startD.getMonth() + 1).padStart(2, '0')}-${String(startD.getDate()).padStart(2, '0')}`;
+            const endDate = `${endD.getFullYear()}-${String(endD.getMonth() + 1).padStart(2, '0')}-${String(endD.getDate()).padStart(2, '0')}`;
             const clinicId = staffUser?.clinic_id ?? '';
-            const response = await fetch(`/api/roster/doctor?year=${year}&month=${month}&clinicId=${encodeURIComponent(clinicId)}`, {
+            const response = await fetch(`/api/roster/doctor?startDate=${startDate}&endDate=${endDate}&clinicId=${encodeURIComponent(clinicId)}`, {
                 credentials: 'include', // 🔑 關鍵：帶上 Cookie
             });
             
@@ -608,14 +622,25 @@ export default function RosterView({ rosterData, staffUser }: RosterViewProps) {
         }
     };
 
-    // 🟢 載入休診日
-    const fetchClosedDays = async () => {
+    // 🟢 載入休診日（一般 tab 用 year/month，醫師 tab 用 startDate/endDate 未來 4 週）
+    const fetchClosedDays = async (forDoctorTab?: boolean) => {
         if (!currentDate) return;
         try {
-            const year = currentDate.getFullYear();
-            const month = currentDate.getMonth() + 1;
             const clinicId = staffUser?.clinic_id ?? '';
-            const response = await fetch(`/api/roster/closed-days?year=${year}&month=${month}&clinicId=${encodeURIComponent(clinicId)}`, {
+            let url: string;
+            if (forDoctorTab) {
+                const startD = new Date();
+                const endD = new Date();
+                endD.setDate(endD.getDate() + 28);
+                const startDate = `${startD.getFullYear()}-${String(startD.getMonth() + 1).padStart(2, '0')}-${String(startD.getDate()).padStart(2, '0')}`;
+                const endDate = `${endD.getFullYear()}-${String(endD.getMonth() + 1).padStart(2, '0')}-${String(endD.getDate()).padStart(2, '0')}`;
+                url = `/api/roster/closed-days?startDate=${startDate}&endDate=${endDate}&clinicId=${encodeURIComponent(clinicId)}`;
+            } else {
+                const year = currentDate.getFullYear();
+                const month = currentDate.getMonth() + 1;
+                url = `/api/roster/closed-days?year=${year}&month=${month}&clinicId=${encodeURIComponent(clinicId)}`;
+            }
+            const response = await fetch(url, {
                 credentials: 'include',
             });
             
@@ -648,6 +673,20 @@ export default function RosterView({ rosterData, staffUser }: RosterViewProps) {
             return { dateObj: d, dateStr: dateStr, dayOfWeek: d.getDay() };
         });
     };
+
+    // 🟢 醫師班表：未來 4 週（從今天起 28 天）
+    const getDoctorDays = () => {
+        const days: { dateObj: Date; dateStr: string; dayOfWeek: number }[] = [];
+        const start = new Date();
+        for (let i = 0; i < 28; i++) {
+            const d = new Date(start);
+            d.setDate(start.getDate() + i);
+            const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            days.push({ dateObj: d, dateStr, dayOfWeek: d.getDay() });
+        }
+        return days;
+    };
+    const doctorDays = getDoctorDays();
 
     // 🟢 資料分流邏輯已移至 useEffect，使用 state 儲存分流後的員工
 
@@ -731,6 +770,7 @@ export default function RosterView({ rosterData, staffUser }: RosterViewProps) {
                                     return (
                                         <th
                                             key={d.dateStr}
+                                            id={`day-col-${d.dateStr}`}
                                             className={`p-1 border text-center min-w-[50px] ${headerBg} ${textColor} ${isToday ? 'border-b-2 border-yellow-400' : ''}`}
                                         >
                                             <div className="text-[10px] font-bold">
@@ -782,10 +822,10 @@ export default function RosterView({ rosterData, staffUser }: RosterViewProps) {
                                         return (
                                             <td
                                                 key={d.dateStr}
-                                                className={`border p-0.5 text-center align-top h-12 min-w-[50px] ${cellBg} ${isToday ? 'border-x-2 border-yellow-300' : ''}`}
+                                                className={`border p-0.5 text-center align-top relative overflow-hidden ${cellBg} ${isToday ? 'border-x-2 border-yellow-400 bg-yellow-50/50' : ''} ${isDoctorTable ? 'h-12 min-w-[50px]' : 'h-[60px] w-[42px] min-w-[42px]'}`}
                                             >
                                                 {badge}
-                                                <div className="flex flex-col gap-1 h-full justify-center">
+                                                <div className={`flex flex-col h-full w-full justify-center ${!isDoctorTable ? 'divide-y divide-slate-100 overflow-hidden' : 'gap-1'}`}>
                                                     {isDoctorTable ? (
                                                         // 🟢 醫師門診表：顯示完整的 Badge (例如橘色「早診」、藍色「午診」)
                                                         data.shifts.map(s => {
@@ -802,19 +842,24 @@ export default function RosterView({ rosterData, staffUser }: RosterViewProps) {
                                                             );
                                                         })
                                                     ) : (
-                                                        // 一般員工：顯示簡寫 (早/午/晚) 或色塊
-                                                        (['M', 'A', 'N'] as Shift[]).map(s => {
-                                                            if (!data.shifts.includes(s)) return null;
-                                                            const colorClass =
-                                                                s === 'M' ? 'bg-orange-400' : s === 'A' ? 'bg-blue-400' : 'bg-purple-400';
-                                                            const timeDisplay = getShiftTimeDisplay(s, data.shift_details);
-                                                            const shiftLabel = s === 'M' ? '早' : s === 'A' ? '午' : '晚';
+                                                        // 一般員工：依 shiftsConfig 顯示 M/A/N 班別（無設定時用預設 M/A/N）
+                                                        (shiftsConfig.length ? shiftsConfig : [
+                                                            { id: '1', code: 'M', name: '早診', start: '08:00', end: '12:00' },
+                                                            { id: '2', code: 'A', name: '午診', start: '14:00', end: '18:00' },
+                                                            { id: '3', code: 'N', name: '晚診', start: '18:30', end: '21:30' }
+                                                        ]).map(shift => {
+                                                            const isSelected = data.shifts.includes(shift.code);
                                                             return (
                                                                 <div
-                                                                    key={s}
-                                                                    className={`h-2 w-full rounded-[1px] ${colorClass}`}
-                                                                    title={`${shiftLabel}班 ${timeDisplay}`}
-                                                                />
+                                                                    key={shift.id}
+                                                                    className={`flex-1 w-full flex items-center justify-center transition-all min-h-[14px] text-[10px] leading-none ${
+                                                                        isSelected
+                                                                            ? 'bg-blue-500 text-white shadow-inner font-bold'
+                                                                            : 'bg-transparent text-slate-400'
+                                                                    }`}
+                                                                >
+                                                                    {isSelected ? shift.code : ''}
+                                                                </div>
                                                             );
                                                         })
                                                     )}
@@ -952,7 +997,7 @@ export default function RosterView({ rosterData, staffUser }: RosterViewProps) {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
-                                    {days.map((d: any) => {
+                                    {doctorDays.map((d: any) => {
                                         const dateStr = d.dateStr;
                                         const dateObj = d.dateObj;
                                         const weekDay = d.dayOfWeek;
@@ -967,7 +1012,7 @@ export default function RosterView({ rosterData, staffUser }: RosterViewProps) {
                                                 className={`${isTodayDate ? 'bg-yellow-50/50' : ''} ${isHoliday ? 'bg-red-50/30' : ''}`}
                                             >
                                                 {/* 日期欄 */}
-                                                <td className="p-2 border-r text-xs sticky left-0 z-5 bg-white">
+                                                <td id={isTodayDate ? `day-col-${todayStr}` : undefined} className="p-2 border-r text-xs sticky left-0 z-5 bg-white">
                                                     <div className="font-bold text-slate-700">{dateObj.getDate()}</div>
                                                     <div className={`text-[10px] ${weekDay === 0 ? 'text-red-500' : weekDay === 6 ? 'text-green-600' : 'text-slate-400'}`}>
                                                         {weekDays[weekDay]}

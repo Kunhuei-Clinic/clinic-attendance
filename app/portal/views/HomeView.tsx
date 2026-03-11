@@ -10,6 +10,7 @@ interface HomeViewProps {
   gpsStatus: string;
   announcements: any[];
   managerStats?: any;
+  isPunching?: boolean;
   onClockIn: () => void;
   onClockOut: () => void;
   bypassMode: boolean;
@@ -46,6 +47,7 @@ export default function HomeView(props: HomeViewProps) {
     gpsStatus,
     announcements,
     managerStats,
+    isPunching = false,
     onClockIn,
     onClockOut,
     bypassMode,
@@ -86,11 +88,11 @@ export default function HomeView(props: HomeViewProps) {
             )}
           </p>
 
-          {/* 單一巨大打卡按鈕：依 isWorking 顯示上班或下班 */}
+          {/* 單一巨大打卡按鈕：依 isWorking 顯示上班或下班，防連點 */}
           <button
             type="button"
             onClick={isWorking ? onClockOut : onClockIn}
-            disabled={gpsStatus === 'locating'}
+            disabled={gpsStatus === 'locating' || isPunching}
             className={`w-full h-14 rounded-xl font-bold text-white flex items-center justify-center gap-2 shadow-md active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none transition ${
               isWorking
                 ? 'bg-amber-500 hover:bg-amber-600 border border-amber-600/20'
@@ -98,7 +100,7 @@ export default function HomeView(props: HomeViewProps) {
             }`}
           >
             <Clock size={24} />
-            <span>{isWorking ? '下班打卡' : '上班打卡'}</span>
+            <span>{isPunching ? '處理中...' : isWorking ? '下班打卡' : '上班打卡'}</span>
           </button>
 
           {/* GPS 狀態文字（按鈕下方小字） */}
