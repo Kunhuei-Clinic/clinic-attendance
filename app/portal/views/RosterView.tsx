@@ -255,7 +255,8 @@ export default function RosterView({ rosterData, staffUser }: RosterViewProps) {
 
     const fetchGlobalSettings = async () => {
         try {
-            const response = await fetch('/api/settings?key=clinic_business_hours', {
+            const clinicId = staffUser?.clinic_id ?? '';
+            const response = await fetch('/api/settings?key=clinic_business_hours&clinicId=' + encodeURIComponent(clinicId), {
                 credentials: 'include', // 🔑 關鍵：帶上 Cookie
             });
             
@@ -341,7 +342,8 @@ export default function RosterView({ rosterData, staffUser }: RosterViewProps) {
 
     const fetchRosterSettings = async () => {
         try {
-            const response = await fetch('/api/settings', {
+            const clinicId = staffUser?.clinic_id ?? '';
+            const response = await fetch('/api/settings?clinicId=' + encodeURIComponent(clinicId), {
                 credentials: 'include', // 🔑 關鍵：帶上 Cookie
             });
             
@@ -446,7 +448,8 @@ export default function RosterView({ rosterData, staffUser }: RosterViewProps) {
 
     const fetchStaff = async () => {
         try {
-            const response = await fetch('/api/staff', {
+            const clinicId = staffUser?.clinic_id ?? '';
+            const response = await fetch('/api/staff?clinicId=' + encodeURIComponent(clinicId), {
                 credentials: 'include', // 🔑 關鍵：帶上 Cookie
             });
             
@@ -493,7 +496,8 @@ export default function RosterView({ rosterData, staffUser }: RosterViewProps) {
         try {
             const year = currentDate.getFullYear();
             const month = currentDate.getMonth() + 1;
-            const response = await fetch(`/api/roster/holidays?year=${year}&month=${month}`, {
+            const clinicId = staffUser?.clinic_id ?? '';
+            const response = await fetch(`/api/roster/holidays?year=${year}&month=${month}&clinicId=${encodeURIComponent(clinicId)}`, {
                 credentials: 'include', // 🔑 關鍵：帶上 Cookie
             });
             
@@ -610,7 +614,8 @@ export default function RosterView({ rosterData, staffUser }: RosterViewProps) {
         try {
             const year = currentDate.getFullYear();
             const month = currentDate.getMonth() + 1;
-            const response = await fetch(`/api/roster/closed-days?year=${year}&month=${month}`, {
+            const clinicId = staffUser?.clinic_id ?? '';
+            const response = await fetch(`/api/roster/closed-days?year=${year}&month=${month}&clinicId=${encodeURIComponent(clinicId)}`, {
                 credentials: 'include',
             });
             

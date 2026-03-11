@@ -29,46 +29,53 @@ export async function getClinicIdFromRequest(request: NextRequest): Promise<stri
     );
 
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return null; // 如果抓不到人，絕對是回傳 null
 
-    const userId = user.id;
-    // 優先讀取請求頭，其次讀取 Cookie
-    const targetClinicId = request.headers.get('x-clinic-id') || cookieStore.get('active_clinic_id')?.value;
+    if (user) {
+      const userId = user.id;
+      const targetClinicId = request.headers.get('x-clinic-id') || cookieStore.get('active_clinic_id')?.value;
 
-    // 1. 檢查是否為平台總管 (Super Admin)
-    const { data: superAdmin } = await supabaseAdmin
-      .from('super_admins')
-      .select('user_id')
-      .eq('user_id', userId)
-      .single();
+      // 1. 檢查是否為平台總管 (Super Admin)
+      const { data: superAdmin } = await supabaseAdmin
+        .from('super_admins')
+        .select('user_id')
+        .eq('user_id', userId)
+        .single();
 
-    if (superAdmin) {
-      return targetClinicId || null; 
-    }
+      if (superAdmin) {
+        return targetClinicId || null;
+      }
 
-    // 2. 一般連鎖老闆/員工的嚴格驗證
-    if (targetClinicId) {
-      const { data: memberRecord } = await supabaseAdmin
+      // 2. 一般連鎖老闆/員工的嚴格驗證
+      if (targetClinicId) {
+        const { data: memberRecord } = await supabaseAdmin
+          .from('clinic_members')
+          .select('clinic_id')
+          .eq('user_id', userId)
+          .eq('clinic_id', targetClinicId)
+          .single();
+
+        if (memberRecord) {
+          return memberRecord.clinic_id;
+        }
+      }
+
+      // 3. 預設降級：抓取他名下的第一家合法診所
+      const { data: firstValidClinic } = await supabaseAdmin
         .from('clinic_members')
         .select('clinic_id')
         .eq('user_id', userId)
-        .eq('clinic_id', targetClinicId)
+        .limit(1)
         .single();
 
-      if (memberRecord) {
-        return memberRecord.clinic_id; 
-      }
+      if (firstValidClinic?.clinic_id) return firstValidClinic.clinic_id;
     }
 
-    // 3. 預設降級：抓取他名下的第一家合法診所
-    const { data: firstValidClinic } = await supabaseAdmin
-      .from('clinic_members')
-      .select('clinic_id')
-      .eq('user_id', userId)
-      .limit(1)
-      .single();
+    // 🟢 若 Session 找不到（例如 Portal 用戶），允許從 URL 參數獲取
+    const searchParams = request.nextUrl.searchParams;
+    const paramClinicId = searchParams.get('clinicId') || searchParams.get('clinic_id');
+    if (paramClinicId) return paramClinicId;
 
-    return firstValidClinic?.clinic_id || null;
+    return null;
   } catch (error) {
     console.error('getClinicIdFromRequest Security Error:', error);
     return null;

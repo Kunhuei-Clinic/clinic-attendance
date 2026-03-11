@@ -140,6 +140,7 @@ export async function GET(request: NextRequest) {
 
         if (isAdmin) {
           const todayStr = new Date().toISOString().slice(0, 10);
+          const currentClinicId = staff.clinic_id;
 
           const [
             { count: totalStaff },
@@ -148,12 +149,12 @@ export async function GET(request: NextRequest) {
             supabaseAdmin
               .from('staff')
               .select('*', { count: 'exact', head: true })
-              .eq('clinic_id', clinicId)
+              .eq('clinic_id', currentClinicId)
               .eq('is_active', true),
             supabaseAdmin
               .from('attendance_logs')
               .select('staff_id')
-              .eq('clinic_id', clinicId)
+              .eq('clinic_id', currentClinicId)
               .gte('clock_in_time', `${todayStr}T00:00:00`)
               .lte('clock_in_time', `${todayStr}T23:59:59`),
           ]);
@@ -164,13 +165,13 @@ export async function GET(request: NextRequest) {
           const { count: pendingLeaves } = await supabaseAdmin
             .from('leave_requests')
             .select('*', { count: 'exact', head: true })
-            .eq('clinic_id', clinicId)
+            .eq('clinic_id', currentClinicId)
             .eq('status', 'pending');
 
           const { count: anomalyCount } = await supabaseAdmin
             .from('attendance_logs')
             .select('*', { count: 'exact', head: true })
-            .eq('clinic_id', clinicId)
+            .eq('clinic_id', currentClinicId)
             .not('anomaly_reason', 'is', null);
 
           managerStats = {
@@ -188,6 +189,7 @@ export async function GET(request: NextRequest) {
             name: staffProfile.name || '',
             role: staffProfile.role || '',
             admin_role: staffProfile.admin_role ?? null,
+            clinic_id: staffProfile.clinic_id ?? null,
             start_date: staffProfile.start_date || null,
             phone: staffProfile.phone || null,
             address: staffProfile.address || null,
