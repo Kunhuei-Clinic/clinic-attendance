@@ -215,6 +215,10 @@ export async function POST(request: NextRequest) {
       payload.id_number = id_number;
     }
 
+    if (body.admin_role !== undefined) {
+      payload.admin_role = body.admin_role;
+    }
+
     const { error } = await supabaseAdmin
       .from('staff')
       .insert([payload]);
@@ -419,6 +423,10 @@ export async function PATCH(request: NextRequest) {
 
     if (updateData.phone !== undefined) {
       payload.phone = String(updateData.phone).trim();
+    }
+
+    if (body.admin_role !== undefined) {
+      payload.admin_role = body.admin_role;
     }
 
     if (didCreateAuth && finalAuthUserId) {

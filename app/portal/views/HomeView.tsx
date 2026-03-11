@@ -1,157 +1,221 @@
-import React from 'react';
-import { Clock, MapPin, Bell, AlertTriangle, Info } from 'lucide-react';
-import PortalTopHeader from './PortalTopHeader';
+'use client';
 
-type GpsStatus = 'idle' | 'locating' | 'ok' | 'out_of_range' | 'error';
+import React from 'react';
+import { Clock, Users, FileText, AlertCircle, MapPin, QrCode } from 'lucide-react';
 
 interface HomeViewProps {
   staffUser: any;
   isWorking: boolean;
   logs: any[];
-  gpsStatus: GpsStatus;
-  announcements: {
-    title: string;
-    content: string;
-    created_at: string | null;
-  }[];
+  gpsStatus: string;
+  announcements: any[];
   onClockIn: () => void;
   onClockOut: () => void;
   bypassMode: boolean;
-  setBypassMode: (value: boolean) => void;
+  setBypassMode: (val: boolean) => void;
 }
 
-const formatTime = (iso: string | null | undefined) =>
-  iso
-    ? new Date(iso).toLocaleTimeString('zh-TW', {
-        hour: '2-digit',
-        minute: '2-digit',
-      })
-    : '--:--';
+function getGreeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return '早安';
+  if (hour < 18) return '午安';
+  return '晚安';
+}
 
-export default function HomeView({
-  staffUser,
-  isWorking,
-  logs,
-  gpsStatus,
-  announcements,
-  onClockIn,
-  onClockOut,
-  bypassMode,
-  setBypassMode,
-}: HomeViewProps) {
+function getGpsStatusText(status: string) {
+  switch (status) {
+    case 'locating':
+      return 'GPS 定位中...';
+    case 'ok':
+      return '定位良好';
+    case 'out_of_range':
+      return '⚠️ 距離診所太遠';
+    case 'error':
+      return '定位失敗';
+    default:
+      return 'GPS 待命';
+  }
+}
+
+export default function HomeView(props: HomeViewProps) {
+  const {
+    staffUser,
+    isWorking,
+    logs,
+    gpsStatus,
+    announcements,
+    onClockIn,
+    onClockOut,
+    bypassMode,
+    setBypassMode,
+  } = props;
+
   const latestLog = logs?.[0];
-
-  // 🟢 除錯：確認資料有沒有進來
-  console.log('HomeView 接收到的公告資料:', announcements);
-
+  // 雙重身分驗證：讀取新的 admin_role 欄位
+  const isManager =
+    staffUser?.admin_role === 'owner' || staffUser?.admin_role === 'manager';
   const isVip = staffUser?.role === '醫師' || staffUser?.role === '主管';
 
-  const renderGpsLabel = () => {
-    if (gpsStatus === 'locating') return <span className="text-slate-400">定位中...</span>;
-    if (gpsStatus === 'ok') return <span className="text-green-600 flex items-center gap-1"><MapPin size={12}/> 定位良好</span>;
-    if (gpsStatus === 'out_of_range') return <span className="text-red-500 flex items-center gap-1"><AlertTriangle size={12}/> 超出範圍</span>;
-    if (gpsStatus === 'error') return <span className="text-red-500">定位失敗</span>;
-    return <span className="text-slate-300">GPS 待命</span>;
-  };
+  const greeting = getGreeting();
+  const gpsStatusText = getGpsStatusText(gpsStatus);
+  const displayAnnouncements = Array.isArray(announcements)
+    ? announcements.slice(0, 3)
+    : [];
 
   return (
-    <div className="animate-fade-in space-y-4 px-4 pt-4 pb-20">
-      <PortalTopHeader 
-         name={staffUser?.name} 
-         role={staffUser?.role} 
-         isVip={isVip}
-      >
-         {/* 把 GPS 狀態放在 Header 裡面顯示 */}
-         <div className="mt-2 flex justify-end">
-            <div className="bg-white/20 backdrop-blur-md px-3 py-1 rounded-full text-xs font-bold shadow-sm">
-               {renderGpsLabel()}
-            </div>
-         </div>
-      </PortalTopHeader>
+    <div className="min-h-screen bg-slate-50 p-4 space-y-4 pb-24 max-w-md mx-auto">
+      {/* 區塊一：個人狀態與打卡卡片 */}
+      <section className="rounded-2xl border border-slate-100 bg-white shadow-md overflow-hidden">
+        <div className="p-5">
+          <h1 className="text-xl font-bold text-slate-800 mb-1">
+            {greeting}，{staffUser?.name ?? '—'}
+          </h1>
+          <p className="text-slate-600 text-sm mb-4">
+            {isWorking ? (
+              <span className="inline-flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                工作中
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-slate-300" />
+                尚未打卡
+              </span>
+            )}
+          </p>
 
-      {/* 🟢 公告區塊 (關鍵修正) */}
-      {announcements && announcements.length > 0 ? (
-        <div className="bg-orange-50 border border-orange-200 rounded-2xl p-4 shadow-sm relative overflow-hidden">
-          <div className="absolute top-0 right-0 p-2 opacity-10">
-              <Bell size={64} className="text-orange-500" />
-          </div>
-          <div className="flex items-center gap-2 mb-3 relative z-10">
-             <div className="bg-orange-100 p-1.5 rounded-full">
-                <Bell size={16} className="text-orange-600 fill-orange-600 animate-pulse" />
-             </div>
-             <h3 className="text-sm font-black text-orange-800">最新公告</h3>
-          </div>
-          <div className="space-y-2 relative z-10">
-            {announcements.map((news, idx) => (
-              <div key={idx} className="bg-white p-3 rounded-xl border border-orange-100 shadow-sm">
-                <div className="flex justify-between items-start mb-1">
-                    <span className="font-bold text-slate-800 text-sm">{news.title}</span>
-                    {news.created_at && (
-                        <span className="text-[10px] text-slate-400">
-                            {new Date(news.created_at).toLocaleDateString()}
-                        </span>
-                    )}
-                </div>
-                <p className="text-xs text-slate-600 leading-relaxed">{news.content}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : (
-        // 若無公告，顯示佔位符 (可選)
-         <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 text-center text-xs text-slate-400">
-            <Info size={16} className="mx-auto mb-1 opacity-50"/>
-            目前沒有新公告
-         </div>
-      )}
-
-      {/* 打卡按鈕區塊 */}
-      <div className="flex flex-col items-center justify-center py-4">
+          {/* 單一巨大打卡按鈕：依 isWorking 顯示上班或下班 */}
           <button
+            type="button"
             onClick={isWorking ? onClockOut : onClockIn}
             disabled={gpsStatus === 'locating'}
-            className={`w-48 h-48 rounded-full shadow-2xl flex flex-col items-center justify-center text-white transition-all active:scale-95 relative overflow-hidden ${
+            className={`w-full h-14 rounded-xl font-bold text-white flex items-center justify-center gap-2 shadow-md active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none transition ${
               isWorking
-                ? 'bg-gradient-to-b from-orange-400 to-orange-600 shadow-orange-200 ring-4 ring-orange-100'
-                : 'bg-gradient-to-b from-teal-400 to-teal-600 shadow-teal-200 ring-4 ring-teal-100'
+                ? 'bg-amber-500 hover:bg-amber-600 border border-amber-600/20'
+                : 'bg-teal-500 hover:bg-teal-600 border border-teal-600/20'
             }`}
           >
-            {/* 動畫波紋效果 */}
-            <div className="absolute inset-0 bg-white/10 rounded-full animate-ping opacity-20"></div>
-            
-            <Clock size={56} className="mb-2 opacity-90 relative z-10" />
-            <span className="text-3xl font-black tracking-widest relative z-10">
-              {isWorking ? '下班' : '上班'}
-            </span>
-            <span className="text-sm opacity-80 mt-2 font-mono relative z-10">
-              {isWorking && latestLog?.clock_in_time
-                ? `已工作: ${((Date.now() - new Date(latestLog.clock_in_time).getTime()) / 3600000).toFixed(1)} hr`
-                : new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })}
-            </span>
+            <Clock size={24} />
+            <span>{isWorking ? '下班打卡' : '上班打卡'}</span>
           </button>
-      </div>
 
-      {/* 救援模式開關 */}
-      {!isVip && (
-        <div className="text-center pb-4">
-          {!bypassMode ? (
-            <button
-              onClick={() => {
-                if (window.confirm('啟用救援模式？將標記為異常打卡')) {
-                  setBypassMode(true);
-                }
-              }}
-              className="text-xs text-slate-400 underline hover:text-slate-600 transition"
-            >
-              GPS 定位不到？開啟救援模式
-            </button>
-          ) : (
-            <div className="inline-flex items-center gap-1 bg-red-50 text-red-600 px-3 py-1.5 rounded-full text-xs font-bold border border-red-100 animate-pulse">
-              <AlertTriangle size={12} /> 救援模式已啟用 (異常標記)
+          {/* GPS 狀態文字（按鈕下方小字） */}
+          <p className="text-xs text-slate-500 mt-3 text-center">
+            {gpsStatusText}
+          </p>
+
+          {isWorking && latestLog?.clock_in_time && (
+            <p className="text-center text-xs text-slate-400 mt-1">
+              已工作{' '}
+              {(
+                (Date.now() - new Date(latestLog.clock_in_time).getTime()) /
+                3600000
+              ).toFixed(1)}{' '}
+              小時
+            </p>
+          )}
+
+          {/* 救援模式（非 VIP） */}
+          {!isVip && (
+            <div className="mt-4 pt-4 border-t border-slate-100 text-center">
+              {!bypassMode ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (
+                      window.confirm('啟用救援模式？將標記為異常打卡')
+                    ) {
+                      setBypassMode(true);
+                    }
+                  }}
+                  className="text-xs text-slate-500 underline hover:text-slate-700"
+                >
+                  GPS 定位不到？開啟救援模式
+                </button>
+              ) : (
+                <div className="inline-flex items-center gap-1.5 bg-red-50 text-red-600 px-3 py-2 rounded-xl text-xs font-medium border border-red-100">
+                  <AlertCircle size={12} /> 救援模式已啟用（異常標記）
+                </div>
+              )}
             </div>
           )}
         </div>
+      </section>
+
+      {/* 區塊二：👑 主管專屬儀表板（僅 isManager 時顯示） */}
+      {isManager && (
+        <section className="rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50/80 to-slate-50 shadow-md overflow-hidden">
+          <div className="p-5">
+            <h2 className="text-lg font-bold text-slate-800 mb-4">
+              👑 診所管理中樞
+            </h2>
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              <div className="rounded-xl border border-slate-200/80 bg-white/90 p-3 text-center shadow-sm">
+                <p className="text-xs text-slate-500 mb-1 flex items-center justify-center gap-1">
+                  <Users size={14} /> 今日出勤
+                </p>
+                <p className="text-lg font-bold text-slate-800">3 / 8 人</p>
+              </div>
+              <div className="rounded-xl border border-slate-200/80 bg-white/90 p-3 text-center shadow-sm">
+                <p className="text-xs text-slate-500 mb-1 flex items-center justify-center gap-1">
+                  <FileText size={14} /> 待核假單
+                </p>
+                <p className="text-lg font-bold text-red-600">2 筆</p>
+              </div>
+              <div className="col-span-2 rounded-xl border border-slate-200/80 bg-white/90 p-3 text-center shadow-sm">
+                <p className="text-xs text-slate-500 mb-1 flex items-center justify-center gap-1">
+                  <AlertCircle size={14} /> 異常打卡
+                </p>
+                <p className="text-lg font-bold text-slate-800">1 筆</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="w-full h-12 py-3 rounded-xl font-bold text-slate-600 bg-slate-200 border border-slate-300 hover:bg-slate-300 transition flex items-center justify-center gap-2"
+            >
+              <QrCode size={20} />
+              <span>📱 產生打卡 QR Code（即將推出）</span>
+            </button>
+          </div>
+        </section>
       )}
+
+      {/* 區塊三：公告區塊 */}
+      <section className="rounded-2xl border border-slate-100 bg-white shadow-md overflow-hidden">
+        <div className="p-5">
+          <h2 className="text-lg font-bold text-slate-800 mb-4">
+            📢 最新公告
+          </h2>
+          {displayAnnouncements.length > 0 ? (
+            <ul className="space-y-3">
+              {displayAnnouncements.map((ann: any, idx: number) => (
+                <li
+                  key={ann?.id ?? idx}
+                  className="p-3 rounded-xl bg-slate-50 border border-slate-100"
+                >
+                  <div className="flex justify-between items-start gap-2 mb-0.5">
+                    <span className="font-semibold text-slate-800 text-sm truncate flex-1 min-w-0">
+                      {ann?.title ?? '無標題'}
+                    </span>
+                    {ann?.created_at && (
+                      <span className="text-[10px] text-slate-400 shrink-0">
+                        {new Date(ann.created_at).toLocaleDateString('zh-TW')}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-600 leading-relaxed truncate">
+                    {ann?.content ?? ''}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-slate-400 text-center py-6">
+              目前無最新公告
+            </p>
+          )}
+        </div>
+      </section>
     </div>
   );
 }

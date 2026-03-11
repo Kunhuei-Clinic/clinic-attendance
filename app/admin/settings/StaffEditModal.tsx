@@ -145,6 +145,7 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
               entity: initialData.entity || defaultEntity,
               password: '', // 🟢 編輯模式：密碼預設空白
               system_role: initialData.system_role || 'staff',
+              admin_role: initialData.admin_role ?? 'none',
               bank_code: bankInfo.bank_code || '',
               branch_code: bankInfo.branch_code || '',
               account_number: bankInfo.account_number || ''
@@ -182,7 +183,8 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
               branch_code: '',
               account_number: '',
               id_number: '',
-              system_role: 'staff'
+              system_role: 'staff',
+              admin_role: 'none'
             });
             setEnableLogin(false);
             setLoginEmail('');
@@ -210,6 +212,7 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
               ...initialData,
               password: '',
               system_role: initialData.system_role || 'staff',
+              admin_role: initialData.admin_role ?? 'none',
               bank_code: bankInfo.bank_code || '',
               branch_code: bankInfo.branch_code || '',
               account_number: bankInfo.account_number || ''
@@ -243,7 +246,8 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
               branch_code: '',
               account_number: '',
               id_number: '',
-              system_role: 'staff'
+              system_role: 'staff',
+              admin_role: 'none'
             });
             setEnableLogin(false);
             setLoginEmail('');
@@ -344,7 +348,8 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
       new_password: newPassword,
       login_email: loginEmail,
       login_password: loginPassword,
-      system_role: editData.system_role || 'staff'
+      system_role: editData.system_role || 'staff',
+      admin_role: editData.admin_role ?? 'none'
     };
 
     // 🟢 處理密碼欄位
@@ -437,6 +442,21 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
                       ))}
                     </select>
                   </div>
+                </div>
+                {/* LINE 系統管理權限（進階設定） */}
+                <div className="rounded-xl border border-blue-200 bg-blue-50/50 p-3">
+                  <label className="block text-xs font-bold text-slate-600 mb-1.5">
+                    LINE 系統管理權限 <span className="text-slate-400 font-normal">(admin_role)</span>
+                  </label>
+                  <select
+                    value={editData.admin_role ?? 'none'}
+                    onChange={e => setEditData({ ...editData, admin_role: e.target.value })}
+                    className="w-full border border-blue-200 bg-white p-2 rounded-lg text-sm text-slate-700"
+                  >
+                    <option value="none">無管理權限（預設）</option>
+                    <option value="manager">主管</option>
+                    <option value="owner">診所負責人</option>
+                  </select>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
