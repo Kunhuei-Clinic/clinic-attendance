@@ -85,10 +85,10 @@ export async function GET(request: NextRequest) {
       case 'home': {
         // 🟢 首頁資料：個人資料 + 公告 + 當日打卡紀錄
 
-        // 1. 查詢個人資料 (Profile)
+        // 1. 查詢個人資料 (Profile)，含 admin_role 供 RBAC 與主管儀表板使用
         const { data: staffProfile, error: profileError } = await supabaseAdmin
           .from('staff')
-          .select('id, name, role, clinic_id, start_date, annual_leave_history, annual_leave_quota, phone, address, emergency_contact, bank_account, id_number')
+          .select('id, name, role, clinic_id, start_date, annual_leave_history, annual_leave_quota, phone, address, emergency_contact, bank_account, id_number, admin_role')
           .eq('id', staffId)
           .eq('clinic_id', clinicId)
           .single();
@@ -134,11 +134,60 @@ export async function GET(request: NextRequest) {
           // 即使打卡紀錄查詢失敗，仍然回傳個人資料和公告
         }
 
-        // 4. 組合回傳資料
+        // 4. 主管專屬數據（僅 admin_role 為 owner 或 manager 時查詢）
+        let managerStats: { totalStaff: number; clockedInCount: number; pendingLeaves: number; anomalyCount: number } | null = null;
+        const isAdmin = staffProfile?.admin_role === 'owner' || staffProfile?.admin_role === 'manager';
+
+        if (isAdmin) {
+          const todayStr = new Date().toISOString().slice(0, 10);
+
+          const [
+            { count: totalStaff },
+            { data: todayAllLogs },
+          ] = await Promise.all([
+            supabaseAdmin
+              .from('staff')
+              .select('*', { count: 'exact', head: true })
+              .eq('clinic_id', clinicId)
+              .eq('is_active', true),
+            supabaseAdmin
+              .from('attendance_logs')
+              .select('staff_id')
+              .eq('clinic_id', clinicId)
+              .gte('clock_in_time', `${todayStr}T00:00:00`)
+              .lte('clock_in_time', `${todayStr}T23:59:59`),
+          ]);
+
+          const clockedInStaffIds = new Set((todayAllLogs || []).map((log: any) => log.staff_id));
+          const clockedInCount = clockedInStaffIds.size;
+
+          const { count: pendingLeaves } = await supabaseAdmin
+            .from('leave_requests')
+            .select('*', { count: 'exact', head: true })
+            .eq('clinic_id', clinicId)
+            .eq('status', 'pending');
+
+          const { count: anomalyCount } = await supabaseAdmin
+            .from('attendance_logs')
+            .select('*', { count: 'exact', head: true })
+            .eq('clinic_id', clinicId)
+            .not('anomaly_reason', 'is', null);
+
+          managerStats = {
+            totalStaff: totalStaff ?? 0,
+            clockedInCount,
+            pendingLeaves: pendingLeaves ?? 0,
+            anomalyCount: anomalyCount ?? 0,
+          };
+        }
+
+        // 5. 組合回傳資料（含 profile、announcements、todayLogs、managerStats）
         queryResult = {
           profile: {
+            id: staffProfile.id,
             name: staffProfile.name || '',
             role: staffProfile.role || '',
+            admin_role: staffProfile.admin_role ?? null,
             start_date: staffProfile.start_date || null,
             phone: staffProfile.phone || null,
             address: staffProfile.address || null,
@@ -154,6 +203,7 @@ export async function GET(request: NextRequest) {
             created_at: ann.created_at,
           })),
           todayLogs: todayLogs || [],
+          managerStats,
         };
         break;
       }

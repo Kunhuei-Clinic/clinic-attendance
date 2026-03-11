@@ -86,6 +86,7 @@ export default function EmployeePortal() {
   const [showAnnualHistory, setShowAnnualHistory] = useState(false);
 
   const [announcements, setAnnouncements] = useState<any[]>([]);
+  const [managerStats, setManagerStats] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
 
   const [overtimeSettings, setOvertimeSettings] = useState<{
@@ -475,7 +476,12 @@ export default function EmployeePortal() {
       if (profileData) {
         console.log('[Portal] ✅ 設定 Profile:', profileData);
         setProfile(profileData);
+        setStaffUser((prev) => (prev ? { ...prev, admin_role: profileData.admin_role } : prev));
       }
+
+      const statsData = json.data?.managerStats ?? json.managerStats ?? null;
+      if (statsData) setManagerStats(statsData);
+      else setManagerStats(null);
 
       const announcementData = json.data?.announcements || json.announcements || [];
       if (Array.isArray(announcementData)) {
@@ -1152,6 +1158,7 @@ export default function EmployeePortal() {
           logs={logs}
           gpsStatus={gpsStatus}
           announcements={announcements}
+          managerStats={managerStats}
           onClockIn={() => executeClock('in')}
           onClockOut={() => executeClock('out')}
           bypassMode={bypassMode}

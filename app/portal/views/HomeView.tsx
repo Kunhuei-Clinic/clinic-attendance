@@ -9,6 +9,7 @@ interface HomeViewProps {
   logs: any[];
   gpsStatus: string;
   announcements: any[];
+  managerStats?: any;
   onClockIn: () => void;
   onClockOut: () => void;
   bypassMode: boolean;
@@ -44,6 +45,7 @@ export default function HomeView(props: HomeViewProps) {
     logs,
     gpsStatus,
     announcements,
+    managerStats,
     onClockIn,
     onClockOut,
     bypassMode,
@@ -154,19 +156,37 @@ export default function HomeView(props: HomeViewProps) {
                 <p className="text-xs text-slate-500 mb-1 flex items-center justify-center gap-1">
                   <Users size={14} /> 今日出勤
                 </p>
-                <p className="text-lg font-bold text-slate-800">3 / 8 人</p>
+                <p className="text-lg font-bold text-slate-800">
+                  {managerStats?.clockedInCount ?? 0} / {managerStats?.totalStaff ?? 0} 人
+                </p>
               </div>
-              <div className="rounded-xl border border-slate-200/80 bg-white/90 p-3 text-center shadow-sm">
+              <div className={`rounded-xl border p-3 text-center shadow-sm ${
+                (managerStats?.pendingLeaves ?? 0) > 0
+                  ? 'border-red-200 bg-red-50/90 animate-pulse'
+                  : 'border-slate-200/80 bg-white/90'
+              }`}>
                 <p className="text-xs text-slate-500 mb-1 flex items-center justify-center gap-1">
                   <FileText size={14} /> 待核假單
                 </p>
-                <p className="text-lg font-bold text-red-600">2 筆</p>
+                <p className="text-lg font-bold text-red-600">
+                  {(managerStats?.pendingLeaves ?? 0) > 0 ? (
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">
+                        {managerStats.pendingLeaves} 筆
+                      </span>
+                    </span>
+                  ) : (
+                    <span>{managerStats?.pendingLeaves ?? 0} 筆</span>
+                  )}
+                </p>
               </div>
               <div className="col-span-2 rounded-xl border border-slate-200/80 bg-white/90 p-3 text-center shadow-sm">
                 <p className="text-xs text-slate-500 mb-1 flex items-center justify-center gap-1">
                   <AlertCircle size={14} /> 異常打卡
                 </p>
-                <p className="text-lg font-bold text-slate-800">1 筆</p>
+                <p className="text-lg font-bold text-slate-800">
+                  {managerStats?.anomalyCount ?? 0} 筆
+                </p>
               </div>
             </div>
             <button
