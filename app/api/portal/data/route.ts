@@ -38,25 +38,49 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // 🔒 步驟 2: 驗證員工是否存在且屬於該診所（一次查詢含首頁所需欄位，減少 500 風險）
-    const { data: staff, error: staffError } = await supabaseAdmin
+    // 🔒 步驟 2: 驗證員工（刪去法：先只比對員工 ID，再比對診所，錯誤訊息具體化）
+    const { data: staffCheck, error: staffError } = await supabaseAdmin
       .from('staff')
-      .select('id, name, role, clinic_id, is_active, start_date, annual_leave_history, annual_leave_quota, phone, address, emergency_contact, bank_account, id_number, admin_role')
+      .select('id, clinic_id, is_active')
       .eq('id', staffId)
-      .eq('clinic_id', clinicId)
       .single();
 
-    if (staffError || !staff) {
+    if (staffError || !staffCheck) {
       return NextResponse.json(
-        { success: false, error: '員工 ID 不匹配或該診所無此員工，請確認登入身分', code: 'staff_id_mismatch' },
+        { success: false, error: `找不到員工 ID: ${staffId}` },
         { status: 403 }
       );
     }
 
-    if (!staff.is_active) {
+    if (staffCheck.clinic_id !== clinicId) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `診所不匹配。資料庫是: ${staffCheck.clinic_id}，但請求帶的是: ${clinicId}`,
+          code: 'staff_id_mismatch'
+        },
+        { status: 403 }
+      );
+    }
+
+    if (!staffCheck.is_active) {
       return NextResponse.json(
         { success: false, error: '該員工帳號已停用' },
         { status: 403 }
+      );
+    }
+
+    // 通過驗證後再查完整員工資料供後續 type 使用
+    const { data: staff, error: staffFullError } = await supabaseAdmin
+      .from('staff')
+      .select('id, name, role, clinic_id, is_active, start_date, annual_leave_history, annual_leave_quota, phone, address, emergency_contact, bank_account, id_number, admin_role')
+      .eq('id', staffId)
+      .single();
+
+    if (staffFullError || !staff) {
+      return NextResponse.json(
+        { success: false, error: `取得員工資料失敗: ${staffId}` },
+        { status: 500 }
       );
     }
 
