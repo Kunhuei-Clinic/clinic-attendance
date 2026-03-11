@@ -206,6 +206,8 @@ export default function RosterView({ rosterData, staffUser }: RosterViewProps) {
         staffList.forEach((s: any) => {
             // 只顯示在職員工 (portal 視圖只顯示在職)
             if (s.is_active !== true) return;
+            // 過濾掉不參與排班的員工
+            if (s.work_rule === 'none') return;
 
             const role = s.role || '';
 
@@ -985,12 +987,12 @@ export default function RosterView({ rosterData, staffUser }: RosterViewProps) {
                             👨‍⚕️ 醫師門診表
                         </h3>
                         <div className="overflow-x-auto">
-                            <table className="w-full min-w-[350px] border-collapse text-sm bg-white">
+                            <table className="w-full min-w-[350px] table-fixed border-collapse text-sm bg-white">
                                 <thead className="bg-slate-100 text-slate-600 border-b sticky top-0 z-10">
                                     <tr>
-                                        <th className="p-2 text-left w-16 border-r sticky left-0 z-20 bg-slate-100">日期</th>
+                                        <th className="p-1 text-center w-[45px] border-r sticky left-0 z-20 bg-slate-100 text-xs">日期</th>
                                         {SHIFTS.map(s => (
-                                            <th key={s.key} className={`p-2 text-center min-w-[100px] border-r ${s.color} bg-opacity-30 font-bold`}>
+                                            <th key={s.key} className={`p-1 text-center border-r ${s.color} bg-opacity-30 font-bold text-xs md:text-sm`} style={{ width: 'calc((100% - 45px) / 3)' }}>
                                                 {s.label}
                                             </th>
                                         ))}
@@ -1012,7 +1014,7 @@ export default function RosterView({ rosterData, staffUser }: RosterViewProps) {
                                                 className={`${isTodayDate ? 'bg-yellow-50/50' : ''} ${isHoliday ? 'bg-red-50/30' : ''}`}
                                             >
                                                 {/* 日期欄 */}
-                                                <td id={isTodayDate ? `day-col-${todayStr}` : undefined} className="p-2 border-r text-xs sticky left-0 z-5 bg-white">
+                                                <td id={isTodayDate ? `day-col-${todayStr}` : undefined} className="p-1 border-r text-center text-xs sticky left-0 z-5 bg-white">
                                                     <div className="font-bold text-slate-700">{dateObj.getDate()}</div>
                                                     <div className={`text-[10px] ${weekDay === 0 ? 'text-red-500' : weekDay === 6 ? 'text-green-600' : 'text-slate-400'}`}>
                                                         {weekDays[weekDay]}
@@ -1041,33 +1043,36 @@ export default function RosterView({ rosterData, staffUser }: RosterViewProps) {
                                                                     {docs.map((doc: any, idx: number) => (
                                                                         <div 
                                                                             key={idx} 
-                                                                            className="bg-white border border-slate-200 rounded px-1.5 py-1 shadow-sm w-full"
+                                                                            className="bg-white border border-slate-200 rounded px-1 py-1 shadow-sm w-full flex flex-col items-center justify-center"
                                                                         >
-                                                                            <div className="font-bold text-slate-800 text-xs">
+                                                                            <div className="font-bold text-slate-800 text-xs text-center">
                                                                                 {doc.doctor_name}
                                                                             </div>
-                                                                            {/* 專科標籤 */}
-                                                                            {doc.special_tags && Array.isArray(doc.special_tags) && doc.special_tags.length > 0 && (
+
+                                                                            {/* 僅顯示專診 */}
+                                                                            {doc.is_dedicated && doc.special_tags && Array.isArray(doc.special_tags) && doc.special_tags.length > 0 && (
                                                                                 <div className="flex flex-wrap gap-0.5 justify-center mt-0.5">
                                                                                     {doc.special_tags.map((t: string, tagIdx: number) => (
                                                                                         <span 
                                                                                             key={tagIdx} 
-                                                                                            className="text-[9px] bg-slate-100 text-slate-600 px-1 rounded"
+                                                                                            className="text-[9px] bg-pink-100 text-pink-700 px-1 rounded font-bold"
                                                                                         >
-                                                                                            {t}
+                                                                                            {t}專診
                                                                                         </span>
                                                                                     ))}
                                                                                 </div>
                                                                             )}
-                                                                            {/* 異動標記 */}
+
+                                                                            {/* 僅顯示代診 (醒目紅底白字) */}
                                                                             {doc.is_substitution && (
-                                                                                <div className="text-[9px] text-red-500 font-bold mt-0.5">
+                                                                                <div className="text-[9px] text-white bg-red-500 rounded px-1.5 py-[1px] font-bold mt-0.5">
                                                                                     代診
                                                                                 </div>
                                                                             )}
+
                                                                             {/* 時間顯示 */}
                                                                             {doc.start_time && doc.end_time && (
-                                                                                <div className="text-[9px] text-slate-400 mt-0.5 font-mono">
+                                                                                <div className="text-[9px] text-slate-400 mt-0.5 font-mono text-center">
                                                                                     {doc.start_time}-{doc.end_time}
                                                                                 </div>
                                                                             )}

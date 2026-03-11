@@ -37,10 +37,10 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // 🔒 步驟 2: 驗證員工是否存在且屬於該診所
+    // 🔒 步驟 2: 驗證員工是否存在且屬於該診所（一次查詢含首頁所需欄位，減少 500 風險）
     const { data: staff, error: staffError } = await supabaseAdmin
       .from('staff')
-      .select('id, name, role, clinic_id, is_active')
+      .select('id, name, role, clinic_id, is_active, start_date, annual_leave_history, annual_leave_quota, phone, address, emergency_contact, bank_account, id_number, admin_role')
       .eq('id', staffId)
       .eq('clinic_id', clinicId)
       .single();
@@ -83,24 +83,9 @@ export async function GET(request: NextRequest) {
 
     switch (type) {
       case 'home': {
-        // 🟢 首頁資料：個人資料 + 公告 + 當日打卡紀錄
+        // 🟢 首頁資料：個人資料 + 公告 + 當日打卡紀錄（員工資料已於步驟 2 一次取得，不再重複查詢）
 
-        // 1. 查詢個人資料 (Profile)，含 admin_role 供 RBAC 與主管儀表板使用
-        const { data: staffProfile, error: profileError } = await supabaseAdmin
-          .from('staff')
-          .select('id, name, role, clinic_id, start_date, annual_leave_history, annual_leave_quota, phone, address, emergency_contact, bank_account, id_number, admin_role')
-          .eq('id', staffId)
-          .eq('clinic_id', clinicId)
-          .single();
-
-        if (profileError || !staffProfile) {
-          return NextResponse.json(
-            { success: false, error: '無法讀取個人資料' },
-            { status: 500 }
-          );
-        }
-
-        // 2. 查詢公告 (Announcements) - 關鍵修正
+        // 1. 查詢公告 (Announcements)
         // 條件：clinic_id 相符、is_active 為 true、排序：created_at 倒序、限制：前 5 筆
         const { data: announcements, error: annError } = await supabaseAdmin
           .from('announcements')
@@ -136,7 +121,8 @@ export async function GET(request: NextRequest) {
 
         // 4. 主管專屬數據（僅 admin_role 為 owner 或 manager 時查詢，用 try/catch 防止連鎖崩潰）
         let managerStats: { totalStaff: number; clockedInCount: number; pendingLeaves: number; anomalyCount: number } | null = null;
-        const isAdmin = staffProfile?.admin_role === 'owner' || staffProfile?.admin_role === 'manager';
+        const adminRole = staff?.admin_role ?? 'none';
+        const isAdmin = adminRole === 'owner' || adminRole === 'manager';
 
         if (isAdmin) {
           try {
@@ -186,22 +172,22 @@ export async function GET(request: NextRequest) {
           }
         }
 
-        // 5. 組合回傳資料（含 profile、announcements、todayLogs、managerStats）
+        // 5. 組合回傳資料（profile 來自步驟 2 的 staff，admin_role 空值時預設 'none'）
         queryResult = {
           profile: {
-            id: staffProfile.id,
-            name: staffProfile.name || '',
-            role: staffProfile.role || '',
-            admin_role: staffProfile.admin_role ?? null,
-            clinic_id: staffProfile.clinic_id ?? null,
-            start_date: staffProfile.start_date || null,
-            phone: staffProfile.phone || null,
-            address: staffProfile.address || null,
-            emergency_contact: staffProfile.emergency_contact || null,
-            bank_account: staffProfile.bank_account || null,
-            id_number: staffProfile.id_number || null,
-            annual_leave_quota: staffProfile.annual_leave_quota || null,
-            annual_leave_history: staffProfile.annual_leave_history || null,
+            id: staff.id,
+            name: staff.name || '',
+            role: staff.role || '',
+            admin_role: (staff.admin_role ?? 'none') as string,
+            clinic_id: staff.clinic_id ?? null,
+            start_date: staff.start_date || null,
+            phone: staff.phone || null,
+            address: staff.address || null,
+            emergency_contact: staff.emergency_contact || null,
+            bank_account: staff.bank_account || null,
+            id_number: staff.id_number || null,
+            annual_leave_quota: staff.annual_leave_quota || null,
+            annual_leave_history: staff.annual_leave_history || null,
           },
           announcements: (announcements || []).map((ann: any) => ({
             title: ann.title,
