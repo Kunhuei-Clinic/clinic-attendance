@@ -9,7 +9,6 @@ interface ProfileUser {
   phone?: string | null;
   address?: string | null;
   emergency_contact?: string | null;
-  bank_account?: string | null;
   id_number?: string | null;
   annual_leave_quota?: number | null;
   annual_leave_history?: any;
@@ -165,14 +164,12 @@ export default function ProfileView({
             </div>
           </div>
 
-          {/* 敏感資料：銀行帳號、身分證字號（唯讀 + 遮罩） */}
+          {/* 敏感資料：身分證字號（唯讀 + 遮罩）；銀行帳號於 Portal 不顯示 */}
           <div className="pt-3 border-t border-slate-100 space-y-3">
             <div>
               <label className="text-[11px] text-slate-400 mb-1 block">銀行帳號</label>
-              <div className="text-sm font-bold text-slate-800">
-                {maskSensitiveData(user.bank_account || undefined)}
-              </div>
-              <p className="text-[10px] text-slate-400 mt-1">如需修改請洽管理員</p>
+              <div className="text-sm font-bold text-slate-500">***</div>
+              <p className="text-[10px] text-slate-400 mt-1">如需查詢或修改請洽管理員</p>
             </div>
             <div>
               <label className="text-[11px] text-slate-400 mb-1 block">身分證字號</label>

@@ -84,7 +84,10 @@ export default function PortalSalaryView({ user }: { user: any }) {
   const fetchSalaryList = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`/api/portal/data?type=salary&staffId=${user.id}`);
+      const clinicQ = user?.clinic_id ? `&clinic_id=${encodeURIComponent(user.clinic_id)}` : '';
+      const response = await fetch(`/api/portal/data?type=salary&staffId=${user.id}${clinicQ}`, {
+        credentials: 'include',
+      });
       const result = await response.json();
 
       // 格式化資料以符合現有的顯示邏輯

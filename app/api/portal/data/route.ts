@@ -28,17 +28,12 @@ export async function GET(request: NextRequest) {
         { status: 401 }
       );
     }
-    const staffId = staffIdCookie.value;
+    const staffId = staffIdCookie.value.trim();
 
-    const clinicId = clinicIdCookie?.value?.trim() || queryClinicId?.trim() || null;
-    if (!clinicId) {
-      return NextResponse.json(
-        { success: false, error: '缺少診所別，無法辨識診所，請重新登入或從正確連結進入', code: 'missing_clinic' },
-        { status: 401 }
-      );
-    }
+    // 🔒 clinic_id：優先 Cookie / Query，若皆無則從員工資料推斷（避免 LINE 內嵌瀏覽器等未帶 cookie 時無法辨識診所）
+    let clinicId = clinicIdCookie?.value?.trim() || queryClinicId?.trim() || null;
 
-    // 🔒 步驟 2: 驗證員工（刪去法：先只比對員工 ID，再比對診所，錯誤訊息具體化）
+    // 🔒 步驟 2: 驗證員工（先查 staff，若缺少 clinic_id 則用 DB 的 staff.clinic_id 補上）
     const { data: staffCheck, error: staffError } = await supabaseAdmin
       .from('staff')
       .select('id, clinic_id, is_active')
@@ -49,6 +44,24 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(
         { success: false, error: `找不到員工 ID: ${staffId}` },
         { status: 403 }
+      );
+    }
+
+    if (!staffCheck.is_active) {
+      return NextResponse.json(
+        { success: false, error: '該員工帳號已停用' },
+        { status: 403 }
+      );
+    }
+
+    // 若請求未帶 clinic_id（Cookie 未送或未帶 query），改由資料庫員工所屬診所辨識
+    if (!clinicId && staffCheck.clinic_id) {
+      clinicId = staffCheck.clinic_id;
+    }
+    if (!clinicId) {
+      return NextResponse.json(
+        { success: false, error: '缺少診所別，無法辨識診所，請重新登入或從正確連結進入', code: 'missing_clinic' },
+        { status: 401 }
       );
     }
 
@@ -63,21 +76,15 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    if (!staffCheck.is_active) {
-      return NextResponse.json(
-        { success: false, error: '該員工帳號已停用' },
-        { status: 403 }
-      );
-    }
-
-    // 通過驗證後再查完整員工資料供後續 type 使用
+    // 通過驗證後再查完整員工資料供後續 type 使用（僅選必要欄位，不包含 password、line_user_id 等敏感欄位）
     const { data: staff, error: staffFullError } = await supabaseAdmin
       .from('staff')
-      .select('id, name, role, clinic_id, is_active, start_date, annual_leave_history, annual_leave_quota, phone, address, emergency_contact, bank_account, id_number, admin_role')
+      .select('id, name, role, clinic_id, is_active, start_date, annual_leave_history, annual_leave_quota, phone, address, emergency_contact, id_number, admin_role')
       .eq('id', staffId)
       .single();
 
     if (staffFullError || !staff) {
+      console.error('[Portal Data] 取得員工資料失敗:', staffId, staffFullError?.message ?? staffFullError);
       return NextResponse.json(
         { success: false, error: `取得員工資料失敗: ${staffId}` },
         { status: 500 }
@@ -208,7 +215,6 @@ export async function GET(request: NextRequest) {
             phone: staff.phone || null,
             address: staff.address || null,
             emergency_contact: staff.emergency_contact || null,
-            bank_account: staff.bank_account || null,
             id_number: staff.id_number || null,
             annual_leave_quota: staff.annual_leave_quota || null,
             annual_leave_history: staff.annual_leave_history || null,

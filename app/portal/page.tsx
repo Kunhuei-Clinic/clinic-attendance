@@ -180,10 +180,12 @@ export default function EmployeePortal() {
         } else {
           // 🟢 情境 B：在瀏覽器/電腦，使用網頁登入模式
           console.log('[Portal] 在瀏覽器環境，檢查 Cookie');
-          
+          // URL 若有 clinic_id 一併帶上，供後端辨識診所（Cookie 可能未帶 clinic_id）
+          const urlClinicId = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('clinic_id') : null;
+          const homeQuery = urlClinicId ? `?type=home&clinic_id=${encodeURIComponent(urlClinicId)}` : '?type=home';
           // 檢查是否已有有效 Cookie
           try {
-            const testRes = await fetch('/api/portal/data?type=home', {
+            const testRes = await fetch(`/api/portal/data${homeQuery}`, {
               credentials: 'include',
             });
             
