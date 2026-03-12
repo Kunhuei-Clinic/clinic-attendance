@@ -6,6 +6,7 @@ import { saveAs } from 'file-saver';
 
 export default function QrGenerator() {
   const [clinicId, setClinicId] = useState<string>('');
+  const [staticToken, setStaticToken] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'bind' | 'static' | 'dynamic'>('bind');
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
@@ -34,6 +35,25 @@ export default function QrGenerator() {
       if (result.data && result.data.length > 0 && result.data[0].clinic_id) {
         setClinicId(result.data[0].clinic_id);
       }
+
+      const settingsRes = await fetch('/api/settings?type=clinic', {
+        credentials: 'include',
+      });
+      const settingsJson = await settingsRes.json();
+      let currentToken = settingsJson.data?.static_qr_token;
+      if (!currentToken) {
+        currentToken = Math.random().toString(36).substring(2, 10);
+        await fetch('/api/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'clinic',
+            settings: { static_qr_token: currentToken },
+          }),
+          credentials: 'include',
+        });
+      }
+      setStaticToken(currentToken || '');
     } catch (error) {
       console.error('取得診所 ID 失敗', error);
     } finally {
@@ -47,7 +67,7 @@ export default function QrGenerator() {
       return `https://liff.line.me/${liffId}?clinic_id=${clinicId}`;
     }
     if (activeTab === 'static') {
-      return `clockin_static_${clinicId}`;
+      return `clockin_static_${clinicId}_${staticToken}`;
     }
     if (activeTab === 'dynamic') {
       return `clockin_dynamic_${clinicId}_${dynamicTime}`;
@@ -198,24 +218,57 @@ export default function QrGenerator() {
         )}
 
         {(activeTab === 'bind' || activeTab === 'static') && (
-        <div className="flex gap-3 mt-8 w-full max-w-sm">
-          {activeTab === 'bind' && (
-            <button
-              onClick={handleCopyUrl}
-              className="flex-1 flex items-center justify-center gap-2 py-3 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-xl font-bold transition"
-            >
-              {copied ? <Check size={18} /> : <Copy size={18} />} 複製連結
-            </button>
-          )}
-          {(activeTab === 'bind' || activeTab === 'static') && (
-            <button
-              onClick={handleDownloadQr}
-              className="flex-1 flex items-center justify-center gap-2 py-3 bg-slate-800 text-white hover:bg-black rounded-xl font-bold transition shadow-lg"
-            >
-              <Download size={18} /> 下載圖片
-            </button>
-          )}
-        </div>
+          <>
+            <div className="flex gap-3 mt-8 w-full max-w-sm">
+              {activeTab === 'bind' && (
+                <button
+                  onClick={handleCopyUrl}
+                  className="flex-1 flex items-center justify-center gap-2 py-3 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-xl font-bold transition"
+                >
+                  {copied ? <Check size={18} /> : <Copy size={18} />} 複製連結
+                </button>
+              )}
+              <button
+                onClick={handleDownloadQr}
+                className="flex-1 flex items-center justify-center gap-2 py-3 bg-slate-800 text-white hover:bg-black rounded-xl font-bold transition shadow-lg"
+              >
+                <Download size={18} /> 下載圖片
+              </button>
+            </div>
+            {activeTab === 'static' && (
+              <div className="mt-6 pt-6 border-t border-teal-100 w-full flex flex-col items-center">
+                <p className="text-xs text-slate-500 mb-2">
+                  懷疑條碼外流？您可以重置條碼，舊條碼將立即失效。
+                </p>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (
+                      !confirm(
+                        '確定要更換靜態條碼嗎？\n更換後，舊的紙本條碼將無法打卡，您必須重新下載並列印新的條碼！'
+                      )
+                    )
+                      return;
+                    const newToken = Math.random().toString(36).substring(2, 10);
+                    await fetch('/api/settings', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        type: 'clinic',
+                        settings: { static_qr_token: newToken },
+                      }),
+                      credentials: 'include',
+                    });
+                    setStaticToken(newToken);
+                    alert('✅ 條碼已更新！請下載並列印最新條碼。');
+                  }}
+                  className="px-4 py-2 border border-red-200 text-red-600 rounded-lg text-sm font-bold hover:bg-red-50 transition"
+                >
+                  🔄 重置並產生新條碼
+                </button>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

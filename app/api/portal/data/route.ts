@@ -116,6 +116,15 @@ export async function GET(request: NextRequest) {
       case 'home': {
         // 🟢 首頁資料：個人資料 + 公告 + 當日打卡紀錄（員工資料已於步驟 2 一次取得，不再重複查詢）
 
+        // 查詢診所設定 (取得靜態 QR 金鑰等)
+        const { data: clinicData } = await supabaseAdmin
+          .from('clinics')
+          .select('settings')
+          .eq('id', clinicId)
+          .single();
+
+        const clinicSettings = clinicData?.settings || {};
+
         // 1. 查詢公告 (Announcements)
         // 條件：clinic_id 相符、is_active 為 true、排序：created_at 倒序、限制：前 5 筆
         const { data: announcements, error: annError } = await supabaseAdmin
@@ -226,6 +235,7 @@ export async function GET(request: NextRequest) {
           })),
           todayLogs: todayLogs || [],
           managerStats,
+          clinicSettings,
         };
         break;
       }

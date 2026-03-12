@@ -96,6 +96,7 @@ export default function EmployeePortal() {
     approvalRequired: boolean;
     clockIgnoreGps: boolean;
   } | null>(null);
+  const [clinicSettings, setClinicSettings] = useState<any>({});
   const [showOvertimeConfirm, setShowOvertimeConfirm] = useState(false);
   const [pendingClockOut, setPendingClockOut] = useState<{
     lat: number | null;
@@ -522,6 +523,10 @@ export default function EmployeePortal() {
       if (Array.isArray(logsData)) {
         setLogs(logsData);
       }
+
+      if (json.data?.clinicSettings) {
+        setClinicSettings(json.data.clinicSettings);
+      }
     } catch (error) {
       console.error('[Portal] 讀取首頁資料失敗:', error);
       setAnnouncements([]);
@@ -840,25 +845,37 @@ export default function EmployeePortal() {
           return;
         }
 
-        // 2. 驗證診所 ID
+        // 2. 檢查是否掃到「打卡條碼」
         if (scannedUrl.includes(currentClinicId)) {
           const isDynamic = scannedUrl.includes('clockin_dynamic_');
+          const isStatic = scannedUrl.includes('clockin_static_');
           let bypassMessage = '';
 
-          // 3. 🟢 動態防偽驗證 (安全機制)
+          // 3. 🟢 動態防偽驗證
           if (isDynamic) {
             const parts = scannedUrl.split('_');
             const timestamp = parseInt(parts[parts.length - 1], 10);
-            const now = Date.now();
-
-            // 檢查條碼是否產生超過 60 秒 (防截圖作弊)
-            if (!Number.isFinite(timestamp) || now - timestamp > 60000) {
+            if (!Number.isFinite(timestamp) || Date.now() - timestamp > 60000) {
               alert('❌ 條碼已過期！\n請掃描平板上最新的動態 QR Code。');
               return;
             }
-
             setBypassMode(true);
             bypassMessage = '\n(動態安全碼驗證成功，免除 GPS 定位)';
+          }
+
+          // 🟢 靜態金鑰驗證
+          if (isStatic) {
+            const parts = scannedUrl.split('_');
+            const token = parts[parts.length - 1];
+            if (
+              clinicSettings?.static_qr_token &&
+              token !== clinicSettings.static_qr_token
+            ) {
+              alert(
+                '❌ 無效的條碼！\n此條碼已作廢，請掃描診所現場最新的打卡條碼。'
+              );
+              return;
+            }
           }
 
           const action = isWorking ? 'out' : 'in';
