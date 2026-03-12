@@ -807,7 +807,7 @@ export default function EmployeePortal() {
     }
   };
 
-  // 🟢 掃碼打卡：LINE 原生掃描器，驗證 QR 屬於本診所後可選擇執行上班/下班打卡
+  // 🟢 掃碼打卡：LINE 原生掃描器，支援綁定連結辨識與靜態/動態條碼，延遲處理避免相機卡住
   const onScanClock = async () => {
     if (!liff.isInClient()) {
       alert('⚠️ 請在 LINE App 內開啟此頁面以使用掃碼功能');
@@ -818,35 +818,51 @@ export default function EmployeePortal() {
       const result = await liff.scanCodeV2();
       const scannedUrl = result.value;
 
-      if (!scannedUrl) return; // 使用者取消掃描
+      if (!scannedUrl) return;
 
-      console.log('[Portal] 掃描結果:', scannedUrl);
+      // 🟢 加入 500ms 延遲，讓 LINE 相機有時間完整收合，避免畫面卡死
+      setTimeout(() => {
+        const currentClinicId = profile?.clinic_id || staffUser?.clinic_id;
 
-      const currentClinicId = profile?.clinic_id || staffUser?.clinic_id;
-      if (!currentClinicId) {
-        alert('❌ 無法取得診所資訊，請重新登入。');
-        return;
-      }
-
-      if (scannedUrl.includes(currentClinicId)) {
-        const action = isWorking ? 'out' : 'in';
-        if (confirm(`✅ 掃描成功！是否執行「${action === 'in' ? '上班' : '下班'}」打卡？`)) {
-          executeClock(action);
+        // 1. 檢查是否掃到「綁定連結」
+        if (scannedUrl.includes('liff.line.me') && scannedUrl.includes(currentClinicId ?? '')) {
+          alert('ℹ️ 這是員工綁定專用的 QR Code。\n您目前已經綁定並登入系統，請掃描「打卡專用」的 QR Code。');
+          return;
         }
-      } else {
-        alert('❌ 無效的 QR Code：此條碼不屬於本診所，或條碼格式錯誤。');
-      }
+
+        if (!currentClinicId) {
+          alert('❌ 無法取得診所資訊，請重新登入。');
+          return;
+        }
+
+        // 2. 檢查是否掃到「打卡條碼」
+        if (scannedUrl.includes(currentClinicId)) {
+          const isDynamic = scannedUrl.includes('dynamic');
+          let bypassMessage = '';
+          if (isDynamic) {
+            setBypassMode(true);
+            bypassMessage = '\n(動態安全碼驗證成功，免除 GPS 定位)';
+          }
+
+          const action = isWorking ? 'out' : 'in';
+          if (window.confirm(`✅ 條碼掃描成功！\n是否確認執行「${action === 'in' ? '上班' : '下班'}」打卡？${bypassMessage}`)) {
+            executeClock(action, isDynamic);
+          }
+        } else {
+          alert('❌ 無效的 QR Code：此條碼不屬於本診所，或格式錯誤。');
+        }
+      }, 500);
     } catch (error: any) {
       console.error('[Portal] 掃描失敗:', error);
       if (error?.message && error.message.includes('permission')) {
-        alert('❌ 掃描失敗：請檢查是否已授權 LINE 使用相機權限，或在 LINE Developers Console 啟用 Scan Code 功能。');
+        alert('❌ 掃描失敗：請檢查是否已授權 LINE 使用相機權限。');
       } else {
         alert('掃描功能暫時無法使用，請使用一般 GPS 打卡。');
       }
     }
   };
 
-  const executeClock = async (action: 'in' | 'out') => {
+  const executeClock = async (action: 'in' | 'out', forceBypassFromScan?: boolean) => {
     if (isPunching) return;
     setIsPunching(true);
     try {
@@ -873,8 +889,8 @@ export default function EmployeePortal() {
         }
       }
 
-      // 診所設定「忽略 GPS」或手動救援模式：不讀取、不寫入 GPS，直接送出打卡
-      const skipGps = bypassMode || overtimeSettings?.clockIgnoreGps === true;
+      // 診所設定「忽略 GPS」、手動救援模式、或掃碼動態條碼：不讀取、不寫入 GPS，直接送出打卡
+      const skipGps = bypassMode || overtimeSettings?.clockIgnoreGps === true || forceBypassFromScan === true;
       if (isVip || skipGps) {
         try {
           await submitLog(action, null, null, skipGps, false);

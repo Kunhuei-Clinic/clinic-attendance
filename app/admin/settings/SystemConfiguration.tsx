@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Save, Clock, CalendarDays, LayoutGrid, Stethoscope, Trash2, Plus, User, QrCode, Copy, Check, ChevronDown, ChevronUp } from 'lucide-react';
+import { Save, Clock, CalendarDays, LayoutGrid, Stethoscope, Trash2, Plus, User, ChevronDown, ChevronUp } from 'lucide-react';
 
 type Entity = { id: string; name: string };
 
@@ -115,7 +115,6 @@ export default function SystemConfiguration() {
     shifts: false,
     special: false,
     leave: false,
-    bind: false,
     overtime: false,
   });
 
@@ -123,10 +122,7 @@ export default function SystemConfiguration() {
     setExpanded(prev => ({ ...prev, [section]: !prev[section] }));
   };
   
-  // 🟢 員工綁定連結相關
   const [clinicId, setClinicId] = useState<string>('');
-  const [bindLink, setBindLink] = useState<string>('');
-  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     fetchSystemSettings();
@@ -144,28 +140,10 @@ export default function SystemConfiguration() {
       const result = await response.json();
       
       if (result.data && result.data.length > 0 && result.data[0].clinic_id) {
-        const id = result.data[0].clinic_id;
-        setClinicId(id);
-        
-        // 組合綁定連結
-        const liffId = process.env.NEXT_PUBLIC_LIFF_ID || '2008669814-8OqQmkaL';
-        const link = `https://liff.line.me/${liffId}?clinic_id=${id}`;
-        setBindLink(link);
+        setClinicId(result.data[0].clinic_id);
       }
     } catch (error) {
       console.error('Fetch clinic ID error:', error);
-    }
-  };
-
-  // 🟢 複製連結
-  const handleCopyLink = async () => {
-    try {
-      await navigator.clipboard.writeText(bindLink);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (error) {
-      console.error('Copy link error:', error);
-      alert('複製失敗，請手動複製連結');
     }
   };
 
@@ -709,61 +687,6 @@ export default function SystemConfiguration() {
                   <Save size={16}/> 儲存特休制度
                 </button>
               </div>
-            </div>
-          )}
-        </div>
-
-        {/* 員工綁定連結 */}
-        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 transition-all">
-          <div className="flex justify-between items-center cursor-pointer select-none" onClick={() => toggleSection('bind')}>
-            <label className="text-sm font-bold text-slate-700 flex items-center gap-2"><QrCode size={16}/> 員工綁定連結 (QR Code)</label>
-            {expanded.bind ? <ChevronUp size={20} className="text-slate-400"/> : <ChevronDown size={20} className="text-slate-400"/>}
-          </div>
-          {expanded.bind && (
-            <div className="mt-4 pt-4 border-t border-slate-200 animate-fade-in">
-              <div className="bg-teal-50 p-4 rounded-lg border border-teal-100 mb-4">
-                <p className="text-sm text-teal-800 mb-2">請將此連結轉為 QR Code 供員工掃描，或直接傳送至員工群組。</p>
-                <p className="text-xs text-teal-700">員工首次進入需輸入手機與密碼進行綁定。</p>
-              </div>
-              {bindLink ? (
-                <div className="space-y-3">
-                  <div className="flex gap-2 items-center">
-                    <input
-                      type="text"
-                      value={bindLink}
-                      readOnly
-                      className="flex-1 p-3 border rounded-lg bg-white font-mono text-sm"
-                    />
-                    <button
-                      onClick={handleCopyLink}
-                      className={`flex items-center gap-2 px-4 py-3 rounded-lg font-bold transition ${
-                        copied
-                          ? 'bg-green-100 text-green-700 border border-green-300'
-                          : 'bg-teal-600 text-white hover:bg-teal-700'
-                      }`}
-                    >
-                      {copied ? (
-                        <>
-                          <Check size={18} />
-                          已複製
-                        </>
-                      ) : (
-                        <>
-                          <Copy size={18} />
-                          複製連結
-                        </>
-                      )}
-                    </button>
-                  </div>
-                  <div className="text-xs text-slate-400">
-                    診所 ID: <span className="font-mono">{clinicId}</span>
-                  </div>
-                </div>
-              ) : (
-                <div className="p-4 bg-white rounded-lg border border-slate-200 text-sm text-slate-500">
-                  載入中...
-                </div>
-              )}
             </div>
           )}
         </div>
