@@ -89,6 +89,7 @@ export default function EmployeePortal() {
   const [announcements, setAnnouncements] = useState<any[]>([]);
   const [managerStats, setManagerStats] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
+  const [isViewLoading, setIsViewLoading] = useState(false);
 
   const [overtimeSettings, setOvertimeSettings] = useState<{
     threshold: number;
@@ -379,6 +380,7 @@ export default function EmployeePortal() {
   };
 
   const fetchHistory = async () => {
+    setIsViewLoading(true);
     try {
       const clinicQ = (clinicId || staffUser?.clinic_id) ? `&clinic_id=${encodeURIComponent(clinicId || staffUser?.clinic_id || '')}` : '';
       const response = await fetch(
@@ -398,6 +400,8 @@ export default function EmployeePortal() {
     } catch (error) {
       console.error('讀取歷史記錄失敗:', error);
       setHistoryLogs([]);
+    } finally {
+      setIsViewLoading(false);
     }
   };
 
@@ -434,6 +438,7 @@ export default function EmployeePortal() {
   };
 
   const fetchLeaveHistory = async () => {
+    setIsViewLoading(true);
     try {
       const clinicQ = (clinicId || staffUser?.clinic_id) ? `&clinic_id=${encodeURIComponent(clinicId || staffUser?.clinic_id || '')}` : '';
       const response = await fetch(
@@ -463,10 +468,13 @@ export default function EmployeePortal() {
       console.error('讀取請假記錄失敗:', error);
       setLeaveHistory([]);
       setLeaveStats({});
+    } finally {
+      setIsViewLoading(false);
     }
   };
 
   const fetchHomeDataWithStaffId = async (staffId: string, clinicIdParam?: string) => {
+    setIsViewLoading(true);
     try {
       const clinicQ = clinicIdParam ? `&clinic_id=${encodeURIComponent(clinicIdParam)}` : '';
       const response = await fetch(
@@ -511,6 +519,8 @@ export default function EmployeePortal() {
     } catch (error) {
       console.error('[Portal] 讀取首頁資料失敗:', error);
       setAnnouncements([]);
+    } finally {
+      setIsViewLoading(false);
     }
   };
 
@@ -1181,6 +1191,14 @@ export default function EmployeePortal() {
   // 主畫面：各 View + 底部導航
   return (
     <div className="relative">
+      {/* 🟢 全域讀取毛玻璃遮罩 */}
+      {isViewLoading && (
+        <div className="fixed inset-0 z-[100] bg-slate-50/60 backdrop-blur-[2px] flex flex-col items-center justify-center pb-20 transition-all duration-300">
+          <div className="w-12 h-12 border-4 border-teal-200 border-t-teal-600 rounded-full animate-spin shadow-lg" />
+          <span className="mt-4 text-teal-800 font-bold tracking-widest text-sm animate-pulse">資料同步中...</span>
+        </div>
+      )}
+
       {/* Home：優先使用 API 回傳的 profile（含 admin_role），主管儀表板才能正確顯示 */}
       {view === 'home' && (
         <HomeView
