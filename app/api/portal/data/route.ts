@@ -160,7 +160,15 @@ export async function GET(request: NextRequest) {
         }
 
         // 4. 主管專屬數據（僅 admin_role 為 owner 或 manager 時查詢，用 try/catch 防止連鎖崩潰）
-        let managerStats: { totalStaff: number; clockedInCount: number; pendingLeaves: number; anomalyCount: number } | null = null;
+        let managerStats: {
+          totalStaff: number;
+          clockedInCount: number;
+          clockedInList: { name: string; time: string }[];
+          pendingLeaves: number;
+          pendingLeavesList: any[];
+          anomalyCount: number;
+          anomalyList: { name: string; reason: string; date: string }[];
+        } | null = null;
         const adminRole = staff?.admin_role ?? 'none';
         const isAdmin = adminRole === 'owner' || adminRole === 'manager';
 
@@ -169,46 +177,74 @@ export async function GET(request: NextRequest) {
             const todayStr = new Date().toISOString().slice(0, 10);
             const currentClinicId = staff.clinic_id;
 
-            const [
-              { count: totalStaff },
-              { data: todayAllLogs },
-            ] = await Promise.all([
-              supabaseAdmin
-                .from('staff')
-                .select('*', { count: 'exact', head: true })
-                .eq('clinic_id', currentClinicId)
-                .eq('is_active', true),
-              supabaseAdmin
-                .from('attendance_logs')
-                .select('staff_id')
-                .eq('clinic_id', currentClinicId)
-                .gte('clock_in_time', `${todayStr}T00:00:00`)
-                .lte('clock_in_time', `${todayStr}T23:59:59`),
-            ]);
+            // 1. 抓取全院員工名單(建立 ID 到 姓名的 Mapping)
+            const { data: allStaff } = await supabaseAdmin
+              .from('staff')
+              .select('id, name')
+              .eq('clinic_id', currentClinicId);
+            const staffMap = Object.fromEntries((allStaff || []).map((s: any) => [s.id, s.name]));
+            const totalStaff = (allStaff || []).length;
 
-            const clockedInCount = new Set((todayAllLogs || []).map((log: any) => log.staff_id)).size;
+            // 2. 今日打卡紀錄
+            const { data: todayAllLogs } = await supabaseAdmin
+              .from('attendance_logs')
+              .select('staff_id, clock_in_time')
+              .eq('clinic_id', currentClinicId)
+              .gte('clock_in_time', `${todayStr}T00:00:00`)
+              .lte('clock_in_time', `${todayStr}T23:59:59`)
+              .order('clock_in_time', { ascending: true });
 
-            const { count: pendingLeaves } = await supabaseAdmin
+            const clockedInMap = new Map<string, { name: string; time: string }>();
+            (todayAllLogs || []).forEach((log: any) => {
+              if (!clockedInMap.has(log.staff_id)) {
+                clockedInMap.set(log.staff_id, {
+                  name: staffMap[log.staff_id] || '未知員工',
+                  time: new Date(log.clock_in_time).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' }),
+                });
+              }
+            });
+            const clockedInList = Array.from(clockedInMap.values());
+
+            // 3. 待核假單
+            const { data: pendingLeavesData } = await supabaseAdmin
               .from('leave_requests')
-              .select('*', { count: 'exact', head: true })
+              .select('staff_name, type, start_time')
               .eq('clinic_id', currentClinicId)
               .eq('status', 'pending');
 
-            const { count: anomalyCount } = await supabaseAdmin
+            // 4. 異常打卡
+            const { data: anomalyData } = await supabaseAdmin
               .from('attendance_logs')
-              .select('*', { count: 'exact', head: true })
+              .select('staff_id, anomaly_reason, clock_in_time')
               .eq('clinic_id', currentClinicId)
               .not('anomaly_reason', 'is', null);
 
+            const anomalyList = (anomalyData || []).map((a: any) => ({
+              name: staffMap[a.staff_id] || '未知',
+              reason: a.anomaly_reason,
+              date: new Date(a.clock_in_time).toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' }),
+            }));
+
             managerStats = {
-              totalStaff: totalStaff ?? 0,
-              clockedInCount,
-              pendingLeaves: pendingLeaves ?? 0,
-              anomalyCount: anomalyCount ?? 0,
+              totalStaff,
+              clockedInCount: clockedInList.length,
+              clockedInList,
+              pendingLeaves: (pendingLeavesData || []).length,
+              pendingLeavesList: pendingLeavesData || [],
+              anomalyCount: anomalyList.length,
+              anomalyList,
             };
           } catch (statsError) {
             console.error('[Portal API] 讀取主管統計資料失敗，安全降級:', statsError);
-            managerStats = { totalStaff: 0, clockedInCount: 0, pendingLeaves: 0, anomalyCount: 0 };
+            managerStats = {
+              totalStaff: 0,
+              clockedInCount: 0,
+              clockedInList: [],
+              pendingLeaves: 0,
+              pendingLeavesList: [],
+              anomalyCount: 0,
+              anomalyList: [],
+            };
           }
         }
 

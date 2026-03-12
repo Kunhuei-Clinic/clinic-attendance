@@ -849,7 +849,6 @@ export default function EmployeePortal() {
         if (scannedUrl.includes(currentClinicId)) {
           const isDynamic = scannedUrl.includes('clockin_dynamic_');
           const isStatic = scannedUrl.includes('clockin_static_');
-          let bypassMessage = '';
 
           // 3. 🟢 動態防偽驗證（格式: clockin_dynamic_{clinicId}_{timestamp}_{kioskToken}）
           if (isDynamic) {
@@ -866,12 +865,11 @@ export default function EmployeePortal() {
               token !== clinicSettings.kiosk_token
             ) {
               alert(
-                '❌ 來源無效！\n此端點機連結已作廢，請掃描診所現場最新的動態條碼。'
+                '❌ 來源無效！\n此端點機連結已作廢，請掃描現場最新條碼。'
               );
               return;
             }
             setBypassMode(true);
-            bypassMessage = '\n(動態安全碼驗證成功，免除 GPS 定位)';
           }
 
           // 🟢 靜態金鑰驗證
@@ -892,7 +890,7 @@ export default function EmployeePortal() {
           const action = isWorking ? 'out' : 'in';
           if (
             window.confirm(
-              `✅ 條碼掃描成功！\n是否確認執行「${action === 'in' ? '上班' : '下班'}」打卡？${bypassMessage}`
+              `✅ 掃描成功！\n請確認是否進行「${action === 'in' ? '上班' : '下班'}」打卡？`
             )
           ) {
             executeClock(action, isDynamic);

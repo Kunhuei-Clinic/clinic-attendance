@@ -1,7 +1,7 @@
 'use client';
 
-import React from 'react';
-import { Clock, Users, FileText, AlertCircle, MapPin, QrCode } from 'lucide-react';
+import React, { useState } from 'react';
+import { Clock, Users, FileText, AlertCircle, QrCode, X } from 'lucide-react';
 
 interface HomeViewProps {
   staffUser: any;
@@ -55,6 +55,8 @@ export default function HomeView(props: HomeViewProps) {
     bypassMode,
     setBypassMode,
   } = props;
+
+  const [detailModal, setDetailModal] = useState<'attendance' | 'leaves' | 'anomalies' | null>(null);
 
   const latestLog = logs?.[0];
   // 雙重身分驗證：讀取新的 admin_role 欄位
@@ -161,13 +163,18 @@ export default function HomeView(props: HomeViewProps) {
 
       {/* 區塊二：👑 主管專屬儀表板（僅 isManager 時顯示） */}
       {isManager && (
-        <section className="rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50/80 to-slate-50 shadow-md overflow-hidden">
+        <section className="rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50/80 to-slate-50 shadow-md overflow-hidden relative">
           <div className="p-5">
-            <h2 className="text-lg font-bold text-slate-800 mb-4">
-              👑 診所管理中樞
+            <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center justify-between">
+              <span>👑 診所管理中樞</span>
+              <span className="text-[10px] font-normal text-slate-400 bg-white px-2 py-0.5 rounded-full border">點擊卡片看明細</span>
             </h2>
-            <div className="grid grid-cols-2 gap-3 mb-4">
-              <div className="rounded-xl border border-slate-200/80 bg-white/90 p-3 text-center shadow-sm">
+            <div className="grid grid-cols-2 gap-3">
+              {/* 今日出勤卡片 */}
+              <div
+                onClick={() => setDetailModal('attendance')}
+                className="rounded-xl border border-slate-200/80 bg-white p-3 text-center shadow-sm cursor-pointer active:scale-95 transition"
+              >
                 <p className="text-xs text-slate-500 mb-1 flex items-center justify-center gap-1">
                   <Users size={14} /> 今日出勤
                 </p>
@@ -175,27 +182,35 @@ export default function HomeView(props: HomeViewProps) {
                   {managerStats?.clockedInCount ?? 0} / {managerStats?.totalStaff ?? 0} 人
                 </p>
               </div>
-              <div className={`rounded-xl border p-3 text-center shadow-sm ${
-                (managerStats?.pendingLeaves ?? 0) > 0
-                  ? 'border-red-200 bg-red-50/90 animate-pulse'
-                  : 'border-slate-200/80 bg-white/90'
-              }`}>
+
+              {/* 待核假單卡片 */}
+              <div
+                onClick={() => setDetailModal('leaves')}
+                className={`rounded-xl border p-3 text-center shadow-sm cursor-pointer active:scale-95 transition ${
+                  (managerStats?.pendingLeaves ?? 0) > 0
+                    ? 'border-red-200 bg-red-50/90 animate-pulse'
+                    : 'border-slate-200/80 bg-white'
+                }`}
+              >
                 <p className="text-xs text-slate-500 mb-1 flex items-center justify-center gap-1">
                   <FileText size={14} /> 待核假單
                 </p>
                 <p className="text-lg font-bold text-red-600">
                   {(managerStats?.pendingLeaves ?? 0) > 0 ? (
-                    <span className="inline-flex items-center gap-1.5">
-                      <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">
-                        {managerStats.pendingLeaves} 筆
-                      </span>
+                    <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full shadow-sm">
+                      {managerStats.pendingLeaves} 筆
                     </span>
                   ) : (
                     <span>{managerStats?.pendingLeaves ?? 0} 筆</span>
                   )}
                 </p>
               </div>
-              <div className="col-span-2 rounded-xl border border-slate-200/80 bg-white/90 p-3 text-center shadow-sm">
+
+              {/* 異常打卡卡片 */}
+              <div
+                onClick={() => setDetailModal('anomalies')}
+                className="col-span-2 rounded-xl border border-slate-200/80 bg-white p-3 text-center shadow-sm cursor-pointer active:scale-[0.98] transition"
+              >
                 <p className="text-xs text-slate-500 mb-1 flex items-center justify-center gap-1">
                   <AlertCircle size={14} /> 異常打卡
                 </p>
@@ -204,15 +219,65 @@ export default function HomeView(props: HomeViewProps) {
                 </p>
               </div>
             </div>
-            <button
-              type="button"
-              className="w-full h-12 py-3 rounded-xl font-bold text-slate-600 bg-slate-200 border border-slate-300 hover:bg-slate-300 transition flex items-center justify-center gap-2"
-            >
-              <QrCode size={20} />
-              <span>📱 產生打卡 QR Code（即將推出）</span>
-            </button>
           </div>
         </section>
+      )}
+
+      {/* 🟢 主管明細彈出視窗 (Modal) */}
+      {detailModal && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm sm:items-center">
+          <div className="w-full sm:max-w-sm bg-slate-50 rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col max-h-[80vh] animate-fade-in-up">
+            <div className="flex justify-between items-center p-4 bg-white rounded-t-2xl border-b border-slate-100">
+              <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                {detailModal === 'attendance' && <><Users size={18} className="text-teal-600"/> 今日出勤名單</>}
+                {detailModal === 'leaves' && <><FileText size={18} className="text-orange-600"/> 待核准假單</>}
+                {detailModal === 'anomalies' && <><AlertCircle size={18} className="text-red-600"/> 異常回報名單</>}
+              </h3>
+              <button onClick={() => setDetailModal(null)} className="p-1 bg-slate-100 rounded-full text-slate-500 hover:bg-slate-200">
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="p-4 overflow-y-auto space-y-2 pb-8">
+              {detailModal === 'attendance' && (
+                managerStats?.clockedInList?.length > 0 ? managerStats.clockedInList.map((item: any, i: number) => (
+                  <div key={i} className="flex justify-between items-center bg-white p-3 rounded-xl border border-slate-200">
+                    <span className="font-bold text-slate-700">{item.name}</span>
+                    <span className="text-xs text-slate-400 font-mono">{item.time} 打卡</span>
+                  </div>
+                )) : <div className="text-center text-slate-400 py-6 text-sm">今日尚無人打卡</div>
+              )}
+
+              {detailModal === 'leaves' && (
+                managerStats?.pendingLeavesList?.length > 0 ? managerStats.pendingLeavesList.map((item: any, i: number) => (
+                  <div key={i} className="bg-white p-3 rounded-xl border border-orange-200 border-l-4 border-l-orange-400">
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="font-bold text-slate-800">{item.staff_name}</span>
+                      <span className="text-[10px] bg-orange-100 text-orange-700 px-2 py-0.5 rounded font-bold">{item.type}</span>
+                    </div>
+                    <div className="text-xs text-slate-500">起始：{new Date(item.start_time).toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>
+                  </div>
+                )) : <div className="text-center text-slate-400 py-6 text-sm">目前無待簽核假單</div>
+              )}
+
+              {detailModal === 'anomalies' && (
+                managerStats?.anomalyList?.length > 0 ? managerStats.anomalyList.map((item: any, i: number) => (
+                  <div key={i} className="bg-white p-3 rounded-xl border border-red-200 border-l-4 border-l-red-500">
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="font-bold text-slate-800">{item.name}</span>
+                      <span className="text-[10px] text-slate-400">{item.date}</span>
+                    </div>
+                    <div className="text-sm text-red-600 font-medium">原因：{item.reason}</div>
+                  </div>
+                )) : <div className="text-center text-slate-400 py-6 text-sm">無異常回報</div>
+              )}
+
+              <div className="text-center text-[10px] text-slate-400 pt-4">
+                ※ 詳細處理與簽核請至電腦版後台操作
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* 區塊三：公告區塊 */}
