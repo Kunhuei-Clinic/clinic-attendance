@@ -13,6 +13,7 @@ interface HomeViewProps {
   isPunching?: boolean;
   onClockIn: () => void;
   onClockOut: () => void;
+  onScanClock?: () => void;
   bypassMode: boolean;
   setBypassMode: (val: boolean) => void;
 }
@@ -50,6 +51,7 @@ export default function HomeView(props: HomeViewProps) {
     isPunching = false,
     onClockIn,
     onClockOut,
+    onScanClock,
     bypassMode,
     setBypassMode,
   } = props;
@@ -102,6 +104,17 @@ export default function HomeView(props: HomeViewProps) {
             <Clock size={24} />
             <span>{isPunching ? '處理中...' : isWorking ? '下班打卡' : '上班打卡'}</span>
           </button>
+
+          {/* 掃碼打卡按鈕（小一號，置於主按鈕下方） */}
+          {onScanClock && (
+            <button
+              type="button"
+              onClick={onScanClock}
+              className="flex items-center justify-center gap-2 w-full h-12 mt-3 bg-slate-800 text-white rounded-xl font-bold shadow-lg hover:bg-slate-700 active:scale-[0.98] transition"
+            >
+              <QrCode size={20} /> 掃描診所 QR 打卡
+            </button>
+          )}
 
           {/* GPS 狀態文字（按鈕下方小字） */}
           <p className="text-xs text-slate-500 mt-3 text-center">

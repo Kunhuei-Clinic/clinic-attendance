@@ -94,6 +94,7 @@ export default function EmployeePortal() {
   const [overtimeSettings, setOvertimeSettings] = useState<{
     threshold: number;
     approvalRequired: boolean;
+    clockIgnoreGps: boolean;
   } | null>(null);
   const [showOvertimeConfirm, setShowOvertimeConfirm] = useState(false);
   const [pendingClockOut, setPendingClockOut] = useState<{
@@ -335,15 +336,15 @@ export default function EmployeePortal() {
     }
   };
 
-  // 根據 view 抓資料
+  // 根據 view 抓資料（依賴不含 staffUser，避免狀態同步導致無限重抓）
   useEffect(() => {
-    if (!staffUser || step !== 'portal') return;
+    if (!staffUser?.id || step !== 'portal') return;
     if (view === 'history') fetchHistory();
     if (view === 'roster') fetchRoster();
     if (view === 'leave') fetchLeaveHistory();
     if (view === 'home') fetchHomeData();
     if (view === 'profile') fetchProfile();
-  }, [view, selectedMonth, staffUser, step]);
+  }, [view, selectedMonth, step]);
 
   const fetchTodayLogs = async (staffId: string, clinicIdParam?: string) => {
     try {
@@ -497,7 +498,12 @@ export default function EmployeePortal() {
       if (profileData) {
         console.log('[Portal] ✅ 設定 Profile:', profileData);
         setProfile(profileData);
-        setStaffUser((prev) => (prev ? { ...prev, admin_role: profileData.admin_role } : prev));
+        setStaffUser((prev: any) => {
+          if (prev && prev.admin_role !== profileData.admin_role) {
+            return { ...prev, admin_role: profileData.admin_role };
+          }
+          return prev;
+        });
       }
 
       const statsData = json.data?.managerStats ?? json.managerStats ?? null;
@@ -623,6 +629,7 @@ export default function EmployeePortal() {
             threshold: result.data.overtime_threshold || 9,
             approvalRequired:
               result.data.overtime_approval_required !== false,
+            clockIgnoreGps: result.data.clock_ignore_gps === true,
           });
         }
       })
@@ -800,6 +807,34 @@ export default function EmployeePortal() {
     }
   };
 
+  // 🟢 掃碼打卡：使用 LIFF 掃描診所靜態 QR，驗證 clinic_id 後觸發原有打卡流程
+  const onScanClock = async () => {
+    if (!liff.isInClient()) {
+      alert('請在 LINE App 內使用掃碼功能');
+      return;
+    }
+
+    try {
+      const result = await liff.scanCodeV2();
+      const scannedUrl = result.value;
+
+      if (!scannedUrl || !staffUser?.clinic_id) {
+        alert('無效的診所 QR Code');
+        return;
+      }
+      if (!scannedUrl.includes(staffUser.clinic_id)) {
+        alert('無效的診所 QR Code');
+        return;
+      }
+
+      // 靜態模式：掃碼成功後觸發原有 executeClock（內含 GPS 檢查）
+      executeClock(isWorking ? 'out' : 'in');
+    } catch (error) {
+      console.error('掃描失敗', error);
+      alert('掃描失敗，請重試');
+    }
+  };
+
   const executeClock = async (action: 'in' | 'out') => {
     if (isPunching) return;
     setIsPunching(true);
@@ -827,9 +862,11 @@ export default function EmployeePortal() {
         }
       }
 
-      if (isVip || bypassMode) {
+      // 診所設定「忽略 GPS」或手動救援模式：不讀取、不寫入 GPS，直接送出打卡
+      const skipGps = bypassMode || overtimeSettings?.clockIgnoreGps === true;
+      if (isVip || skipGps) {
         try {
-          await submitLog(action, null, null, bypassMode, false);
+          await submitLog(action, null, null, skipGps, false);
         } finally {
           setIsPunching(false);
         }
@@ -1211,6 +1248,7 @@ export default function EmployeePortal() {
           isPunching={isPunching}
           onClockIn={() => executeClock('in')}
           onClockOut={() => executeClock('out')}
+          onScanClock={onScanClock}
           bypassMode={bypassMode}
           setBypassMode={setBypassMode}
         />

@@ -46,7 +46,8 @@ export async function GET(request: NextRequest) {
       const settings = clinic?.settings || {};
       const defaultSettings = {
         overtime_threshold: settings.overtime_threshold ?? 9,
-        overtime_approval_required: settings.overtime_approval_required ?? true
+        overtime_approval_required: settings.overtime_approval_required ?? true,
+        clock_ignore_gps: settings.clock_ignore_gps ?? false
       };
 
       return NextResponse.json({ 

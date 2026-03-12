@@ -107,6 +107,7 @@ export default function SystemConfiguration() {
   const [leaveCalculationSystem, setLeaveCalculationSystem] = useState<'anniversary' | 'calendar'>('anniversary');
   const [overtimeThreshold, setOvertimeThreshold] = useState(9);
   const [overtimeApprovalRequired, setOvertimeApprovalRequired] = useState(true);
+  const [clockIgnoreGps, setClockIgnoreGps] = useState(false);
   const [clinicData, setClinicData] = useState<any | null>(null);
   const [expanded, setExpanded] = useState({
     entities: false,
@@ -250,6 +251,7 @@ export default function SystemConfiguration() {
       if (clinicResult.data) {
         setOvertimeThreshold(clinicResult.data.overtime_threshold ?? 9);
         setOvertimeApprovalRequired(clinicResult.data.overtime_approval_required !== false);
+        setClockIgnoreGps(clinicResult.data.clock_ignore_gps === true);
         // 🟢 從 clinics.settings 讀取班表，完美相容舊資料
         if (clinicResult.data.business_hours) {
           setBusinessHours(migrateBusinessHours(clinicResult.data.business_hours));
@@ -797,12 +799,23 @@ export default function SystemConfiguration() {
                 />
                 <label htmlFor="overtime_approval" className="text-sm font-bold text-slate-700">需要主管審核</label>
               </div>
+              <div className="flex items-center gap-3 pt-2">
+                <input
+                  type="checkbox"
+                  id="clock_ignore_gps"
+                  checked={clockIgnoreGps}
+                  onChange={(e) => setClockIgnoreGps(e.target.checked)}
+                  className="w-5 h-5"
+                />
+                <label htmlFor="clock_ignore_gps" className="text-sm font-bold text-slate-700">LINE 打卡不驗證 GPS（不讀取、不寫入定位）</label>
+              </div>
+              <p className="text-xs text-slate-400">啟用後，員工在 LINE Portal 打卡時將不要求定位，也不寫入 GPS 座標；適合僅用掃碼或室內訊號不佳的診所。</p>
               <div className="mt-4 pt-4 border-t border-slate-200 flex justify-end">
                 <button 
-                  onClick={() => handleSaveClinicSettings({ overtime_threshold: overtimeThreshold, overtime_approval_required: overtimeApprovalRequired })} 
+                  onClick={() => handleSaveClinicSettings({ overtime_threshold: overtimeThreshold, overtime_approval_required: overtimeApprovalRequired, clock_ignore_gps: clockIgnoreGps })} 
                   className="flex items-center gap-2 bg-blue-600 text-white px-5 py-2 rounded-lg text-sm font-bold hover:bg-blue-700 transition shadow-sm"
                 >
-                  <Save size={16}/> 儲存加班規則
+                  <Save size={16}/> 儲存加班與打卡設定
                 </button>
               </div>
             </div>
