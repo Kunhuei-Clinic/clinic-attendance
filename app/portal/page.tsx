@@ -1,292 +1,199 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import liff from '@line/liff';
 import { Clock, User, Lock } from 'lucide-react';
 import PortalSalaryView from './components/SalaryView';
 import BottomNav from './components/BottomNav';
 import HomeView from './views/HomeView';
-import HistoryView, { MissedPunchForm } from './views/HistoryView';
+import HistoryView from './views/HistoryView';
 import RosterView from './views/RosterView';
 import LeaveView from './views/LeaveView';
 import ProfileView from './views/ProfileView';
+import { usePortalData } from './hooks/usePortalData';
+import { useClocking } from './hooks/useClocking';
 
 const LIFF_ID = '2008669814-8OqQmkaL';
 
-const getDist = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-  const deg2rad = (deg: number) => deg * (Math.PI / 180);
-  const R = 6371;
-  const dLat = deg2rad(lat2 - lat1);
-  const dLon = deg2rad(lon2 - lon1);
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(deg2rad(lat1)) *
-      Math.cos(deg2rad(lat2)) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c * 1000;
-};
-
-type ViewType = 'home' | 'history' | 'roster' | 'leave' | 'payslip' | 'profile';
-type GpsStatus = 'idle' | 'locating' | 'ok' | 'out_of_range' | 'error';
 type StepType = 'loading' | 'binding' | 'login' | 'portal';
 
-interface LeaveFormState {
-  type: string;
-  startDate: string;
-  startTime: string;
-  endDate: string;
-  endTime: string;
-  reason: string;
-}
-
 export default function EmployeePortal() {
-  // 🟢 狀態管理
   const [step, setStep] = useState<StepType>('loading');
   const [lineUserId, setLineUserId] = useState<string>('');
-  const [clinicId, setClinicId] = useState<string>(''); // 🔑 SaaS：從 URL 讀取的診所 ID
-  const [bindForm, setBindForm] = useState({ phone: '', password: '' }); // LINE 綁定用
+  const [clinicId, setClinicId] = useState<string>('');
+  const [bindForm, setBindForm] = useState({ phone: '', password: '' });
   const [bindError, setBindError] = useState('');
-  const [loginForm, setLoginForm] = useState({ phone: '', password: '' }); // 🟢 手動登入用
+  const [loginForm, setLoginForm] = useState({ phone: '', password: '' });
   const [loginError, setLoginError] = useState('');
-
-  const [view, setView] = useState<ViewType>('home');
   const [staffUser, setStaffUser] = useState<any>(null);
 
-  const [logs, setLogs] = useState<any[]>([]);
-  const [historyLogs, setHistoryLogs] = useState<any[]>([]);
-  const [rosterData, setRosterData] = useState<any[]>([]);
-  const [leaveHistory, setLeaveHistory] = useState<any[]>([]);
+  const portalData = usePortalData(staffUser, step, clinicId);
+  const isWorking =
+    portalData.logs.length > 0 && !portalData.logs[0].clock_out_time;
 
-  const [gpsStatus, setGpsStatus] = useState<GpsStatus>('idle');
-  const [dist, setDist] = useState(0);
-  const [bypassMode, setBypassMode] = useState(false);
-  const [isPunching, setIsPunching] = useState(false);
-  const [selectedMonth, setSelectedMonth] = useState(
-    new Date().toISOString().slice(0, 7),
-  );
-
-  const [leaveForm, setLeaveForm] = useState<LeaveFormState>({
-    type: '事假',
-    startDate: '',
-    startTime: '09:00',
-    endDate: '',
-    endTime: '18:00',
-    reason: '',
+  const clocking = useClocking({
+    staffUser: portalData.profile || staffUser,
+    profile: portalData.profile,
+    clinicSettings: portalData.clinicSettings,
+    logs: portalData.logs,
+    overtimeSettings: portalData.overtimeSettings,
+    isWorking,
+    clinicId,
+    onSuccess: () => {
+      if (staffUser?.id) {
+        portalData.fetchTodayLogs(
+          staffUser.id,
+          staffUser.clinic_id || clinicId
+        );
+        portalData.fetchHomeDataWithStaffId(
+          staffUser.id,
+          staffUser.clinic_id || clinicId
+        );
+      }
+    },
   });
 
-  const [leaveStats, setLeaveStats] = useState<any>(null);
-  const [staffLeaveInfo, setStaffLeaveInfo] = useState<{
-    start_date: string | null;
-    annual_leave_history: any;
-    annual_leave_quota: number | null;
-  } | null>(null);
-  const [showAnnualHistory, setShowAnnualHistory] = useState(false);
-
-  const [announcements, setAnnouncements] = useState<any[]>([]);
-  const [managerStats, setManagerStats] = useState<any>(null);
-  const [profile, setProfile] = useState<any>(null);
-  const [isViewLoading, setIsViewLoading] = useState(false);
-
-  const [overtimeSettings, setOvertimeSettings] = useState<{
-    threshold: number;
-    approvalRequired: boolean;
-    clockIgnoreGps: boolean;
-  } | null>(null);
-  const [clinicSettings, setClinicSettings] = useState<any>({});
-  const [showOvertimeConfirm, setShowOvertimeConfirm] = useState(false);
-  const [pendingClockOut, setPendingClockOut] = useState<{
-    lat: number | null;
-    lng: number | null;
-    isBypass: boolean;
-  } | null>(null);
-
-  // 🟢 讀取 Clinic ID：從 URL 參數讀取
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const searchParams = new URLSearchParams(window.location.search);
-      const clinicIdParam = searchParams.get('clinic_id');
-      if (clinicIdParam) {
-        console.log('[Portal] 從 URL 讀取 clinic_id:', clinicIdParam);
-        setClinicId(clinicIdParam);
-      } else {
-        console.warn('[Portal] ⚠️ URL 中沒有 clinic_id 參數');
-      }
+      const c = searchParams.get('clinic_id');
+      if (c) setClinicId(c);
     }
   }, []);
 
-  // 🟢 初始化流程：雙軌並行（LIFF 自動登入 / 網頁手動登入）
+  const hasInitialLoaded = useRef(false);
+  useEffect(() => {
+    if (step !== 'portal') hasInitialLoaded.current = false;
+  }, [step]);
+  useEffect(() => {
+    if (
+      step === 'portal' &&
+      staffUser?.id &&
+      !hasInitialLoaded.current
+    ) {
+      hasInitialLoaded.current = true;
+      portalData.fetchTodayLogs(staffUser.id, staffUser.clinic_id || clinicId);
+      portalData.fetchHomeDataWithStaffId(
+        staffUser.id,
+        staffUser.clinic_id || clinicId
+      );
+    }
+  }, [step, staffUser?.id]);
+
   useEffect(() => {
     const initAuth = async () => {
       try {
-        // 1. 嘗試初始化 LIFF
         let isInLine = false;
         try {
           await liff.init({ liffId: LIFF_ID });
           isInLine = liff.isInClient() && liff.isLoggedIn();
-          
           if (isInLine && !liff.isLoggedIn()) {
-            liff.login(); // 在 LINE 內但未登入，觸發登入
+            liff.login();
             return;
           }
-        } catch (liffError) {
-          // LIFF 初始化失敗（不在 LINE 內或瀏覽器環境）
-          console.log('[Portal] 不在 LINE 環境，使用網頁登入模式');
+        } catch {
           isInLine = false;
         }
 
-        // 2. 分支判斷
         if (isInLine) {
-          // 🟢 情境 A：在 LINE 內，執行 LINE Check/Bind 流程
-          console.log('[Portal] 在 LINE 環境，執行 LINE 綁定流程');
-          
           const profile = await liff.getProfile();
-          const userId = profile.userId;
-          setLineUserId(userId);
-
-          console.log('[Portal] 取得 LINE ID:', userId);
-
-          // 檢查綁定狀態
+          setLineUserId(profile.userId);
           const checkRes = await fetch('/api/auth/line-check', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ lineUserId: userId }),
+            body: JSON.stringify({ lineUserId: profile.userId }),
             credentials: 'include',
           });
-
           if (!checkRes.ok) {
-            console.error('[Portal] line-check 失敗:', checkRes.status);
             setStep('binding');
             return;
           }
-
           const checkResult = await checkRes.json();
-
           if (checkResult.bound && checkResult.staff) {
-            // 已綁定：進入系統（同步設定 clinicId 以利後續 API 參數備援）
-            console.log('[Portal] ✅ 已綁定:', checkResult.staff);
             setStaffUser(checkResult.staff);
-            if (checkResult.staff.clinic_id) setClinicId(checkResult.staff.clinic_id);
+            if (checkResult.staff.clinic_id)
+              setClinicId(checkResult.staff.clinic_id);
             setStep('portal');
-            
-            // 載入資料
-            await fetchTodayLogs(checkResult.staff.id, checkResult.staff.clinic_id ?? clinicId);
-            await fetchHomeDataWithStaffId(checkResult.staff.id, checkResult.staff.clinic_id ?? clinicId);
           } else {
-            // 未綁定：進入綁定模式
-            console.log('[Portal] ⚠️ 未綁定，進入綁定模式');
             setStep('binding');
-    }
+          }
         } else {
-          // 🟢 情境 B：在瀏覽器/電腦，使用網頁登入模式
-          console.log('[Portal] 在瀏覽器環境，檢查 Cookie');
-          // URL 若有 clinic_id 一併帶上，供後端辨識診所（Cookie 可能未帶 clinic_id）
-          const urlClinicId = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('clinic_id') : null;
-          const homeQuery = urlClinicId ? `?type=home&clinic_id=${encodeURIComponent(urlClinicId)}` : '?type=home';
-          // 檢查是否已有有效 Cookie
+          const urlClinicId =
+            typeof window !== 'undefined'
+              ? new URLSearchParams(window.location.search).get('clinic_id')
+              : null;
+          const homeQuery = urlClinicId
+            ? `?type=home&clinic_id=${encodeURIComponent(urlClinicId)}`
+            : '?type=home';
           try {
             const testRes = await fetch(`/api/portal/data${homeQuery}`, {
               credentials: 'include',
             });
-            
             if (testRes.ok) {
               const testResult = await testRes.json();
-              if (testResult.data && testResult.data.profile) {
-                // 已有有效 Cookie，直接進入系統
-                console.log('[Portal] ✅ 已有有效 Cookie，直接進入系統');
+              if (testResult.data?.profile) {
                 const profile = testResult.data.profile;
                 setStaffUser(profile);
                 if (profile.clinic_id) setClinicId(profile.clinic_id);
                 setStep('portal');
-                await fetchTodayLogs(profile.id, profile.clinic_id ?? clinicId);
-                await fetchHomeDataWithStaffId(profile.id, profile.clinic_id ?? clinicId);
-          return;
-        }
+                return;
+              }
             }
-      } catch (e) {
-            console.log('[Portal] Cookie 檢查失敗，顯示登入頁面');
-          }
-          
-          // 若無有效 Cookie，顯示手動登入介面
+          } catch {}
           setStep('login');
         }
       } catch (e) {
-        console.error('[Portal] 初始化錯誤:', e);
-        // 發生錯誤時，顯示手動登入介面
+        console.error('[Portal] 初始化錯誤', e);
         setStep('login');
       }
     };
-
     initAuth();
   }, []);
 
-  // 🟢 手動登入動作
   const handleLogin = async () => {
     if (!loginForm.phone || !loginForm.password) {
       setLoginError('請輸入手機號碼和密碼');
       return;
     }
-
     setLoginError('');
-
     try {
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          phone: loginForm.phone,
-          password: loginForm.password,
-        }),
+        body: JSON.stringify(loginForm),
         credentials: 'include',
       });
-
-      if (!response.ok) {
       const result = await response.json();
+      if (!response.ok) {
         setLoginError(result.message || '帳號或密碼錯誤');
         return;
       }
-
-      const result = await response.json();
-
       if (result.success && result.staff) {
-        // 登入成功：進入系統（同步設定 clinicId）
-        console.log('[Portal] ✅ 登入成功:', result.staff);
         setStaffUser(result.staff);
         if (result.staff.clinic_id) setClinicId(result.staff.clinic_id);
         setStep('portal');
-
-        // 載入資料
-        await fetchTodayLogs(result.staff.id, result.staff.clinic_id ?? clinicId);
-        await fetchHomeDataWithStaffId(result.staff.id, result.staff.clinic_id ?? clinicId);
       } else {
         setLoginError('登入失敗，請稍後再試');
       }
-    } catch (error: any) {
-      console.error('[Portal] 登入錯誤:', error);
+    } catch {
       setLoginError('登入失敗，請稍後再試');
     }
   };
 
-  // 🟢 綁定動作
   const handleBind = async () => {
     if (!bindForm.phone || !bindForm.password) {
       setBindError('請輸入手機號碼和密碼');
       return;
     }
-
     if (!lineUserId) {
       setBindError('無法取得 LINE 帳號資訊，請重新整理頁面');
       return;
     }
-
     if (!clinicId) {
       setBindError('無效的連結，請從診所官方帳號選單進入');
       return;
     }
-
     setBindError('');
-
     try {
       const response = await fetch('/api/auth/line-bind', {
         method: 'POST',
@@ -295,806 +202,31 @@ export default function EmployeePortal() {
           lineUserId,
           phone: bindForm.phone,
           password: bindForm.password,
-          clinicId, // 🔑 SaaS：帶上診所 ID
+          clinicId,
         }),
-        credentials: 'include', // 🔑 關鍵：帶上 Cookie
+        credentials: 'include',
       });
-
-      if (!response.ok) {
       const result = await response.json();
-        if (response.status === 404) {
-          setBindError('找不到員工資料');
-        } else if (response.status === 401) {
-          setBindError('密碼錯誤');
-        } else if (response.status === 409) {
+      if (!response.ok) {
+        if (response.status === 404) setBindError('找不到員工資料');
+        else if (response.status === 401) setBindError('密碼錯誤');
+        else if (response.status === 409)
           setBindError('此帳號已被其他 LINE 綁定');
-        } else {
-          setBindError(result.error || '綁定失敗，請稍後再試');
-        }
+        else setBindError(result.error || '綁定失敗，請稍後再試');
         return;
       }
-
-      const result = await response.json();
-
       if (result.success && result.staff) {
-        // 綁定成功：進入系統（clinicId 已從 URL 或表單帶入）
-        console.log('[Portal] ✅ 綁定成功:', result.staff);
         setStaffUser(result.staff);
         if (result.staff.clinic_id) setClinicId(result.staff.clinic_id);
         setStep('portal');
-
-        // 載入資料
-        await fetchTodayLogs(result.staff.id, result.staff.clinic_id ?? clinicId);
-        await fetchHomeDataWithStaffId(result.staff.id, result.staff.clinic_id ?? clinicId);
       } else {
         setBindError('綁定失敗，請稍後再試');
       }
-    } catch (error: any) {
-      console.error('[Portal] 綁定錯誤:', error);
+    } catch {
       setBindError('綁定失敗，請稍後再試');
     }
   };
 
-  // 根據 view 抓資料（依賴不含 staffUser，避免狀態同步導致無限重抓）
-  useEffect(() => {
-    if (!staffUser?.id || step !== 'portal') return;
-    if (view === 'history') fetchHistory();
-    if (view === 'roster') fetchRoster();
-    if (view === 'leave') fetchLeaveHistory();
-    if (view === 'home') fetchHomeData();
-    if (view === 'profile') fetchProfile();
-  }, [view, selectedMonth, step]);
-
-  const fetchTodayLogs = async (staffId: string, clinicIdParam?: string) => {
-    try {
-      const ym = new Date().toISOString().slice(0, 7);
-      const clinicQ = clinicIdParam ? `&clinic_id=${encodeURIComponent(clinicIdParam)}` : '';
-      const response = await fetch(
-        `/api/portal/data?type=history&staffId=${staffId}&month=${ym}${clinicQ}`,
-        {
-          credentials: 'include',
-        }
-      );
-      
-      if (response.status === 401) {
-        console.error('[Portal] 401 Unauthorized - 請重新登入');
-        return;
-      }
-      
-      const result = await response.json();
-
-      if (result.data) {
-        const today = new Date().toISOString().slice(0, 10);
-        const todayLogs = result.data.filter(
-          (log: any) =>
-            log.clock_in_time && log.clock_in_time.startsWith(today),
-        );
-        setLogs(todayLogs || []);
-      } else {
-        setLogs([]);
-      }
-    } catch (error) {
-      console.error('讀取打卡記錄失敗:', error);
-      setLogs([]);
-    }
-  };
-
-  const fetchHistory = async () => {
-    setIsViewLoading(true);
-    try {
-      const clinicQ = (clinicId || staffUser?.clinic_id) ? `&clinic_id=${encodeURIComponent(clinicId || staffUser?.clinic_id || '')}` : '';
-      const response = await fetch(
-        `/api/portal/data?type=history&staffId=${staffUser.id}&month=${selectedMonth}${clinicQ}`,
-        {
-          credentials: 'include',
-        }
-      );
-      
-      if (response.status === 401) {
-        console.error('[Portal] 401 Unauthorized - 請重新登入');
-        return;
-      }
-      
-      const result = await response.json();
-      setHistoryLogs(result.data || []);
-    } catch (error) {
-      console.error('讀取歷史記錄失敗:', error);
-      setHistoryLogs([]);
-    } finally {
-      setIsViewLoading(false);
-    }
-  };
-
-  const fetchRoster = async () => {
-    try {
-      const clinicQ = (clinicId || staffUser?.clinic_id) ? `&clinic_id=${encodeURIComponent(clinicId || staffUser?.clinic_id || '')}` : '';
-      const response = await fetch(
-        `/api/portal/data?type=roster&staffId=${staffUser.id}${clinicQ}`,
-        {
-          credentials: 'include',
-        }
-      );
-      
-      if (response.status === 401) {
-        console.error('[Portal] 401 Unauthorized - 請重新登入');
-        return;
-      }
-      
-      const result = await response.json();
-
-      const sorted = (result.data || []).sort((a: any, b: any) => {
-        if (a.date !== b.date) return (a?.date || '').localeCompare(b?.date || '');
-        const order: Record<string, number> = { AM: 1, PM: 2, NIGHT: 3 };
-        const aOrder = order[a.shift_code] || 999;
-        const bOrder = order[b.shift_code] || 999;
-        return aOrder - bOrder;
-      });
-
-      setRosterData(sorted);
-    } catch (error) {
-      console.error('讀取班表失敗:', error);
-      setRosterData([]);
-    }
-  };
-
-  const fetchLeaveHistory = async () => {
-    setIsViewLoading(true);
-    try {
-      const clinicQ = (clinicId || staffUser?.clinic_id) ? `&clinic_id=${encodeURIComponent(clinicId || staffUser?.clinic_id || '')}` : '';
-      const response = await fetch(
-        `/api/portal/data?type=leave&staffId=${staffUser.id}${clinicQ}`,
-        {
-          credentials: 'include',
-        }
-      );
-      
-      if (response.status === 401) {
-        console.error('[Portal] 401 Unauthorized - 請重新登入');
-        return;
-      }
-      
-      const result = await response.json();
-
-      if (result.data && typeof result.data === 'object' && 'leaves' in result.data) {
-        setLeaveHistory(result.data.leaves || []);
-        setLeaveStats(result.data.stats || {});
-        setStaffLeaveInfo(result.data.staffInfo || null);
-      } else {
-        setLeaveHistory(result.data || []);
-        setLeaveStats({});
-        setStaffLeaveInfo(null);
-      }
-    } catch (error) {
-      console.error('讀取請假記錄失敗:', error);
-      setLeaveHistory([]);
-      setLeaveStats({});
-    } finally {
-      setIsViewLoading(false);
-    }
-  };
-
-  const fetchHomeDataWithStaffId = async (staffId: string, clinicIdParam?: string) => {
-    setIsViewLoading(true);
-    try {
-      const clinicQ = clinicIdParam ? `&clinic_id=${encodeURIComponent(clinicIdParam)}` : '';
-      const response = await fetch(
-        `/api/portal/data?type=home&staffId=${staffId}${clinicQ}`,
-        {
-          credentials: 'include',
-        }
-      );
-      
-      if (response.status === 401) {
-        console.error('[Portal] 401 Unauthorized - 請重新登入');
-        return;
-      }
-      
-      const json = await response.json();
-
-      console.log('[Portal] 首頁資料 API 回應:', json);
-
-      const profileData = json.data?.profile || json.profile || null;
-      if (profileData) {
-        console.log('[Portal] ✅ 設定 Profile:', profileData);
-        setProfile(profileData);
-        setStaffUser((prev: any) => {
-          if (prev && prev.admin_role !== profileData.admin_role) {
-            return { ...prev, admin_role: profileData.admin_role };
-          }
-          return prev;
-        });
-      }
-
-      const statsData = json.data?.managerStats ?? json.managerStats ?? null;
-      if (statsData) setManagerStats(statsData);
-      else setManagerStats(null);
-
-      const announcementData = json.data?.announcements || json.announcements || [];
-      if (Array.isArray(announcementData)) {
-        console.log('[Portal] ✅ 設定公告:', announcementData.length, '則');
-        setAnnouncements(announcementData);
-      } else {
-        setAnnouncements([]);
-      }
-
-      const logsData = json.data?.todayLogs || json.todayLogs || [];
-      if (Array.isArray(logsData)) {
-        setLogs(logsData);
-      }
-
-      if (json.data?.clinicSettings) {
-        setClinicSettings(json.data.clinicSettings);
-      }
-    } catch (error) {
-      console.error('[Portal] 讀取首頁資料失敗:', error);
-      setAnnouncements([]);
-    } finally {
-      setIsViewLoading(false);
-    }
-  };
-
-  const fetchHomeData = async () => {
-    if (!staffUser?.id) return;
-    await fetchHomeDataWithStaffId(staffUser.id, clinicId || staffUser?.clinic_id);
-  };
-
-  const fetchProfile = async () => {
-    if (!staffUser?.id) return;
-    try {
-      const clinicQ = (clinicId || staffUser?.clinic_id) ? `&clinic_id=${encodeURIComponent(clinicId || staffUser?.clinic_id || '')}` : '';
-      const response = await fetch(
-        `/api/portal/data?type=home&staffId=${staffUser.id}${clinicQ}`,
-        {
-          credentials: 'include',
-        }
-      );
-      
-      if (response.status === 401) {
-        console.error('[Portal] 401 Unauthorized - 請重新登入');
-        return;
-      }
-      
-      const json = await response.json();
-
-      const profileData = json.data?.profile || json.profile || null;
-      if (profileData) {
-        setProfile(profileData);
-      }
-    } catch (error) {
-      console.error('[Portal] 讀取個人資料失敗:', error);
-    }
-  };
-
-  const updateProfile = async (payload: {
-    phone: string;
-    address: string;
-    emergency_contact: string;
-  }) => {
-    try {
-      const response = await fetch('/api/staff/profile', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          staff_id: staffUser.id,
-          phone: payload.phone,
-          address: payload.address,
-          emergency_contact: payload.emergency_contact,
-        }),
-        credentials: 'include',
-      });
-
-      if (response.status === 401) {
-        alert('❌ 請重新登入');
-        return;
-      }
-
-      const result = await response.json();
-
-      if (!response.ok || !result.success) {
-        throw new Error(result.message || result.error || '更新失敗');
-      }
-
-      alert('✅ 個人資料已更新');
-      
-        setProfile((prev: any) =>
-          prev
-            ? {
-                ...prev,
-                phone: payload.phone,
-                address: payload.address,
-                emergency_contact: payload.emergency_contact,
-              }
-            : prev,
-        );
-      
-      await fetchProfile();
-    } catch (error: any) {
-      console.error('[Portal] 更新個人資料失敗:', error);
-      alert(`❌ ${error.message || '更新失敗，請稍後再試'}`);
-    }
-  };
-
-  useEffect(() => {
-    if (!staffUser) return;
-    fetch('/api/settings?type=clinic', {
-      credentials: 'include',
-    })
-      .then((res) => {
-        if (res.status === 401) {
-          console.error('[Portal] 401 Unauthorized - 請重新登入');
-          return { data: null };
-        }
-        return res.json();
-      })
-      .then((result) => {
-        if (result.data) {
-          setOvertimeSettings({
-            threshold: result.data.overtime_threshold || 9,
-            approvalRequired:
-              result.data.overtime_approval_required !== false,
-            clockIgnoreGps: result.data.clock_ignore_gps === true,
-          });
-        }
-      })
-      .catch((err) =>
-        console.error('Error fetching overtime settings:', err),
-      );
-  }, [staffUser]);
-
-  const submitMissedPunch = async (form: MissedPunchForm) => {
-    if (!form.date || !form.reason) {
-      alert('請填寫日期和原因');
-      return;
-    }
-    if (form.correctionType === 'check_in' && !form.startTime) {
-      alert('請填寫上班時間');
-      return;
-    }
-    if (form.correctionType === 'check_out' && !form.endTime) {
-      alert('請填寫下班時間');
-      return;
-    }
-    if (
-      form.correctionType === 'full' &&
-      (!form.startTime || !form.endTime)
-    ) {
-      alert('補全天請填寫上班和下班時間');
-      return;
-    }
-
-    let startFull: string | null = null;
-    let endFull: string | null = null;
-    let leaveType = '';
-
-    if (form.correctionType === 'check_in') {
-      startFull = new Date(
-        `${form.date}T${form.startTime}`,
-      ).toISOString();
-      endFull = startFull;
-      leaveType = '上班';
-    } else if (form.correctionType === 'check_out') {
-      startFull = new Date(`${form.date}T09:00`).toISOString();
-      endFull = new Date(
-        `${form.date}T${form.endTime}`,
-      ).toISOString();
-      leaveType = '下班';
-    } else if (form.correctionType === 'full') {
-      startFull = new Date(
-        `${form.date}T${form.startTime}`,
-      ).toISOString();
-      endFull = new Date(
-        `${form.date}T${form.endTime}`,
-      ).toISOString();
-      leaveType = '全天';
-    }
-
-    try {
-      const response = await fetch('/api/leave', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          staff_id: staffUser.id,
-          staff_name: staffUser.name,
-          type: '補打卡',
-          leave_type: leaveType,
-          start_time: startFull,
-          end_time: endFull,
-          hours: 0,
-          reason: form.reason,
-          status: 'pending',
-        }),
-        credentials: 'include',
-      });
-      
-      if (response.status === 401) {
-        alert('❌ 請重新登入');
-        return;
-      }
-
-      const result = await response.json();
-
-      if (result.success) {
-        alert('✅ 補打卡申請已送出，待主管審核。');
-        fetchLeaveHistory();
-      } else {
-        alert('申請失敗: ' + (result.message || result.error));
-      }
-    } catch (error: any) {
-      console.error('Submit missed punch error:', error);
-      alert('申請失敗: ' + error.message);
-    }
-  };
-
-  const reportAnomaly = async (logId: number) => {
-    const reason = prompt('請輸入異常原因 (例如: 忘記打卡)');
-    if (!reason) return;
-
-    try {
-      const response = await fetch('/api/attendance', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: logId,
-          anomaly_reason: reason,
-        }),
-        credentials: 'include',
-      });
-      
-      if (response.status === 401) {
-        alert('❌ 請重新登入');
-        return;
-      }
-
-      const result = await response.json();
-      if (result.success) {
-        alert('已送出');
-        fetchHistory();
-      } else {
-        alert('更新失敗: ' + (result.message || result.error));
-      }
-    } catch (error: any) {
-      console.error('Report anomaly error:', error);
-      alert('更新失敗: ' + error.message);
-    }
-  };
-
-  const submitLeave = async () => {
-    if (!leaveForm.startDate || !leaveForm.endDate) {
-      alert('請填寫完整日期');
-      return;
-    }
-    const startT = new Date(
-      `${leaveForm.startDate}T${leaveForm.startTime}`,
-    ).toISOString();
-    const endT = new Date(
-      `${leaveForm.endDate}T${leaveForm.endTime}`,
-    ).toISOString();
-    const diff =
-      (new Date(endT).getTime() - new Date(startT).getTime()) /
-      3600000;
-
-    try {
-      const response = await fetch('/api/leave', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          staff_id: staffUser.id,
-          staff_name: staffUser.name,
-          type: leaveForm.type,
-          start_time: startT,
-          end_time: endT,
-          hours: diff.toFixed(1),
-          reason: leaveForm.reason,
-          status: 'pending',
-        }),
-        credentials: 'include',
-      });
-      
-      if (response.status === 401) {
-        alert('❌ 請重新登入');
-        return;
-      }
-
-      const result = await response.json();
-
-      if (result.success) {
-        alert('假單已送出');
-        setLeaveForm({ ...leaveForm, reason: '' });
-        fetchLeaveHistory();
-      } else {
-        alert('申請失敗: ' + (result.message || result.error));
-      }
-    } catch (error: any) {
-      console.error('Submit leave error:', error);
-      alert('申請失敗: ' + error.message);
-    }
-  };
-
-  // 🟢 掃碼打卡：LINE 原生掃描器，綁定連結辨識、靜態/動態條碼與 60 秒時間防偽驗證
-  const onScanClock = async () => {
-    if (!liff.isInClient()) {
-      alert('⚠️ 請在 LINE App 內開啟此頁面以使用掃碼功能');
-      return;
-    }
-
-    try {
-      const result = await liff.scanCodeV2();
-      const scannedUrl = result.value;
-
-      if (!scannedUrl) return;
-
-      // 🟢 關鍵修復：加入 500ms 延遲，確保 LINE 相機 UI 完整收合，避免畫面卡死
-      setTimeout(() => {
-        const currentClinicId = profile?.clinic_id || staffUser?.clinic_id;
-
-        // 1. 擋掉誤掃綁定條碼
-        if (
-          scannedUrl.includes('liff.line.me') &&
-          scannedUrl.includes(currentClinicId ?? '')
-        ) {
-          alert(
-            'ℹ️ 這是員工綁定專用的 QR Code。\n您已登入系統，請掃描「打卡專用」的條碼。'
-          );
-          return;
-        }
-
-        if (!currentClinicId) {
-          alert('❌ 無法取得診所資訊，請重新登入。');
-          return;
-        }
-
-        // 2. 檢查是否掃到「打卡條碼」
-        if (scannedUrl.includes(currentClinicId)) {
-          const isDynamic = scannedUrl.includes('clockin_dynamic_');
-          const isStatic = scannedUrl.includes('clockin_static_');
-
-          // 3. 🟢 動態防偽驗證（格式: clockin_dynamic_{clinicId}_{timestamp}_{kioskToken}）
-          if (isDynamic) {
-            const parts = scannedUrl.split('_');
-            const token = parts[parts.length - 1];
-            const timestamp = parseInt(parts[parts.length - 2], 10);
-
-            if (!Number.isFinite(timestamp) || Date.now() - timestamp > 60000) {
-              alert('❌ 條碼已過期！\n請掃描平板上最新的動態 QR Code。');
-              return;
-            }
-            if (
-              clinicSettings?.kiosk_token &&
-              token !== clinicSettings.kiosk_token
-            ) {
-              alert(
-                '❌ 來源無效！\n此端點機連結已作廢，請掃描現場最新條碼。'
-              );
-              return;
-            }
-            setBypassMode(true);
-          }
-
-          // 🟢 靜態金鑰驗證
-          if (isStatic) {
-            const parts = scannedUrl.split('_');
-            const token = parts[parts.length - 1];
-            if (
-              clinicSettings?.static_qr_token &&
-              token !== clinicSettings.static_qr_token
-            ) {
-              alert(
-                '❌ 無效的條碼！\n此條碼已作廢，請掃描診所現場最新的打卡條碼。'
-              );
-              return;
-            }
-          }
-
-          const action = isWorking ? 'out' : 'in';
-          if (
-            window.confirm(
-              `✅ 掃描成功！\n請確認是否進行「${action === 'in' ? '上班' : '下班'}」打卡？`
-            )
-          ) {
-            executeClock(action, isDynamic);
-          }
-        } else {
-          alert('❌ 無效的 QR Code：此條碼不屬於本診所，或格式錯誤。');
-        }
-      }, 500);
-    } catch (error: any) {
-      console.error('[Portal] 掃描失敗:', error);
-      if (error?.message && error.message.includes('permission')) {
-        alert('❌ 掃描失敗：請檢查是否已授權 LINE 使用相機權限。');
-      } else {
-        alert('掃描功能暫時無法使用，請使用一般 GPS 打卡。');
-      }
-    }
-  };
-
-  const executeClock = async (action: 'in' | 'out', forceBypassFromScan?: boolean) => {
-    if (isPunching) return;
-    setIsPunching(true);
-    try {
-      if (action === 'out' && logs.length > 0 && logs[0].clock_in_time) {
-        const clockInTime = new Date(logs[0].clock_in_time);
-        const now = new Date();
-        const workHours =
-          (now.getTime() - clockInTime.getTime()) /
-          (1000 * 60 * 60);
-        const threshold = overtimeSettings?.threshold || 9;
-
-        if (workHours > threshold) {
-          setPendingClockOut({
-            lat: null,
-            lng: null,
-            isBypass: false,
-          });
-          setShowOvertimeConfirm(true);
-          setIsPunching(false);
-          return;
-        }
-      }
-
-      // 僅在：手動救援模式、診所設定忽略 GPS、或掃碼動態條碼 時免除 GPS，其餘一律走距離驗證
-      const skipGps = bypassMode || overtimeSettings?.clockIgnoreGps === true || forceBypassFromScan === true;
-      if (skipGps) {
-        try {
-          await submitLog(action, null, null, skipGps, false);
-        } finally {
-          setIsPunching(false);
-        }
-        return;
-      }
-      setGpsStatus('locating');
-      if (!navigator.geolocation) {
-        alert('GPS 未開');
-        setGpsStatus('error');
-        setIsPunching(false);
-        return;
-      }
-      navigator.geolocation.getCurrentPosition(
-        async (pos) => {
-          try {
-            const { latitude, longitude } = pos.coords;
-            const clinicLat = clinicSettings?.gps_lat;
-            const clinicLng = clinicSettings?.gps_lng;
-            const allowedRadius = clinicSettings?.gps_radius ?? 150;
-
-            if (clinicLat == null || clinicLng == null) {
-              alert('系統尚未設定診所 GPS 座標，請聯繫管理員。');
-              setGpsStatus('error');
-              setIsPunching(false);
-              return;
-            }
-
-            const d = getDist(latitude, longitude, clinicLat, clinicLng);
-            setDist(Math.round(d));
-            if (d <= allowedRadius) {
-              setGpsStatus('ok');
-              if (
-                action === 'out' &&
-                logs.length > 0 &&
-                logs[0].clock_in_time
-              ) {
-                const clockInTime = new Date(logs[0].clock_in_time);
-                const now = new Date();
-                const workHours =
-                  (now.getTime() - clockInTime.getTime()) /
-                  (1000 * 60 * 60);
-                const threshold = overtimeSettings?.threshold || 9;
-                if (workHours > threshold) {
-                  setPendingClockOut({
-                    lat: latitude,
-                    lng: longitude,
-                    isBypass: false,
-                  });
-                  setShowOvertimeConfirm(true);
-                  return;
-                }
-              }
-              await submitLog(action, latitude, longitude, false, false);
-            } else {
-              setGpsStatus('out_of_range');
-              alert(`距離太遠 (${Math.round(d)}m)`);
-            }
-          } finally {
-            setIsPunching(false);
-          }
-        },
-        (err) => {
-          console.error(err);
-          setGpsStatus('error');
-          alert('定位失敗');
-          setIsPunching(false);
-        },
-        { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 },
-      );
-    } catch (e) {
-      setIsPunching(false);
-    }
-  };
-
-  const submitLog = async (
-    action: 'in' | 'out',
-    lat: number | null,
-    lng: number | null,
-    isBypass: boolean,
-    applyOvertime: boolean = false,
-  ) => {
-    try {
-      if (action === 'in') {
-        const response = await fetch('/api/attendance/clock', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'in',
-            staffId: staffUser.id,
-            staffName: staffUser.name,
-            gpsLat: lat,
-            gpsLng: lng,
-            isBypass: isBypass,
-          }),
-          credentials: 'include',
-        });
-        
-        if (response.status === 401) {
-          alert('❌ 請重新登入');
-          return;
-        }
-        const result = await response.json();
-        if (!result.success) throw new Error(result.message || '打卡失敗');
-        alert('上班打卡成功！');
-      } else {
-        const lastLog = logs.find((l) => !l.clock_out_time);
-        if (!lastLog) {
-          alert('無上班紀錄');
-          return;
-        }
-
-        const response = await fetch('/api/attendance/clock', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'out',
-            staffId: staffUser.id,
-            staffName: staffUser.name,
-            logId: lastLog.id,
-            gpsLat: lat,
-            gpsLng: lng,
-            isBypass: isBypass,
-            applyOvertime,
-          }),
-          credentials: 'include',
-        });
-        
-        if (response.status === 401) {
-          alert('❌ 請重新登入');
-          return;
-        }
-        const result = await response.json();
-        if (!result.success) throw new Error(result.message || '打卡失敗');
-        alert('下班打卡成功！');
-      }
-      await fetchTodayLogs(staffUser.id, clinicId || staffUser?.clinic_id);
-      setGpsStatus('idle');
-      setBypassMode(false);
-    } catch (err: any) {
-      console.error('打卡錯誤:', err);
-      alert('錯誤：' + (err.message || '打卡失敗，請重試'));
-    }
-  };
-
-  const handleOvertimeConfirm = async (apply: boolean) => {
-    setShowOvertimeConfirm(false);
-    if (pendingClockOut) {
-      await submitLog(
-        'out',
-        pendingClockOut.lat,
-        pendingClockOut.lng,
-        pendingClockOut.isBypass,
-        apply,
-      );
-      setPendingClockOut(null);
-    }
-  };
-
-  // 🟢 UI 呈現：Loading
   if (step === 'loading') {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50">
@@ -1104,7 +236,6 @@ export default function EmployeePortal() {
     );
   }
 
-  // 🟢 UI 呈現：手動登入 (網頁登入)
   if (step === 'login') {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6">
@@ -1113,16 +244,12 @@ export default function EmployeePortal() {
             <User className="w-8 h-8 text-blue-600" />
           </div>
           <h2 className="text-2xl font-bold mb-2 text-slate-800">員工系統登入</h2>
-          <p className="text-slate-500 mb-6 text-sm">
-            請輸入手機號碼和密碼進行登入
-          </p>
-          
+          <p className="text-slate-500 mb-6 text-sm">請輸入手機號碼和密碼進行登入</p>
           {loginError && (
             <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm">
               {loginError}
             </div>
           )}
-
           <div className="space-y-4 text-left">
             <div>
               <label className="block text-sm font-bold text-slate-700 mb-2">手機號碼</label>
@@ -1133,11 +260,9 @@ export default function EmployeePortal() {
                   setLoginForm({ ...loginForm, phone: e.target.value });
                   if (loginError) setLoginError('');
                 }}
-              className="w-full p-3 border rounded-xl bg-slate-50 font-bold"
+                className="w-full p-3 border rounded-xl bg-slate-50 font-bold"
                 placeholder="例如：0912345678"
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter') handleLogin();
-                }}
+                onKeyPress={(e) => e.key === 'Enter' && handleLogin()}
               />
             </div>
             <div>
@@ -1151,9 +276,7 @@ export default function EmployeePortal() {
                 }}
                 className="w-full p-3 border rounded-xl bg-slate-50 font-bold"
                 placeholder="請輸入密碼"
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter') handleLogin();
-                }}
+                onKeyPress={(e) => e.key === 'Enter' && handleLogin()}
               />
             </div>
             <button
@@ -1168,7 +291,6 @@ export default function EmployeePortal() {
     );
   }
 
-  // 🟢 UI 呈現：Binding (首次使用 - SaaS 模式)
   if (step === 'binding') {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6">
@@ -1177,8 +299,6 @@ export default function EmployeePortal() {
             <Lock className="w-8 h-8 text-teal-600" />
           </div>
           <h2 className="text-2xl font-bold mb-2 text-slate-800">歡迎使用員工系統</h2>
-          
-          {/* 🔑 SaaS：顯示診所資訊 */}
           {clinicId ? (
             <div className="mb-4 p-3 bg-teal-50 border border-teal-200 rounded-xl">
               <p className="text-sm text-teal-700 font-bold">
@@ -1187,22 +307,15 @@ export default function EmployeePortal() {
             </div>
           ) : (
             <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl">
-              <p className="text-sm text-red-600 font-bold">
-                ⚠️ 無效的連結，請從診所官方帳號選單進入
-              </p>
+              <p className="text-sm text-red-600 font-bold">⚠️ 無效的連結，請從診所官方帳號選單進入</p>
             </div>
           )}
-
-          <p className="text-slate-500 mb-6 text-sm">
-            初次使用請輸入手機與預設密碼進行身份綁定
-          </p>
-          
+          <p className="text-slate-500 mb-6 text-sm">初次使用請輸入手機與預設密碼進行身份綁定</p>
           {bindError && (
             <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm">
               {bindError}
             </div>
           )}
-
           <div className="space-y-4 text-left">
             <div>
               <label className="block text-sm font-bold text-slate-700 mb-2">手機號碼</label>
@@ -1212,27 +325,25 @@ export default function EmployeePortal() {
                 onChange={(e) => setBindForm({ ...bindForm, phone: e.target.value })}
                 className="w-full p-3 border rounded-xl bg-slate-50 font-bold"
                 placeholder="例如：0912345678"
-                disabled={!clinicId} // 若無 clinicId，禁用輸入
+                disabled={!clinicId}
               />
             </div>
             <div>
               <label className="block text-sm font-bold text-slate-700 mb-2">預設密碼</label>
-            <input
-              type="password"
-              value={bindForm.password}
+              <input
+                type="password"
+                value={bindForm.password}
                 onChange={(e) => setBindForm({ ...bindForm, password: e.target.value })}
-              className="w-full p-3 border rounded-xl bg-slate-50 font-bold"
+                className="w-full p-3 border rounded-xl bg-slate-50 font-bold"
                 placeholder="預設為 0000"
-                disabled={!clinicId} // 若無 clinicId，禁用輸入
-            />
+                disabled={!clinicId}
+              />
             </div>
             <button
               onClick={handleBind}
-              disabled={!clinicId} // 若無 clinicId，禁用按鈕
+              disabled={!clinicId}
               className={`w-full py-4 rounded-xl font-bold shadow-lg mt-4 transition ${
-                clinicId
-                  ? 'bg-teal-600 text-white hover:bg-teal-700'
-                  : 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                clinicId ? 'bg-teal-600 text-white hover:bg-teal-700' : 'bg-slate-300 text-slate-500 cursor-not-allowed'
               }`}
             >
               驗證並綁定
@@ -1243,7 +354,6 @@ export default function EmployeePortal() {
     );
   }
 
-  // 🟢 UI 呈現：Portal (主系統)
   if (step !== 'portal' || !staffUser) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 text-sm text-slate-400">
@@ -1252,16 +362,11 @@ export default function EmployeePortal() {
     );
   }
 
-  const isWorking = logs.length > 0 && !logs[0].clock_out_time;
-
-  // 加班確認 Modal
-  if (showOvertimeConfirm && logs.length > 0 && logs[0].clock_in_time) {
-    const clockInTime = new Date(logs[0].clock_in_time);
-    const now = new Date();
+  if (clocking.showOvertimeConfirm && portalData.logs.length > 0 && portalData.logs[0].clock_in_time) {
+    const clockInTime = new Date(portalData.logs[0].clock_in_time);
     const workHours =
-      (now.getTime() - clockInTime.getTime()) / (1000 * 60 * 60);
-    const threshold = overtimeSettings?.threshold || 9;
-
+      (Date.now() - clockInTime.getTime()) / (1000 * 60 * 60);
+    const threshold = portalData.overtimeSettings?.threshold || 9;
     return (
       <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
         <div className="bg-white w-full max-w-sm rounded-2xl p-6 space-y-4">
@@ -1269,32 +374,22 @@ export default function EmployeePortal() {
             <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <Clock size={32} className="text-orange-600" />
             </div>
-            <h3 className="text-xl font-bold text-slate-800 mb-2">
-              加班確認
-            </h3>
+            <h3 className="text-xl font-bold text-slate-800 mb-2">加班確認</h3>
             <p className="text-sm text-slate-600">
-              今日工時已達{' '}
-              <span className="font-bold text-orange-600">
-                {workHours.toFixed(1)}
-              </span>{' '}
-              小時。
+              今日工時已達 <span className="font-bold text-orange-600">{workHours.toFixed(1)}</span> 小時。
             </p>
-            <p className="text-sm text-slate-700 font-bold mt-2">
-              是否申請加班？
-            </p>
-            <p className="text-xs text-slate-400 mt-1">
-              (加班門檻: {threshold} 小時)
-            </p>
+            <p className="text-sm text-slate-700 font-bold mt-2">是否申請加班？</p>
+            <p className="text-xs text-slate-400 mt-1">(加班門檻: {threshold} 小時)</p>
           </div>
           <div className="space-y-2">
             <button
-              onClick={() => handleOvertimeConfirm(true)}
+              onClick={() => clocking.handleOvertimeConfirm(true)}
               className="w-full bg-orange-600 text-white py-3 rounded-xl font-bold hover:bg-orange-700 transition"
             >
               是，申請加班
             </button>
             <button
-              onClick={() => handleOvertimeConfirm(false)}
+              onClick={() => clocking.handleOvertimeConfirm(false)}
               className="w-full bg-slate-200 text-slate-700 py-3 rounded-xl font-bold hover:bg-slate-300 transition"
             >
               否，正常下班
@@ -1305,69 +400,62 @@ export default function EmployeePortal() {
     );
   }
 
-  // 主畫面：各 View + 底部導航
   return (
     <div className="relative">
-      {/* 🟢 全域讀取毛玻璃遮罩 */}
-      {isViewLoading && (
+      {portalData.isViewLoading && (
         <div className="fixed inset-0 z-[100] bg-slate-50/60 backdrop-blur-[2px] flex flex-col items-center justify-center pb-20 transition-all duration-300">
           <div className="w-12 h-12 border-4 border-teal-200 border-t-teal-600 rounded-full animate-spin shadow-lg" />
           <span className="mt-4 text-teal-800 font-bold tracking-widest text-sm animate-pulse">資料同步中...</span>
         </div>
       )}
 
-      {/* Home：優先使用 API 回傳的 profile（含 admin_role），主管儀表板才能正確顯示 */}
-      {view === 'home' && (
+      {portalData.view === 'home' && (
         <HomeView
-          staffUser={profile || staffUser}
+          staffUser={portalData.profile || staffUser}
           isWorking={isWorking}
-          logs={logs}
-          gpsStatus={gpsStatus}
-          announcements={announcements}
-          managerStats={managerStats}
-          isPunching={isPunching}
-          onClockIn={() => executeClock('in')}
-          onClockOut={() => executeClock('out')}
-          onScanClock={onScanClock}
-          bypassMode={bypassMode}
-          setBypassMode={setBypassMode}
+          logs={portalData.logs}
+          gpsStatus={clocking.gpsStatus}
+          announcements={portalData.announcements}
+          managerStats={portalData.managerStats}
+          isPunching={clocking.isPunching}
+          onClockIn={() => clocking.executeClock('in')}
+          onClockOut={() => clocking.executeClock('out')}
+          onScanClock={clocking.onScanClock}
+          bypassMode={clocking.bypassMode}
+          setBypassMode={clocking.setBypassMode}
         />
       )}
 
-      {/* History */}
-      {view === 'history' && (
+      {portalData.view === 'history' && (
         <HistoryView
           staffUser={staffUser}
-          logs={historyLogs}
-          selectedMonth={selectedMonth}
-          setSelectedMonth={setSelectedMonth}
-          onReportAnomaly={reportAnomaly}
-          onSubmitMissedPunch={submitMissedPunch}
+          logs={portalData.historyLogs}
+          selectedMonth={portalData.selectedMonth}
+          setSelectedMonth={portalData.setSelectedMonth}
+          onReportAnomaly={portalData.reportAnomaly}
+          onSubmitMissedPunch={portalData.submitMissedPunch}
         />
       )}
 
-      {/* Roster */}
-      {view === 'roster' && (
-        <RosterView rosterData={rosterData} staffUser={staffUser} />
+      {portalData.view === 'roster' && (
+        <RosterView rosterData={portalData.rosterData} staffUser={staffUser} />
       )}
 
-      {/* Leave */}
-      {view === 'leave' && (
+      {portalData.view === 'leave' && (
         <LeaveView
           staffUser={staffUser}
-          leaveForm={leaveForm}
-          setLeaveForm={setLeaveForm}
-          onSubmitLeave={submitLeave}
-          leaveHistory={leaveHistory}
-          leaveStats={leaveStats}
-          staffLeaveInfo={staffLeaveInfo}
-          showAnnualHistory={showAnnualHistory}
-          setShowAnnualHistory={setShowAnnualHistory}
+          leaveForm={portalData.leaveForm}
+          setLeaveForm={portalData.setLeaveForm}
+          onSubmitLeave={portalData.submitLeave}
+          leaveHistory={portalData.leaveHistory}
+          leaveStats={portalData.leaveStats}
+          staffLeaveInfo={portalData.staffLeaveInfo}
+          showAnnualHistory={portalData.showAnnualHistory}
+          setShowAnnualHistory={portalData.setShowAnnualHistory}
         />
       )}
 
-      {/* Payslip */}
-      {view === 'payslip' && (
+      {portalData.view === 'payslip' && (
         <div className="min-h-screen bg-slate-50 pb-24 max-w-md mx-auto shadow-2xl relative">
           <div className="p-4">
             <PortalSalaryView user={staffUser} />
@@ -1375,16 +463,15 @@ export default function EmployeePortal() {
         </div>
       )}
 
-      {/* Profile */}
-      {view === 'profile' && (
+      {portalData.view === 'profile' && (
         <ProfileView
-          user={profile || staffUser}
+          user={portalData.profile || staffUser}
           staffUser={staffUser}
-          onUpdateProfile={updateProfile}
+          onUpdateProfile={portalData.updateProfile}
         />
       )}
 
-      <BottomNav view={view} setView={setView} />
+      <BottomNav view={portalData.view} setView={portalData.setView} />
     </div>
   );
 }
