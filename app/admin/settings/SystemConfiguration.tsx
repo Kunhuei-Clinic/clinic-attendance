@@ -699,7 +699,7 @@ export default function SystemConfiguration() {
         {/* 加班設定 */}
         <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 transition-all">
           <div className="flex justify-between items-center cursor-pointer select-none" onClick={() => toggleSection('overtime')}>
-            <label className="text-sm font-bold text-slate-700 flex items-center gap-2"><Clock size={16}/> 加班規則設定</label>
+            <label className="text-sm font-bold text-slate-700 flex items-center gap-2"><Clock size={16}/> 診所位置與打卡加班規則設定</label>
             {expanded.overtime ? <ChevronUp size={20} className="text-slate-400"/> : <ChevronDown size={20} className="text-slate-400"/>}
           </div>
           {expanded.overtime && (
@@ -725,7 +725,7 @@ export default function SystemConfiguration() {
                   onChange={(e) => setOvertimeApprovalRequired(e.target.checked)}
                   className="w-5 h-5"
                 />
-                <label htmlFor="overtime_approval" className="text-sm font-bold text-slate-700">需要主管審核</label>
+                <label htmlFor="overtime_approval" className="text-sm font-bold text-slate-700">加班需要主管審核</label>
               </div>
               <div className="flex items-center gap-3 pt-2">
                 <input

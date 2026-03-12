@@ -62,7 +62,6 @@ export default function HomeView(props: HomeViewProps) {
   // 雙重身分驗證：讀取新的 admin_role 欄位
   const isManager =
     staffUser?.admin_role === 'owner' || staffUser?.admin_role === 'manager';
-  const isVip = staffUser?.role === '醫師' || staffUser?.role === '主管';
 
   const greeting = getGreeting();
   const gpsStatusText = getGpsStatusText(gpsStatus);
@@ -134,30 +133,26 @@ export default function HomeView(props: HomeViewProps) {
             </p>
           )}
 
-          {/* 救援模式（非 VIP） */}
-          {!isVip && (
-            <div className="mt-4 pt-4 border-t border-slate-100 text-center">
-              {!bypassMode ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (
-                      window.confirm('啟用救援模式？將標記為異常打卡')
-                    ) {
-                      setBypassMode(true);
-                    }
-                  }}
-                  className="text-xs text-slate-500 underline hover:text-slate-700"
-                >
-                  GPS 定位不到？開啟救援模式
-                </button>
-              ) : (
-                <div className="inline-flex items-center gap-1.5 bg-red-50 text-red-600 px-3 py-2 rounded-xl text-xs font-medium border border-red-100">
-                  <AlertCircle size={12} /> 救援模式已啟用（異常標記）
-                </div>
-              )}
-            </div>
-          )}
+          {/* 救援模式（全體適用） */}
+          <div className="mt-4 pt-4 border-t border-slate-100 text-center">
+            {!bypassMode ? (
+              <button
+                type="button"
+                onClick={() => {
+                  if (window.confirm('啟用救援模式？將標記為異常打卡')) {
+                    setBypassMode(true);
+                  }
+                }}
+                className="text-xs text-slate-500 underline hover:text-slate-700"
+              >
+                GPS 定位不到？開啟救援模式
+              </button>
+            ) : (
+              <div className="inline-flex items-center gap-1.5 bg-red-50 text-red-600 px-3 py-2 rounded-xl text-xs font-medium border border-red-100">
+                <AlertCircle size={12} /> 救援模式已啟用（異常標記）
+              </div>
+            )}
+          </div>
         </div>
       </section>
 

@@ -911,9 +911,6 @@ export default function EmployeePortal() {
     if (isPunching) return;
     setIsPunching(true);
     try {
-      const isVip =
-        staffUser.role === '醫師' || staffUser.role === '主管';
-
       if (action === 'out' && logs.length > 0 && logs[0].clock_in_time) {
         const clockInTime = new Date(logs[0].clock_in_time);
         const now = new Date();
@@ -934,9 +931,9 @@ export default function EmployeePortal() {
         }
       }
 
-      // 診所設定「忽略 GPS」、手動救援模式、或掃碼動態條碼：不讀取、不寫入 GPS，直接送出打卡
+      // 僅在：手動救援模式、診所設定忽略 GPS、或掃碼動態條碼 時免除 GPS，其餘一律走距離驗證
       const skipGps = bypassMode || overtimeSettings?.clockIgnoreGps === true || forceBypassFromScan === true;
-      if (isVip || skipGps) {
+      if (skipGps) {
         try {
           await submitLog(action, null, null, skipGps, false);
         } finally {
