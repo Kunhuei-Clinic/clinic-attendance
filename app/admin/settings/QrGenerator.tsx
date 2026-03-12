@@ -134,28 +134,70 @@ export default function QrGenerator() {
             </div>
           )}
           {activeTab === 'dynamic' && (
-            <div className="bg-purple-50 text-purple-800 p-4 rounded-xl text-sm border border-purple-200">
-              ⏱️ 動態條碼每 30 秒更新一次。<br />
-              請用診所的平板/電腦開啟此頁面放置於櫃檯。<br />
-              員工掃描此碼可<span className="font-bold text-red-600 underline ml-1">自動免除 GPS 驗證</span>！
+            <div className="flex flex-col items-center space-y-6 w-full">
+              <div className="bg-purple-50 text-purple-800 p-4 rounded-xl text-sm border border-purple-200 text-center w-full">
+                ⏱️ 動態條碼每 30 秒更新一次，具備最高防偽能力。<br />
+                請將下方「Kiosk 專屬網址」傳送至櫃台的平板或電腦開啟。<br />
+                員工掃描此動態碼將
+                <span className="font-bold text-red-600 underline ml-1">自動免除 GPS 驗證</span>！
+              </div>
+
+              <div className="w-full space-y-2">
+                <label className="block text-sm font-bold text-slate-700">
+                  平板 Kiosk 專屬網址 (免登入)
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    readOnly
+                    value={
+                      typeof window !== 'undefined'
+                        ? `${window.location.origin}/kiosk?c=${clinicId}`
+                        : ''
+                    }
+                    className="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 font-mono truncate"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (typeof window !== 'undefined') {
+                        navigator.clipboard.writeText(
+                          `${window.location.origin}/kiosk?c=${clinicId}`
+                        );
+                        alert('已複製 Kiosk 網址，請在平板的瀏覽器貼上開啟');
+                      }
+                    }}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg font-medium hover:bg-slate-200 transition"
+                  >
+                    複製網址
+                  </button>
+                </div>
+              </div>
+
+              <a
+                href={`/kiosk?c=${clinicId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full flex items-center justify-center gap-2 py-4 bg-purple-600 text-white rounded-xl font-bold shadow-lg hover:bg-purple-700 transition text-lg"
+              >
+                <TabletSmartphone size={24} /> 立即開啟 Kiosk 平板模式
+              </a>
             </div>
           )}
         </div>
 
-        {/* QR Code 顯示區塊 */}
-        <div className="p-4 bg-white border-2 border-slate-100 rounded-2xl shadow-inner relative">
-          {activeTab === 'dynamic' && (
-            <div className="absolute top-2 right-2 flex items-center gap-1 bg-green-100 text-green-700 px-2 py-0.5 rounded-full text-[10px] font-bold animate-pulse">
-              <span className="w-1.5 h-1.5 bg-green-600 rounded-full" /> 即時更新中
-            </div>
-          )}
-          <img
-            src={`https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(getQrContent())}`}
-            alt="QR Code"
-            className="w-56 h-56"
-          />
-        </div>
+        {/* QR Code 顯示區塊（僅 bind / static 顯示） */}
+        {activeTab !== 'dynamic' && (
+          <div className="p-4 bg-white border-2 border-slate-100 rounded-2xl shadow-inner relative w-full flex flex-col items-center">
+            <img
+              src={`https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(getQrContent())}`}
+              alt="QR Code"
+              className="w-56 h-56"
+            />
+          </div>
+        )}
 
+        {(activeTab === 'bind' || activeTab === 'static') && (
         <div className="flex gap-3 mt-8 w-full max-w-sm">
           {activeTab === 'bind' && (
             <button
@@ -174,6 +216,7 @@ export default function QrGenerator() {
             </button>
           )}
         </div>
+        )}
       </div>
     </div>
   );

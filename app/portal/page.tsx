@@ -807,7 +807,7 @@ export default function EmployeePortal() {
     }
   };
 
-  // 🟢 掃碼打卡：LINE 原生掃描器，支援綁定連結辨識與靜態/動態條碼，延遲處理避免相機卡住
+  // 🟢 掃碼打卡：LINE 原生掃描器，綁定連結辨識、靜態/動態條碼與 60 秒時間防偽驗證
   const onScanClock = async () => {
     if (!liff.isInClient()) {
       alert('⚠️ 請在 LINE App 內開啟此頁面以使用掃碼功能');
@@ -820,13 +820,18 @@ export default function EmployeePortal() {
 
       if (!scannedUrl) return;
 
-      // 🟢 加入 500ms 延遲，讓 LINE 相機有時間完整收合，避免畫面卡死
+      // 🟢 關鍵修復：加入 500ms 延遲，確保 LINE 相機 UI 完整收合，避免畫面卡死
       setTimeout(() => {
         const currentClinicId = profile?.clinic_id || staffUser?.clinic_id;
 
-        // 1. 檢查是否掃到「綁定連結」
-        if (scannedUrl.includes('liff.line.me') && scannedUrl.includes(currentClinicId ?? '')) {
-          alert('ℹ️ 這是員工綁定專用的 QR Code。\n您目前已經綁定並登入系統，請掃描「打卡專用」的 QR Code。');
+        // 1. 擋掉誤掃綁定條碼
+        if (
+          scannedUrl.includes('liff.line.me') &&
+          scannedUrl.includes(currentClinicId ?? '')
+        ) {
+          alert(
+            'ℹ️ 這是員工綁定專用的 QR Code。\n您已登入系統，請掃描「打卡專用」的條碼。'
+          );
           return;
         }
 
@@ -835,17 +840,33 @@ export default function EmployeePortal() {
           return;
         }
 
-        // 2. 檢查是否掃到「打卡條碼」
+        // 2. 驗證診所 ID
         if (scannedUrl.includes(currentClinicId)) {
-          const isDynamic = scannedUrl.includes('dynamic');
+          const isDynamic = scannedUrl.includes('clockin_dynamic_');
           let bypassMessage = '';
+
+          // 3. 🟢 動態防偽驗證 (安全機制)
           if (isDynamic) {
+            const parts = scannedUrl.split('_');
+            const timestamp = parseInt(parts[parts.length - 1], 10);
+            const now = Date.now();
+
+            // 檢查條碼是否產生超過 60 秒 (防截圖作弊)
+            if (!Number.isFinite(timestamp) || now - timestamp > 60000) {
+              alert('❌ 條碼已過期！\n請掃描平板上最新的動態 QR Code。');
+              return;
+            }
+
             setBypassMode(true);
             bypassMessage = '\n(動態安全碼驗證成功，免除 GPS 定位)';
           }
 
           const action = isWorking ? 'out' : 'in';
-          if (window.confirm(`✅ 條碼掃描成功！\n是否確認執行「${action === 'in' ? '上班' : '下班'}」打卡？${bypassMessage}`)) {
+          if (
+            window.confirm(
+              `✅ 條碼掃描成功！\n是否確認執行「${action === 'in' ? '上班' : '下班'}」打卡？${bypassMessage}`
+            )
+          ) {
             executeClock(action, isDynamic);
           }
         } else {
