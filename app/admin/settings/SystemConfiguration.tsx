@@ -234,6 +234,11 @@ export default function SystemConfiguration() {
         if (clinicResult.data.business_hours) {
           setBusinessHours(migrateBusinessHours(clinicResult.data.business_hours));
         }
+        // 🟢 合併診所設定至 clinicData.settings（供 GPS 表單使用）
+        setClinicData((prev: any) => ({
+          ...(prev || {}),
+          settings: { ...(prev?.settings || {}), ...clinicResult.data },
+        }));
       }
     } catch (error) {
       console.error('Fetch system settings error:', error);
@@ -733,12 +738,104 @@ export default function SystemConfiguration() {
                 <label htmlFor="clock_ignore_gps" className="text-sm font-bold text-slate-700">LINE 打卡不驗證 GPS（不讀取、不寫入定位）</label>
               </div>
               <p className="text-xs text-slate-400">啟用後，員工在 LINE Portal 打卡時將不要求定位，也不寫入 GPS 座標；適合僅用掃碼或室內訊號不佳的診所。</p>
+
+              {/* 動態 GPS 設定 */}
+              <div className="pt-4 mt-4 border-t border-slate-200">
+                <label className="block text-sm font-bold text-slate-700 mb-2">診所 GPS 座標設定</label>
+                <div className="grid grid-cols-2 gap-3 mb-2">
+                  <input
+                    type="number"
+                    step="0.000001"
+                    placeholder="緯度 (Latitude)"
+                    value={clinicData?.settings?.gps_lat ?? ''}
+                    onChange={(e) =>
+                      setClinicData({
+                        ...clinicData,
+                        settings: {
+                          ...(clinicData?.settings || {}),
+                          gps_lat: e.target.value === '' ? undefined : parseFloat(e.target.value),
+                        },
+                      })
+                    }
+                    className="border p-2 rounded-lg text-sm bg-white"
+                  />
+                  <input
+                    type="number"
+                    step="0.000001"
+                    placeholder="經度 (Longitude)"
+                    value={clinicData?.settings?.gps_lng ?? ''}
+                    onChange={(e) =>
+                      setClinicData({
+                        ...clinicData,
+                        settings: {
+                          ...(clinicData?.settings || {}),
+                          gps_lng: e.target.value === '' ? undefined : parseFloat(e.target.value),
+                        },
+                      })
+                    }
+                    className="border p-2 rounded-lg text-sm bg-white"
+                  />
+                </div>
+                <div className="flex gap-3 items-center flex-wrap">
+                  <input
+                    type="number"
+                    placeholder="容許半徑(公尺)"
+                    value={clinicData?.settings?.gps_radius ?? 150}
+                    onChange={(e) =>
+                      setClinicData({
+                        ...clinicData,
+                        settings: {
+                          ...(clinicData?.settings || {}),
+                          gps_radius: e.target.value === '' ? undefined : parseInt(e.target.value, 10),
+                        },
+                      })
+                    }
+                    className="border p-2 rounded-lg text-sm bg-white w-32"
+                  />
+                  <span className="text-xs text-slate-500">公尺</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!navigator.geolocation) {
+                        alert('無法抓取目前位置');
+                        return;
+                      }
+                      navigator.geolocation.getCurrentPosition(
+                        (pos) =>
+                          setClinicData({
+                            ...clinicData,
+                            settings: {
+                              ...(clinicData?.settings || {}),
+                              gps_lat: pos.coords.latitude,
+                              gps_lng: pos.coords.longitude,
+                            },
+                          }),
+                        () => alert('無法抓取目前位置')
+                      );
+                    }}
+                    className="text-xs bg-teal-50 text-teal-600 px-3 py-1.5 rounded-lg font-bold hover:bg-teal-100"
+                  >
+                    📍 抓取我現在的位置
+                  </button>
+                </div>
+              </div>
+
               <div className="mt-4 pt-4 border-t border-slate-200 flex justify-end">
-                <button 
-                  onClick={() => handleSaveClinicSettings({ overtime_threshold: overtimeThreshold, overtime_approval_required: overtimeApprovalRequired, clock_ignore_gps: clockIgnoreGps })} 
+                <button
+                  onClick={() =>
+                    handleSaveClinicSettings({
+                      ...(clinicData?.settings || {}),
+                      overtime_threshold: overtimeThreshold,
+                      overtime_approval_required: overtimeApprovalRequired,
+                      clock_ignore_gps: clockIgnoreGps,
+                      gps_lat: clinicData?.settings?.gps_lat,
+                      gps_lng: clinicData?.settings?.gps_lng,
+                      gps_radius: clinicData?.settings?.gps_radius,
+                    })
+                  }
                   className="flex items-center gap-2 bg-blue-600 text-white px-5 py-2 rounded-lg text-sm font-bold hover:bg-blue-700 transition shadow-sm"
                 >
-                  <Save size={16}/> 儲存加班與打卡設定
+                  <Save size={16} /> 儲存加班與打卡設定
                 </button>
               </div>
             </div>

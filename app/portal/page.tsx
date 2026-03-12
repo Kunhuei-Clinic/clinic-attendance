@@ -2,8 +2,9 @@
 
 import React, { useState, useEffect } from 'react';
 import liff from '@line/liff';
-import { Clock, Calendar, DollarSign, History, Coffee, User, Lock } from 'lucide-react';
+import { Clock, User, Lock } from 'lucide-react';
 import PortalSalaryView from './components/SalaryView';
+import BottomNav from './components/BottomNav';
 import HomeView from './views/HomeView';
 import HistoryView, { MissedPunchForm } from './views/HistoryView';
 import RosterView from './views/RosterView';
@@ -11,9 +12,6 @@ import LeaveView from './views/LeaveView';
 import ProfileView from './views/ProfileView';
 
 const LIFF_ID = '2008669814-8OqQmkaL';
-const CLINIC_LAT = 25.00606566310205;
-const CLINIC_LNG = 121.47745903743363;
-const ALLOWED_RADIUS = 150;
 
 const getDist = (lat1: number, lon1: number, lat2: number, lon2: number) => {
   const deg2rad = (deg: number) => deg * (Math.PI / 180);
@@ -957,9 +955,20 @@ export default function EmployeePortal() {
         async (pos) => {
           try {
             const { latitude, longitude } = pos.coords;
-            const d = getDist(latitude, longitude, CLINIC_LAT, CLINIC_LNG);
+            const clinicLat = clinicSettings?.gps_lat;
+            const clinicLng = clinicSettings?.gps_lng;
+            const allowedRadius = clinicSettings?.gps_radius ?? 150;
+
+            if (clinicLat == null || clinicLng == null) {
+              alert('系統尚未設定診所 GPS 座標，請聯繫管理員。');
+              setGpsStatus('error');
+              setIsPunching(false);
+              return;
+            }
+
+            const d = getDist(latitude, longitude, clinicLat, clinicLng);
             setDist(Math.round(d));
-            if (d <= ALLOWED_RADIUS) {
+            if (d <= allowedRadius) {
               setGpsStatus('ok');
               if (
                 action === 'out' &&
@@ -1378,63 +1387,7 @@ export default function EmployeePortal() {
         />
       )}
 
-      {/* 底部 Tab Bar */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t p-2 pb-6 pb-[env(safe-area-inset-bottom)] flex justify-around items-center text-[10px] font-bold text-slate-400 z-50 max-w-md mx-auto">
-        <button
-          onClick={() => setView('home')}
-          className={`flex flex-col items-center gap-1 w-14 p-1.5 rounded-xl transition ${
-            view === 'home' ? 'text-teal-600 bg-teal-50' : ''
-          }`}
-        >
-          <Clock size={20} />
-          打卡
-        </button>
-        <button
-          onClick={() => setView('history')}
-          className={`flex flex-col items-center gap-1 w-14 p-1.5 rounded-xl transition ${
-            view === 'history' ? 'text-teal-600 bg-teal-50' : ''
-          }`}
-        >
-          <History size={20} />
-          紀錄
-        </button>
-        <button
-          onClick={() => setView('roster')}
-          className={`flex flex-col items-center gap-1 w-14 p-1.5 rounded-xl transition ${
-            view === 'roster' ? 'text-teal-600 bg-teal-50' : ''
-          }`}
-        >
-          <Calendar size={20} />
-          班表
-        </button>
-        <button
-          onClick={() => setView('leave')}
-          className={`flex flex-col items-center gap-1 w-14 p-1.5 rounded-xl transition ${
-            view === 'leave' ? 'text-teal-600 bg-teal-50' : ''
-          }`}
-        >
-          <Coffee size={20} />
-          請假
-        </button>
-        <button
-          onClick={() => setView('payslip')}
-          className={`flex flex-col items-center gap-1 w-14 p-1.5 rounded-xl transition ${
-            view === 'payslip' ? 'text-teal-600 bg-teal-50' : ''
-          }`}
-        >
-          <DollarSign size={20} />
-          薪資
-        </button>
-        <button
-          onClick={() => setView('profile')}
-          className={`flex flex-col items-center gap-1 w-14 p-1.5 rounded-xl transition ${
-            view === 'profile' ? 'text-teal-600 bg-teal-50' : ''
-          }`}
-        >
-          <User size={20} />
-          個人
-        </button>
-      </div>
+      <BottomNav view={view} setView={setView} />
     </div>
   );
 }
