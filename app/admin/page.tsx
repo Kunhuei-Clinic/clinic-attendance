@@ -70,6 +70,9 @@ export default function AdminPage() {
             setAuthLevel(data.authLevel);
             setActiveTab(data.authLevel === 'boss' ? 'tasks' : 'staff_roster');
             if (data.clinicName) setClinicName(data.clinicName);
+
+            // 🟢 核心修復：登入驗證成功後，立即寫入當前時間，防止被舊的時間戳記踢出
+            localStorage.setItem('last_system_activity', Date.now().toString());
           } else {
             localStorage.removeItem('last_system_activity'); // 🟢 防呆
             router.push('/login');
@@ -89,78 +92,52 @@ export default function AdminPage() {
     checkAuth();
   }, [router]);
 
-  // 🔒 資安防護：全時段閒置偵測 (含網頁關閉後重開)
+  // 🔒 資安防護：全時段閒置偵測
   useEffect(() => {
-    if (!authLevel) return; // 尚未登入則不執行
+    if (!authLevel) return;
 
-    const IDLE_TIME = 30 * 60 * 1000; // 30 分鐘 (毫秒)
+    const IDLE_TIME = 30 * 60 * 1000; // 30 分鐘
     const ACTIVITY_KEY = 'last_system_activity';
 
-    // 1. 初始化檢查：網頁重新載入時，檢查上次活動時間
-    const checkOnMount = () => {
-      const lastActivity = localStorage.getItem(ACTIVITY_KEY);
-      if (lastActivity) {
-        const elapsed = Date.now() - parseInt(lastActivity, 10);
-        if (elapsed > IDLE_TIME) {
-          // 🟢 靜默登出：如果是隔很久才開網頁，默默把他踢回登入頁，不要彈出警告干擾他
-          localStorage.removeItem(ACTIVITY_KEY);
-          supabase.auth.signOut().then(() => {
-            router.refresh();
-            router.push('/login');
-          });
-          return true;
-        }
-      }
-      return false;
-    };
-
-    if (checkOnMount()) return; // 如果已經超時，就不掛載後續監聽了
-
-    // 2. 活動更新器：記錄最新活動時間到硬碟
     let timeoutId: NodeJS.Timeout;
+
     const updateActivity = () => {
       const now = Date.now();
       const lastActivityStr = localStorage.getItem(ACTIVITY_KEY);
 
-      // 🟢 關鍵修復：在更新時間之前，先檢查是否已經超時（對抗瀏覽器休眠）
       if (lastActivityStr) {
-        const elapsed = now - parseInt(lastActivityStr, 10);
+        const lastTime = parseInt(lastActivityStr, 10);
+        const elapsed = now - lastTime;
+
+        // 如果真的超過 30 分鐘（且不是剛剛才重置的），才登出
         if (elapsed > IDLE_TIME) {
           handleLogout(true);
-          return; // 已經超時，立刻停止更新並登出
+          return;
         }
       }
 
-      // 未超時，才更新為最新時間並重置計時器
+      // 更新時間並設定下一次自動檢查
       localStorage.setItem(ACTIVITY_KEY, now.toString());
-      clearTimeout(timeoutId);
-      timeoutId = setTimeout(() => {
-        handleLogout(true);
-      }, IDLE_TIME);
+      if (timeoutId) clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => handleLogout(true), IDLE_TIME);
     };
 
-    // 🟢 新增：分頁喚醒偵測 (對抗手機鎖屏或切換分頁)
+    // 分頁喚醒偵測 (對抗手機鎖屏或切換分頁)
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        const now = Date.now();
-        const lastActivityStr = localStorage.getItem(ACTIVITY_KEY);
-        if (lastActivityStr && (now - parseInt(lastActivityStr, 10) > IDLE_TIME)) {
-          handleLogout(true);
-        }
+        updateActivity(); // 回到頁面時立刻執行一次超時檢查
       }
     };
 
-    // 3. 綁定監聽事件
     const events = ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'];
     events.forEach(event => window.addEventListener(event, updateActivity));
-    document.addEventListener('visibilitychange', handleVisibilityChange); // 綁定喚醒事件
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
-    // 初始呼叫一次
+    // 🔴 移除 checkOnMount，直接用初始呼叫
     updateActivity();
 
-    // 清除監聽器
     return () => {
-      clearTimeout(timeoutId);
+      if (timeoutId) clearTimeout(timeoutId);
       events.forEach(event => window.removeEventListener(event, updateActivity));
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
