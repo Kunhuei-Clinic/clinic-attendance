@@ -807,10 +807,10 @@ export default function EmployeePortal() {
     }
   };
 
-  // 🟢 掃碼打卡：使用 LIFF 掃描診所靜態 QR，驗證 clinic_id 後觸發原有打卡流程
+  // 🟢 掃碼打卡：LINE 原生掃描器，驗證 QR 屬於本診所後可選擇執行上班/下班打卡
   const onScanClock = async () => {
     if (!liff.isInClient()) {
-      alert('請在 LINE App 內使用掃碼功能');
+      alert('⚠️ 請在 LINE App 內開啟此頁面以使用掃碼功能');
       return;
     }
 
@@ -818,20 +818,31 @@ export default function EmployeePortal() {
       const result = await liff.scanCodeV2();
       const scannedUrl = result.value;
 
-      if (!scannedUrl || !staffUser?.clinic_id) {
-        alert('無效的診所 QR Code');
-        return;
-      }
-      if (!scannedUrl.includes(staffUser.clinic_id)) {
-        alert('無效的診所 QR Code');
+      if (!scannedUrl) return; // 使用者取消掃描
+
+      console.log('[Portal] 掃描結果:', scannedUrl);
+
+      const currentClinicId = profile?.clinic_id || staffUser?.clinic_id;
+      if (!currentClinicId) {
+        alert('❌ 無法取得診所資訊，請重新登入。');
         return;
       }
 
-      // 靜態模式：掃碼成功後觸發原有 executeClock（內含 GPS 檢查）
-      executeClock(isWorking ? 'out' : 'in');
-    } catch (error) {
-      console.error('掃描失敗', error);
-      alert('掃描失敗，請重試');
+      if (scannedUrl.includes(currentClinicId)) {
+        const action = isWorking ? 'out' : 'in';
+        if (confirm(`✅ 掃描成功！是否執行「${action === 'in' ? '上班' : '下班'}」打卡？`)) {
+          executeClock(action);
+        }
+      } else {
+        alert('❌ 無效的 QR Code：此條碼不屬於本診所，或條碼格式錯誤。');
+      }
+    } catch (error: any) {
+      console.error('[Portal] 掃描失敗:', error);
+      if (error?.message && error.message.includes('permission')) {
+        alert('❌ 掃描失敗：請檢查是否已授權 LINE 使用相機權限，或在 LINE Developers Console 啟用 Scan Code 功能。');
+      } else {
+        alert('掃描功能暫時無法使用，請使用一般 GPS 打卡。');
+      }
     }
   };
 
