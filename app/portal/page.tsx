@@ -851,12 +851,23 @@ export default function EmployeePortal() {
           const isStatic = scannedUrl.includes('clockin_static_');
           let bypassMessage = '';
 
-          // 3. 🟢 動態防偽驗證
+          // 3. 🟢 動態防偽驗證（格式: clockin_dynamic_{clinicId}_{timestamp}_{kioskToken}）
           if (isDynamic) {
             const parts = scannedUrl.split('_');
-            const timestamp = parseInt(parts[parts.length - 1], 10);
+            const token = parts[parts.length - 1];
+            const timestamp = parseInt(parts[parts.length - 2], 10);
+
             if (!Number.isFinite(timestamp) || Date.now() - timestamp > 60000) {
               alert('❌ 條碼已過期！\n請掃描平板上最新的動態 QR Code。');
+              return;
+            }
+            if (
+              clinicSettings?.kiosk_token &&
+              token !== clinicSettings.kiosk_token
+            ) {
+              alert(
+                '❌ 來源無效！\n此端點機連結已作廢，請掃描診所現場最新的動態條碼。'
+              );
               return;
             }
             setBypassMode(true);

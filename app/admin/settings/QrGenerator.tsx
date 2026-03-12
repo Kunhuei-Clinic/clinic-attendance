@@ -1,12 +1,14 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { QrCode, Download, Copy, Check, Users, TabletSmartphone, MapPin } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
+import { Download, Copy, Check, Users, TabletSmartphone, MapPin } from 'lucide-react';
 import { saveAs } from 'file-saver';
 
 export default function QrGenerator() {
   const [clinicId, setClinicId] = useState<string>('');
   const [staticToken, setStaticToken] = useState<string>('');
+  const [kioskToken, setKioskToken] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'bind' | 'static' | 'dynamic'>('bind');
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
@@ -28,34 +30,42 @@ export default function QrGenerator() {
 
   const fetchClinicId = async () => {
     try {
-      const response = await fetch('/api/staff?is_active=true', {
+      const response = await fetch('/api/staff?is_active=true&limit=1', {
         credentials: 'include',
       });
       const result = await response.json();
-      if (result.data && result.data.length > 0 && result.data[0].clinic_id) {
-        setClinicId(result.data[0].clinic_id);
+      if (result.data && result.data.length > 0) {
+        setClinicId(result.data[0].clinic_id || '');
       }
 
       const settingsRes = await fetch('/api/settings?type=clinic', {
         credentials: 'include',
       });
       const settingsJson = await settingsRes.json();
-      let currentToken = settingsJson.data?.static_qr_token;
-      if (!currentToken) {
-        currentToken = Math.random().toString(36).substring(2, 10);
+
+      let sToken = settingsJson.data?.static_qr_token;
+      let kToken = settingsJson.data?.kiosk_token;
+      const updates: Record<string, string> = {};
+      if (!sToken) {
+        sToken = Math.random().toString(36).substring(2, 10);
+        updates.static_qr_token = sToken;
+      }
+      if (!kToken) {
+        kToken = Math.random().toString(36).substring(2, 10);
+        updates.kiosk_token = kToken;
+      }
+      if (Object.keys(updates).length > 0) {
         await fetch('/api/settings', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            type: 'clinic',
-            settings: { static_qr_token: currentToken },
-          }),
+          body: JSON.stringify({ type: 'clinic', settings: updates }),
           credentials: 'include',
         });
       }
-      setStaticToken(currentToken || '');
+      setStaticToken(sToken || '');
+      setKioskToken(kToken || '');
     } catch (error) {
-      console.error('取得診所 ID 失敗', error);
+      console.error('取得設定失敗', error);
     } finally {
       setLoading(false);
     }
@@ -70,7 +80,7 @@ export default function QrGenerator() {
       return `clockin_static_${clinicId}_${staticToken}`;
     }
     if (activeTab === 'dynamic') {
-      return `clockin_dynamic_${clinicId}_${dynamicTime}`;
+      return `clockin_dynamic_${clinicId}_${dynamicTime}_${kioskToken}`;
     }
     return '';
   };
@@ -172,7 +182,7 @@ export default function QrGenerator() {
                     readOnly
                     value={
                       typeof window !== 'undefined'
-                        ? `${window.location.origin}/kiosk?c=${clinicId}`
+                        ? `${window.location.origin}/kiosk?c=${clinicId}&k=${kioskToken}`
                         : ''
                     }
                     className="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 font-mono truncate"
@@ -182,7 +192,7 @@ export default function QrGenerator() {
                     onClick={() => {
                       if (typeof window !== 'undefined') {
                         navigator.clipboard.writeText(
-                          `${window.location.origin}/kiosk?c=${clinicId}`
+                          `${window.location.origin}/kiosk?c=${clinicId}&k=${kioskToken}`
                         );
                         alert('已複製 Kiosk 網址，請在平板的瀏覽器貼上開啟');
                       }
@@ -195,24 +205,54 @@ export default function QrGenerator() {
               </div>
 
               <a
-                href={`/kiosk?c=${clinicId}`}
+                href={`/kiosk?c=${clinicId}&k=${kioskToken}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="w-full flex items-center justify-center gap-2 py-4 bg-purple-600 text-white rounded-xl font-bold shadow-lg hover:bg-purple-700 transition text-lg"
               >
                 <TabletSmartphone size={24} /> 立即開啟 Kiosk 平板模式
               </a>
+
+              <div className="mt-4 pt-4 border-t border-purple-200 w-full flex flex-col items-center">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (
+                      !confirm(
+                        '確定要重置 Kiosk 連結嗎？\n重置後，舊的平板網址將立刻失效，您必須在診所櫃檯重新開啟新網址。'
+                      )
+                    )
+                      return;
+                    const newToken = Math.random().toString(36).substring(2, 10);
+                    await fetch('/api/settings', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        type: 'clinic',
+                        settings: { kiosk_token: newToken },
+                      }),
+                      credentials: 'include',
+                    });
+                    setKioskToken(newToken);
+                    alert('✅ 連結已更新！請複製新網址至櫃台平板開啟。');
+                  }}
+                  className="px-4 py-2 border border-red-200 text-red-600 rounded-lg text-sm font-bold hover:bg-red-50 transition"
+                >
+                  🔄 重置並作廢舊連結
+                </button>
+              </div>
             </div>
           )}
         </div>
 
-        {/* QR Code 顯示區塊（僅 bind / static 顯示） */}
+        {/* QR Code 顯示區塊（bind / static 使用本地 SVG 繪製） */}
         {activeTab !== 'dynamic' && (
-          <div className="p-4 bg-white border-2 border-slate-100 rounded-2xl shadow-inner relative w-full flex flex-col items-center">
-            <img
-              src={`https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(getQrContent())}`}
-              alt="QR Code"
-              className="w-56 h-56"
+          <div className="p-4 bg-white border-2 border-slate-100 rounded-2xl shadow-inner relative flex justify-center items-center">
+            <QRCodeSVG
+              value={getQrContent()}
+              size={240}
+              level="M"
+              includeMargin
             />
           </div>
         )}
