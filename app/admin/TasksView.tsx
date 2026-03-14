@@ -38,17 +38,34 @@ export default function TasksView() {
         setTasks([]);
       } else {
         let filtered = result.data || [];
-        
-        // 根據狀態篩選
+
+        // 🟢 1. 修復狀態篩選 (相容 anomaly_status 與 status)
         if (filter !== 'all') {
-          filtered = filtered.filter((task: any) => task.status === filter);
+          filtered = filtered.filter((task: any) => {
+            const currentStatus = task.status || task.anomaly_status || 'pending';
+            if (filter === 'approved' && currentStatus === 'resolved') return true;
+            return currentStatus === filter;
+          });
         }
-        
-        // 根據類型篩選
+
+        // 🟢 2. 修復類型篩選 (將所有非加班/異常的項目，如事假、補打卡，統整為 leave)
         if (typeFilter !== 'all') {
-          filtered = filtered.filter((task: any) => task.type === typeFilter);
+          if (typeFilter === 'leave') {
+            filtered = filtered.filter((task: any) => task.type !== 'overtime' && task.type !== 'anomaly');
+          } else {
+            filtered = filtered.filter((task: any) => task.type === typeFilter);
+          }
         }
-        
+
+        // 將待審核 (pending) 排在最上面
+        filtered.sort((a: any, b: any) => {
+          const aStatus = a.status || a.anomaly_status || 'pending';
+          const bStatus = b.status || b.anomaly_status || 'pending';
+          if (aStatus === 'pending' && bStatus !== 'pending') return -1;
+          if (aStatus !== 'pending' && bStatus === 'pending') return 1;
+          return 0;
+        });
+
         setTasks(filtered);
       }
     } catch (error) {
@@ -181,11 +198,11 @@ export default function TasksView() {
               <div 
                 key={`${task.type}-${task.id}`} 
                 className={`bg-white p-6 rounded-xl shadow-sm border-l-4 flex justify-between items-center transition hover:shadow-md ${
-                  task.status === 'pending' 
-                    ? 'border-yellow-400' 
-                    : (task.status === 'approved' 
-                        ? 'border-green-500' 
-                        : 'border-red-500')
+                  (task.status || task.anomaly_status || 'pending') === 'pending'
+                    ? 'border-yellow-400'
+                    : (task.status || task.anomaly_status) === 'approved' || (task.status || task.anomaly_status) === 'resolved'
+                      ? 'border-green-500'
+                      : 'border-red-500'
                 }`}
               >
                 <div className="flex items-start gap-4 flex-1">
@@ -204,15 +221,15 @@ export default function TasksView() {
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
                       <span className="text-lg font-bold text-slate-800">{task.staff_name}</span>
                       <span className={`px-2 py-0.5 text-xs rounded font-bold border ${getTypeColor()}`}>
-                        {TYPE_LABELS[task.type] ?? task.type}
+                        {task.type === 'overtime' ? '加班' : task.type === 'anomaly' ? '異常' : (task._raw?.type || task.type)}
                       </span>
-                      {task.status !== 'pending' && (
+                      {((task.status || task.anomaly_status) !== 'pending' && (task.status || task.anomaly_status) != null) && (
                         <span className={`px-2 py-0.5 text-xs rounded font-bold ${
-                          task.status === 'approved'
+                          (task.status || task.anomaly_status) === 'approved' || (task.status || task.anomaly_status) === 'resolved'
                             ? 'bg-green-100 text-green-700'
                             : 'bg-red-100 text-red-700'
                         }`}>
-                          {task.status === 'approved' ? '已通過' : '已駁回'}
+                          {(task.status || task.anomaly_status) === 'approved' || (task.status || task.anomaly_status) === 'resolved' ? '已通過' : '已駁回'}
                         </span>
                       )}
                     </div>
@@ -268,7 +285,7 @@ export default function TasksView() {
                         <>
                           <div className="flex items-center gap-2">
                             <Calendar size={14}/> 
-                            <span className="font-bold">日期：{task.date}</span>
+                            <span className="font-bold">日期：{task.date || (task.clock_in_time ? task.clock_in_time.split('T')[0] : '')}</span>
                           </div>
                           <div className="flex items-center gap-2">
                             <Clock size={14}/> 
@@ -278,15 +295,16 @@ export default function TasksView() {
                               {task.clock_out_time ? formatTime(task.clock_out_time) : '--'}
                             </span>
                           </div>
-                          <div className="flex items-center gap-2 text-red-600">
-                            <AlertCircle size={14}/> {task.description}
+                          <div className="flex items-center gap-2 text-red-600 font-bold bg-red-50 p-2 rounded-lg mt-1">
+                            <AlertCircle size={14}/> 
+                            原因：{task.anomaly_reason || task.description || '無詳細說明'}
                           </div>
                         </>
                       )}
                     </div>
                   </div>
                 </div>
-                {task.status === 'pending' && (
+                {(task.status || task.anomaly_status || 'pending') === 'pending' && (
                   <div className="flex gap-2 shrink-0 mt-4 sm:mt-0">
                     <button
                       onClick={() => handleAction(task, 'reject')}
