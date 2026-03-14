@@ -21,13 +21,14 @@ export async function GET(request: NextRequest) {
     }
 
     const tasks: any[] = [];
+    const fourteenDaysAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
 
-    // 1. 查詢待審核的請假申請
+    // 1. 查詢請假/補打卡：pending 或最近 14 天內已處理的紀錄
     const { data: leaveRequests, error: leaveError } = await supabaseAdmin
       .from('leave_requests')
       .select('id, staff_id, staff_name, type, leave_type, start_time, end_time, reason, status, created_at')
       .eq('clinic_id', clinicId)
-      .eq('status', 'pending')
+      .or(`status.eq.pending,and(status.neq.pending,created_at.gte.${fourteenDaysAgo})`)
       .order('created_at', { ascending: false });
 
     if (!leaveError && leaveRequests) {
@@ -50,13 +51,14 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // 2. 查詢待審核的異常打卡（有 anomaly_reason 且尚未處理的記錄）
+    // 2. 查詢異常打卡：有原因且 (待處理 或 最近 14 天內已解決)
     const { data: anomalyLogs, error: anomalyError } = await supabaseAdmin
       .from('attendance_logs')
-      .select('id, staff_id, staff_name, clock_in_time, clock_out_time, work_hours, anomaly_reason, status')
+      .select('id, staff_id, staff_name, clock_in_time, clock_out_time, work_hours, anomaly_reason, anomaly_status, status')
       .eq('clinic_id', clinicId)
       .not('anomaly_reason', 'is', null)
       .neq('anomaly_reason', '')
+      .or(`anomaly_status.is.null,anomaly_status.eq.pending,and(anomaly_status.eq.resolved,clock_in_time.gte.${fourteenDaysAgo})`)
       .order('clock_in_time', { ascending: false });
 
     if (!anomalyError && anomalyLogs) {
@@ -72,20 +74,20 @@ export async function GET(request: NextRequest) {
           clock_out_time: log.clock_out_time,
           work_hours: log.work_hours,
           anomaly_reason: log.anomaly_reason,
-          status: log.status,
-          // 保留原始資料供前端使用
+          anomaly_status: log.anomaly_status,
+          status: log.anomaly_status ?? log.status,
           _raw: log
         });
       });
     }
 
-    // 3. 🟢 新增：查詢待審核的加班申請
+    // 3. 查詢加班申請：pending 或最近 14 天內已處理的
     const { data: overtimeLogs, error: overtimeError } = await supabaseAdmin
       .from('attendance_logs')
       .select('id, staff_id, staff_name, clock_in_time, clock_out_time, work_hours, is_overtime, overtime_status')
       .eq('clinic_id', clinicId)
       .eq('is_overtime', true)
-      .eq('overtime_status', 'pending')
+      .or(`overtime_status.eq.pending,and(overtime_status.neq.pending,clock_in_time.gte.${fourteenDaysAgo})`)
       .order('clock_in_time', { ascending: false });
 
     if (!overtimeError && overtimeLogs) {

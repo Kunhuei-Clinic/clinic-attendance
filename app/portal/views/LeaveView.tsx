@@ -358,7 +358,7 @@ export default function LeaveView({
               />
             </div>
             <div>
-              <label className="text-[10px] text-slate-400">時間</label>
+              <label className="text-[10px] text-slate-400">時間 (24小時制, 例: 14:00)</label>
               <input
                 type="time"
                 className="w-full border rounded p-1 text-sm"
@@ -386,7 +386,7 @@ export default function LeaveView({
               />
             </div>
             <div>
-              <label className="text-[10px] text-slate-400">時間</label>
+              <label className="text-[10px] text-slate-400">時間 (24小時制, 例: 14:00)</label>
               <input
                 type="time"
                 className="w-full border rounded p-1 text-sm"

@@ -307,6 +307,9 @@ export function usePortalData(
       startTimeHHmm = form.startTime.includes(':') ? form.startTime.slice(0, 5) : form.startTime;
       endTimeHHmm = form.endTime.includes(':') ? form.endTime.slice(0, 5) : form.endTime;
     }
+    // 強制指定為台灣時區 (+08:00)，避免資料庫誤判為 UTC 導致 8 小時時差
+    const startFull = form.date && startTimeHHmm ? `${form.date}T${startTimeHHmm}:00+08:00` : null;
+    const endFull = form.date && endTimeHHmm ? `${form.date}T${endTimeHHmm}:00+08:00` : null;
     setIsViewLoading(true);
     try {
       const payload = {
@@ -315,8 +318,8 @@ export function usePortalData(
         type: '補打卡',
         leave_type: leaveType,
         date: form.date,
-        start_time: startTimeHHmm,
-        end_time: endTimeHHmm,
+        start_time: startFull ?? startTimeHHmm,
+        end_time: endFull ?? endTimeHHmm,
         hours: 0,
         reason: form.reason,
         status: 'pending',
@@ -377,12 +380,13 @@ export function usePortalData(
       alert('請填寫完整日期');
       return;
     }
-    const startT = new Date(
-      `${leaveForm.startDate}T${leaveForm.startTime}`
-    ).toISOString();
-    const endT = new Date(
-      `${leaveForm.endDate}T${leaveForm.endTime}`
-    ).toISOString();
+    // 強制指定為台灣時區 (+08:00)，避免資料庫誤判為 UTC 導致 8 小時時差
+    const startT = leaveForm.startDate && leaveForm.startTime
+      ? `${leaveForm.startDate}T${leaveForm.startTime}:00+08:00`
+      : '';
+    const endT = leaveForm.endDate && leaveForm.endTime
+      ? `${leaveForm.endDate}T${leaveForm.endTime}:00+08:00`
+      : '';
     const diff =
       (new Date(endT).getTime() - new Date(startT).getTime()) / 3600000;
     setIsViewLoading(true);

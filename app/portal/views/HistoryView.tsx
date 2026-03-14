@@ -192,7 +192,7 @@ export default function HistoryView({
 
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="text-xs text-slate-400">上班時間</label>
+                <label className="text-xs text-slate-400 font-bold">上班時間 (24小時制)</label>
                 <input
                   type="time"
                   value={missedForm.startTime}
@@ -212,7 +212,7 @@ export default function HistoryView({
                 />
               </div>
               <div>
-                <label className="text-xs text-slate-400">下班時間</label>
+                <label className="text-xs text-slate-400 font-bold">下班時間 (24小時制)</label>
                 <input
                   type="time"
                   value={missedForm.endTime}
