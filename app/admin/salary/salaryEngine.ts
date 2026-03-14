@@ -81,7 +81,8 @@ export const calculateStaffSalary = (
   holidaySet: Set<string>,
   monthlyStandardHours: number,
   leaves: any[],
-  targetMonth: string // 🟢 新增參數 (格式: 'YYYY-MM')
+  targetMonth: string, // 🟢 新增參數 (格式: 'YYYY-MM')
+  otApprovalRequired: boolean = true
 ): SalaryResult => {
   
   const result: SalaryResult = {
@@ -161,12 +162,29 @@ export const calculateStaffSalary = (
       dayType = isHoliday ? 'holiday' : 'normal';
     }
 
-    // 取得當日打卡紀錄（以本地日期比對）
-    const dailyLogs = logs.filter(
+    // 取得當日打卡紀錄
+    const rawDailyLogs = logs.filter(
       (l) => toLocalDateString(l.clock_in_time) === dateStr
     );
-    // 🟢 確保同日打卡照時間順序排列 (早班在前，晚班在後)
-    dailyLogs.sort((a, b) => new Date(a.clock_in_time).getTime() - new Date(b.clock_in_time).getTime());
+    rawDailyLogs.sort(
+      (a, b) =>
+        new Date(a.clock_in_time).getTime() -
+        new Date(b.clock_in_time).getTime()
+    );
+
+    // 🔒 防漏第一道鎖：過濾掉未核准的「專案加班單」
+    let note = '';
+    const dailyLogs = rawDailyLogs.filter((log: any) => {
+      if (
+        log.work_type === 'overtime' &&
+        otApprovalRequired &&
+        log.overtime_status !== 'approved'
+      ) {
+        note += '加班未核准(不計) ';
+        return false;
+      }
+      return true;
+    });
 
     // 將上下班時間成對組合，例如: 08:00~12:33, 15:00~21:00
     const clockPairs = dailyLogs.map((l: any) => {
@@ -181,8 +199,7 @@ export const calculateStaffSalary = (
     const combinedClockStr = clockPairs.join(', ');
 
     let dailyWorkMinutes = 0;
-    let shiftDisplayStr = "";
-    let note = "";
+    let shiftDisplayStr = '';
 
     const calcMode = staff.clock_in_calc_mode || 'actual';
 
@@ -276,6 +293,18 @@ export const calculateStaffSalary = (
 
     const dailyHours = Math.round((dailyWorkMinutes / 60) * 100) / 100;
 
+    // 🔒 防漏第二道鎖：正常班打卡超時，若未獲加班核准，強制截斷至正常工時上限
+    let effectiveDailyHours = dailyHours;
+    if (effectiveDailyHours > dailyNormalLimit && otApprovalRequired) {
+      const hasApprovedOT = dailyLogs.some(
+        (l: any) => l.is_overtime === true && l.overtime_status === 'approved'
+      );
+      if (!hasApprovedOT) {
+        effectiveDailyHours = dailyNormalLimit;
+        note += ` 超時未核准(截至${dailyNormalLimit}hr)`;
+      }
+    }
+
     // 🟢 無條件建立每日紀錄 (勞檢防禦：即使工時為0也要記錄當天屬性)
     const dailyRecord: DailyRecord = {
       date: dateStr,
@@ -283,19 +312,19 @@ export const calculateStaffSalary = (
       shiftInfo: shiftDisplayStr.trim(),
       clockIn: combinedClockStr || '--:--',
       clockOut: '',
-      totalHours: dailyHours,
+      totalHours: effectiveDailyHours,
       normalHours: 0,
       ot134: 0,
       ot167: 0,
       note: [shiftNote, note.trim()].filter(Boolean).join(' | '),
     };
 
-    if (dailyHours > 0) {
-      result.total_work_hours += dailyHours;
+    if (effectiveDailyHours > 0) {
+      result.total_work_hours += effectiveDailyHours;
 
-      if (dayType === 'holiday') { 
-        const normalWork = Math.min(dailyHours, dailyNormalLimit);
-        const otWork = Math.max(0, dailyHours - dailyNormalLimit);
+      if (dayType === 'holiday') {
+        const normalWork = Math.min(effectiveDailyHours, dailyNormalLimit);
+        const otWork = Math.max(0, effectiveDailyHours - dailyNormalLimit);
 
         // 🟢 修正：累積時數只採計正常工時，避免將加班時數重複顯示
         result.holiday_work_hours += normalWork;
@@ -329,29 +358,34 @@ export const calculateStaffSalary = (
         // 🟢 順便補上例假日的正常工時紀錄
         const normalWork = Math.min(dailyHours, dailyNormalLimit);
         result.holiday_work_hours += normalWork;
-        result.holiday_pay += Math.round(dailyHours * hourlyRate * 2);
+        result.holiday_pay += Math.round(
+          effectiveDailyHours * hourlyRate * 2
+        );
         dailyRecord.normalHours = normalWork;
         result.warnings.push(`${dateStr} 例假出勤`);
         dailyRecord.note = (dailyRecord.note || "") + " 例假違規";
 
-      } else if (dayType === 'rest') { 
-        result.rest_work_hours += dailyHours;
-        result.ot_pay += staff.salary_mode === 'hourly' ? calculateTieredOtPremium(dailyHours, hourlyRate) : calculateTieredOt(dailyHours, hourlyRate);
-        const { ot134, ot167 } = splitOtHours(dailyHours);
+      } else if (dayType === 'rest') {
+        result.rest_work_hours += effectiveDailyHours;
+        result.ot_pay +=
+          staff.salary_mode === 'hourly'
+            ? calculateTieredOtPremium(effectiveDailyHours, hourlyRate)
+            : calculateTieredOt(effectiveDailyHours, hourlyRate);
+        const { ot134, ot167 } = splitOtHours(effectiveDailyHours);
         dailyRecord.ot134 = ot134;
         dailyRecord.ot167 = ot167;
 
-      } else { 
-        if (dailyHours <= dailyNormalLimit) {
-          result.normal_hours += dailyHours;
-          accumulatedNormalHours += dailyHours;
-          dailyRecord.normalHours = dailyHours;
+      } else {
+        if (effectiveDailyHours <= dailyNormalLimit) {
+          result.normal_hours += effectiveDailyHours;
+          accumulatedNormalHours += effectiveDailyHours;
+          dailyRecord.normalHours = effectiveDailyHours;
         } else {
           result.normal_hours += dailyNormalLimit;
           accumulatedNormalHours += dailyNormalLimit;
           dailyRecord.normalHours = dailyNormalLimit;
-          
-          const ot = dailyHours - dailyNormalLimit;
+
+          const ot = effectiveDailyHours - dailyNormalLimit;
           result.normal_ot_hours += ot;
           result.ot_pay += staff.salary_mode === 'hourly' ? calculateTieredOtPremium(ot, hourlyRate) : calculateTieredOt(ot, hourlyRate);
           

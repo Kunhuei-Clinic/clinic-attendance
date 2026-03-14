@@ -76,6 +76,17 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: leaveError.message }, { status: 500 });
     }
 
+    // 5. 讀取診所設定，確認是否強制要求加班審核
+    const { data: clinicData } = await supabaseAdmin
+      .from('clinics')
+      .select('settings')
+      .eq('id', clinicId)
+      .single();
+
+    // 若無特別設定，預設為 true (需要審核)
+    const otApprovalRequired =
+      clinicData?.settings?.overtime_approval_required !== false;
+
     // 計算月標準工時
     const daysInMonth = new Date(y, m, 0).getDate();
     let standardWorkDays = 0;
@@ -91,6 +102,7 @@ export async function GET(request: NextRequest) {
       holidays: holidayData || [],
       leaves: leaveData || [],
       monthlyStandardHours,
+      otApprovalRequired,
     });
   } catch (error: any) {
     if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {

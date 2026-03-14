@@ -215,7 +215,14 @@ export default function SalaryPage() {
         return;
       }
 
-      const { logs, roster, holidays, leaves, monthlyStandardHours } = json;
+      const {
+        logs,
+        roster,
+        holidays,
+        leaves,
+        monthlyStandardHours,
+        otApprovalRequired,
+      } = json;
 
       const holidaySet = new Set<string>(
         (holidays || []).map((h: any) => String(h.date))
@@ -257,7 +264,8 @@ export default function SalaryPage() {
           holidaySet,
           monthlyStandardHours,
           myLeaves,
-          selectedMonth
+          selectedMonth,
+          otApprovalRequired
         );
 
         const fixedBonus = (staff.bonuses || []).reduce(
