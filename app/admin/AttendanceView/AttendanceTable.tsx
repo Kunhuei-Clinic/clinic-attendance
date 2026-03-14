@@ -20,6 +20,7 @@ type AttendanceLog = {
   work_hours?: number | string;
   note?: string | null;
   anomaly_reason?: string | null;
+  anomaly_status?: string | null;
 };
 
 type Props = {
@@ -157,8 +158,25 @@ const AttendanceTable: React.FC<Props> = ({
                       </span>
                     )}
                   </td>
-                  <td className="p-4 text-center text-xs text-slate-500 max-w-[150px] truncate">
-                    {log.note || log.anomaly_reason || '-'}
+                  <td className="p-4 text-center text-xs max-w-[150px] align-middle">
+                    {log.anomaly_reason ? (
+                      <div className="flex flex-col gap-1 items-center justify-center">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          (!log.anomaly_status || log.anomaly_status === 'pending')
+                            ? 'bg-red-100 text-red-700 border border-red-200 animate-pulse'
+                            : 'bg-green-100 text-green-700 border border-green-200'
+                        }`}>
+                          {(!log.anomaly_status || log.anomaly_status === 'pending') ? '⚠️ 異常待處理' : '✅ 異常已解決'}
+                        </span>
+                        <span className="text-slate-500 truncate w-full" title={log.anomaly_reason}>
+                          {log.anomaly_reason}
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="text-slate-500 truncate block w-full" title={log.note || ''}>
+                        {log.note || '-'}
+                      </span>
+                    )}
                   </td>
                   <td className="p-4 text-center flex items-center justify-center gap-2">
                     {log.is_overtime && log.overtime_status === 'pending' && (
