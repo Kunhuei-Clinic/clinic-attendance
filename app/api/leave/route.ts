@@ -79,23 +79,15 @@ export async function GET(request: NextRequest) {
 /**
  * POST /api/leave
  * 新增請假申請
- * 
- * Request Body:
- *   {
- *     staff_id: string (UUID),
- *     staff_name: string,
- *     type: string,
- *     date: string (YYYY-MM-DD),
- *     start_time: string (HH:mm),
- *     end_time: string (HH:mm),
- *     hours: number,
- *     reason?: string,
- *     status?: string
- *   }
+ *
+ * Request Body (格式一：同一天，用 date + HH:mm):
+ *   { staff_id, staff_name, type, date (YYYY-MM-DD), start_time (HH:mm), end_time (HH:mm), hours?, reason?, status?, leave_type? }
+ *
+ * Request Body (格式二：跨日或已有完整時間，用 ISO):
+ *   { staff_id, staff_name, type, start_time (ISO), end_time (ISO), hours?, reason?, status?, leave_type? }
  */
 export async function POST(request: NextRequest) {
   try {
-    // 🟢 多租戶：取得當前使用者的 clinic_id
     const clinicId = await getClinicIdFromRequest(request);
     if (!clinicId) {
       return NextResponse.json(
@@ -114,17 +106,26 @@ export async function POST(request: NextRequest) {
       end_time,
       hours,
       reason,
-      status
+      status,
+      leave_type
     } = body;
 
-    if (!staff_id || !staff_name || !type || !date || !start_time || !end_time) {
+    if (!staff_id || !staff_name || !type || !start_time || !end_time) {
       return NextResponse.json(
         { success: false, message: '請填寫完整資訊' },
         { status: 400 }
       );
     }
 
-    // 🟢 多租戶：驗證該員工是否屬於當前診所；staff_id 保持 string (UUID)
+    const isIsoTime = typeof start_time === 'string' && start_time.includes('T');
+    if (!isIsoTime && !date) {
+      return NextResponse.json(
+        { success: false, message: '請填寫日期或提供完整時間' },
+        { status: 400 }
+      );
+    }
+
+    // 🟢 多租戶：驗證該員工是否屬於當前診所
     const { data: staff } = await supabaseAdmin
       .from('staff')
       .select('id, clinic_id')
@@ -139,23 +140,28 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const startFull = `${date}T${start_time}:00`;
-    const endFull = `${date}T${end_time}:00`;
+    // 同一天格式：date + HH:mm → 組合成 ISO 風格 YYYY-MM-DDTHH:mm:00
+    const toFull = (d: string, t: string) =>
+      `${d}T${String(t).slice(0, 5)}:00`;
+    const startFull = isIsoTime ? start_time : toFull(date, start_time);
+    const endFull = isIsoTime ? end_time : toFull(date, end_time);
 
-    // 🟢 多租戶：將 clinic_id 合併到 payload 中；staff_id 保持 string (UUID)，不轉數字
+    const insertPayload = {
+      staff_id: String(staff_id),
+      staff_name,
+      type,
+      start_time: startFull,
+      end_time: endFull,
+      hours: Number(hours) || 0,
+      reason: reason || '',
+      status: status || 'pending',
+      clinic_id: clinicId,
+      ...(leave_type != null && leave_type !== '' ? { leave_type: String(leave_type) } : {})
+    };
+
     const { error } = await supabaseAdmin
       .from('leave_requests')
-      .insert([{
-        staff_id: String(staff_id),
-        staff_name,
-        type,
-        start_time: startFull,
-        end_time: endFull,
-        hours: Number(hours) || 0,
-        reason: reason || '',
-        status: status || 'approved',
-        clinic_id: clinicId // 🟢 自動填入，不讓前端傳入
-      }]);
+      .insert([insertPayload]);
 
     if (error) {
       console.error('Add leave request error:', error);

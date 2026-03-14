@@ -25,25 +25,26 @@ export async function GET(request: NextRequest) {
     // 1. 查詢待審核的請假申請
     const { data: leaveRequests, error: leaveError } = await supabaseAdmin
       .from('leave_requests')
-      .select('id, staff_id, staff_name, type, start_time, end_time, reason, status, created_at')
+      .select('id, staff_id, staff_name, type, leave_type, start_time, end_time, reason, status, created_at')
       .eq('clinic_id', clinicId)
       .eq('status', 'pending')
       .order('created_at', { ascending: false });
 
     if (!leaveError && leaveRequests) {
       leaveRequests.forEach((req: any) => {
+        const isMissedPunch = req.type === '補打卡';
         tasks.push({
-          type: 'leave',
+          type: isMissedPunch ? 'missed_punch' : 'leave',
           id: req.id,
           staff_name: req.staff_name || '未知員工',
           date: req.start_time ? new Date(req.start_time).toISOString().split('T')[0] : '',
-          description: `${req.type} 申請`,
+          description: isMissedPunch ? `補打卡 (${req.leave_type || '全天'})` : `${req.type} 申請`,
           start_time: req.start_time,
           end_time: req.end_time,
           reason: req.reason,
           status: req.status,
+          leave_type: req.leave_type,
           created_at: req.created_at,
-          // 保留原始資料供前端使用
           _raw: req
         });
       });

@@ -290,37 +290,41 @@ export function usePortalData(
       alert('補全天請填寫上班和下班時間');
       return;
     }
-    let startFull: string | null = null;
-    let endFull: string | null = null;
-    let leaveType = '';
+    // 轉換補打卡類型對應 DB leave_type：上班 / 下班 / 全天
+    let leaveType: '上班' | '下班' | '全天' = '上班';
+    let startTimeHHmm: string;
+    let endTimeHHmm: string;
     if (form.correctionType === 'check_in') {
-      startFull = new Date(`${form.date}T${form.startTime}`).toISOString();
-      endFull = startFull;
       leaveType = '上班';
+      startTimeHHmm = form.startTime.includes(':') ? form.startTime.slice(0, 5) : form.startTime;
+      endTimeHHmm = startTimeHHmm;
     } else if (form.correctionType === 'check_out') {
-      startFull = new Date(`${form.date}T09:00`).toISOString();
-      endFull = new Date(`${form.date}T${form.endTime}`).toISOString();
       leaveType = '下班';
-    } else if (form.correctionType === 'full') {
-      startFull = new Date(`${form.date}T${form.startTime}`).toISOString();
-      endFull = new Date(`${form.date}T${form.endTime}`).toISOString();
+      startTimeHHmm = '09:00';
+      endTimeHHmm = form.endTime.includes(':') ? form.endTime.slice(0, 5) : form.endTime;
+    } else {
       leaveType = '全天';
+      startTimeHHmm = form.startTime.includes(':') ? form.startTime.slice(0, 5) : form.startTime;
+      endTimeHHmm = form.endTime.includes(':') ? form.endTime.slice(0, 5) : form.endTime;
     }
+    setIsViewLoading(true);
     try {
+      const payload = {
+        staff_id: staffUser.id,
+        staff_name: profile?.name ?? staffUser.name,
+        type: '補打卡',
+        leave_type: leaveType,
+        date: form.date,
+        start_time: startTimeHHmm,
+        end_time: endTimeHHmm,
+        hours: 0,
+        reason: form.reason,
+        status: 'pending',
+      };
       const response = await fetch('/api/leave', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          staff_id: staffUser.id,
-          staff_name: staffUser.name,
-          type: '補打卡',
-          leave_type: leaveType,
-          start_time: startFull,
-          end_time: endFull,
-          hours: 0,
-          reason: form.reason,
-          status: 'pending',
-        }),
+        body: JSON.stringify(payload),
         credentials: 'include',
       });
       if (response.status === 401) {
@@ -329,13 +333,15 @@ export function usePortalData(
       }
       const result = await response.json();
       if (result.success) {
-        alert('✅ 補打卡申請已送出，待主管審核。');
+        alert('✅ 補打卡申請已送出，請等待主管簽核。');
         fetchLeaveHistory();
       } else {
-        alert('申請失敗: ' + (result.message || result.error));
+        alert('❌ 申請失敗: ' + (result.message || result.error));
       }
     } catch (error: any) {
-      alert('申請失敗: ' + error.message);
+      alert('❌ 系統錯誤');
+    } finally {
+      setIsViewLoading(false);
     }
   };
 
@@ -379,20 +385,22 @@ export function usePortalData(
     ).toISOString();
     const diff =
       (new Date(endT).getTime() - new Date(startT).getTime()) / 3600000;
+    setIsViewLoading(true);
     try {
+      const payload = {
+        staff_id: staffUser.id,
+        staff_name: profile?.name ?? staffUser.name,
+        type: leaveForm.type,
+        start_time: startT,
+        end_time: endT,
+        hours: Number(diff.toFixed(1)),
+        reason: leaveForm.reason || '',
+        status: 'pending',
+      };
       const response = await fetch('/api/leave', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          staff_id: staffUser.id,
-          staff_name: staffUser.name,
-          type: leaveForm.type,
-          start_time: startT,
-          end_time: endT,
-          hours: diff.toFixed(1),
-          reason: leaveForm.reason,
-          status: 'pending',
-        }),
+        body: JSON.stringify(payload),
         credentials: 'include',
       });
       if (response.status === 401) {
@@ -409,6 +417,8 @@ export function usePortalData(
       }
     } catch (error: any) {
       alert('申請失敗: ' + error.message);
+    } finally {
+      setIsViewLoading(false);
     }
   };
 
