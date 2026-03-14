@@ -3,8 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import { CheckCircle, XCircle, Clock, Calendar, FileText, Filter, AlertCircle } from 'lucide-react';
 
-const formatDate = (iso: string) => new Date(iso).toLocaleString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-const formatTime = (iso: string) => new Date(iso).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' });
+const formatDate = (iso: string) => new Date(iso).toLocaleString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+const formatTime = (iso: string) => new Date(iso).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false });
 
 const FILTER_LABELS: Record<string, string> = {
   pending: '待審核',
@@ -48,10 +48,22 @@ export default function TasksView() {
           });
         }
 
-        // 🟢 2. 修復類型篩選 (將所有非加班/異常的項目，如事假、補打卡，統整為 leave)
+        // 🟢 2. 修復類型篩選 (將請假與補打卡徹底分開)
         if (typeFilter !== 'all') {
           if (typeFilter === 'leave') {
-            filtered = filtered.filter((task: any) => task.type !== 'overtime' && task.type !== 'anomaly');
+            filtered = filtered.filter((task: any) =>
+              task.type !== 'overtime' &&
+              task.type !== 'anomaly' &&
+              task.type !== 'missed_punch' &&
+              task.type !== '補打卡' &&
+              task._raw?.type !== '補打卡'
+            );
+          } else if (typeFilter === 'missed_punch') {
+            filtered = filtered.filter((task: any) =>
+              task.type === 'missed_punch' ||
+              task.type === '補打卡' ||
+              task._raw?.type === '補打卡'
+            );
           } else {
             filtered = filtered.filter((task: any) => task.type === typeFilter);
           }

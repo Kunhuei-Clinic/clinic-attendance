@@ -255,12 +255,14 @@ export default function RosterView({ rosterData, staffUser }: RosterViewProps) {
         }
     }, [doctorStaff, activeTab, currentDate]);
 
-    // 🟢 自動捲動到今日欄位
+    // 🟢 自動捲動到今日欄位（使用 class 選取多個表格的今日欄位並全數滾動置中）
     useEffect(() => {
         if (!isLoading && todayStr) {
             const t = setTimeout(() => {
-                const el = document.getElementById(`day-col-${todayStr}`);
-                if (el) el.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+                const els = document.querySelectorAll(`.day-col-${todayStr}`);
+                els.forEach(el => {
+                    el.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+                });
             }, 300);
             return () => clearTimeout(t);
         }
@@ -772,8 +774,7 @@ export default function RosterView({ rosterData, staffUser }: RosterViewProps) {
                                     return (
                                         <th
                                             key={d.dateStr}
-                                            id={`day-col-${d.dateStr}`}
-                                            className={`p-1 border text-center min-w-[50px] ${headerBg} ${textColor} ${isToday ? 'border-b-2 border-yellow-400' : ''}`}
+                                            className={`day-col-${d.dateStr} p-1 border text-center min-w-[50px] ${headerBg} ${textColor} ${isToday ? 'border-b-2 border-yellow-400' : ''}`}
                                         >
                                             <div className="text-[10px] font-bold">
                                                 {d.dateObj.getDate()}
@@ -1014,7 +1015,7 @@ export default function RosterView({ rosterData, staffUser }: RosterViewProps) {
                                                 className={`${isTodayDate ? 'bg-yellow-50/50' : ''} ${isHoliday ? 'bg-red-50/30' : ''}`}
                                             >
                                                 {/* 日期欄 */}
-                                                <td id={isTodayDate ? `day-col-${todayStr}` : undefined} className="p-1 border-r text-center text-xs sticky left-0 z-5 bg-white">
+                                                <td className={`p-1 border-r text-center text-xs sticky left-0 z-5 bg-white ${isTodayDate ? `day-col-${todayStr}` : ''}`}>
                                                     <div className="font-bold text-slate-700">{dateObj.getDate()}</div>
                                                     <div className={`text-[10px] ${weekDay === 0 ? 'text-red-500' : weekDay === 6 ? 'text-green-600' : 'text-slate-400'}`}>
                                                         {weekDays[weekDay]}
