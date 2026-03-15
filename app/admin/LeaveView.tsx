@@ -5,7 +5,6 @@ import { Calendar, Clock, TrendingUp } from 'lucide-react';
 import LeaveRequestsList from './leave/LeaveRequestsList';
 import LeaveStatsTable from './leave/LeaveStatsTable';
 import LeaveRequestModal from './leave/LeaveRequestModal';
-import LeaveSettleModal from './leave/LeaveSettleModal';
 import LeaveHistoryModal from './leave/LeaveHistoryModal';
 
 const getInitialRange = () => {
@@ -39,8 +38,6 @@ export default function LeaveView() {
   // ==========================================
   const [leaveStats, setLeaveStats] = useState<any[]>([]);
   const [loadingStats, setLoadingStats] = useState(false);
-  const [showSettleModal, setShowSettleModal] = useState(false);
-  const [selectedStaffForSettle, setSelectedStaffForSettle] = useState<any>(null);
 
   // ==========================================
   // LeaveHistoryModal 狀態
@@ -206,43 +203,9 @@ export default function LeaveView() {
     }
   };
 
-  const handleOpenSettle = (staff: any) => {
-    setSelectedStaffForSettle(staff);
-    setShowSettleModal(true);
-  };
-
   const handleOpenHistory = async (staff: any) => {
     setSelectedStaffForHistory(staff);
     setShowHistoryModal(true);
-  };
-
-  const handleSettle = async (settleForm: { days: number; pay_month: string; notes: string }) => {
-    if (!selectedStaffForSettle) return;
-
-    try {
-      const response = await fetch('/api/leave/settle', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          staff_id: selectedStaffForSettle.staff_id,
-          days: Number(settleForm.days),
-          pay_month: settleForm.pay_month,
-          notes: settleForm.notes
-        })
-      });
-
-      const result = await response.json();
-      if (result.success) {
-        alert('結算紀錄已建立！');
-        setShowSettleModal(false);
-        fetchLeaveStats();
-      } else {
-        alert('結算失敗: ' + result.message);
-      }
-    } catch (error) {
-      console.error('Settle error:', error);
-      alert('結算失敗');
-    }
   };
 
   return (
@@ -313,7 +276,7 @@ export default function LeaveView() {
           stats={leaveStats}
           loading={loadingStats}
           onOpenHistory={handleOpenHistory}
-          onOpenSettle={handleOpenSettle}
+          onOpenSettle={handleOpenHistory} // 🟢 統一導向打開特休存摺
           onRefresh={fetchLeaveStats}
         />
       )}
@@ -324,14 +287,6 @@ export default function LeaveView() {
         onClose={() => setShowRequestModal(false)}
         staffList={staffList}
         onSubmit={handleSubmitLeaveRequest}
-      />
-
-      {/* 特休結算彈窗 */}
-      <LeaveSettleModal
-        isOpen={showSettleModal}
-        onClose={() => setShowSettleModal(false)}
-        staff={selectedStaffForSettle}
-        onSubmit={handleSettle}
       />
 
       {/* 歷年特休詳情與設定 Modal */}
