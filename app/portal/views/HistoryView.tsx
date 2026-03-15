@@ -23,6 +23,7 @@ interface HistoryViewProps {
   onSubmitMissedPunch: (form: MissedPunchForm) => Promise<void> | void;
 }
 
+// 強制手動計算 AM/PM，保證全平台顯示一致
 const formatTime = (iso: string | null | undefined) => {
   if (!iso) return '--:--';
   const d = new Date(iso);

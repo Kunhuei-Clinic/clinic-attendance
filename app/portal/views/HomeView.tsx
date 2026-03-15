@@ -36,7 +36,7 @@ function getGpsStatusText(status: string) {
     case 'error':
       return '定位失敗';
     default:
-      return 'GPS 待命';
+      return '';
   }
 }
 

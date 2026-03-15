@@ -212,12 +212,13 @@ export async function GET(request: NextRequest) {
               .eq('clinic_id', currentClinicId)
               .eq('status', 'pending');
 
-            // 4. 異常打卡
+            // 4. 異常打卡（只抓取尚未處理的 pending 案件）
             const { data: anomalyData } = await supabaseAdmin
               .from('attendance_logs')
-              .select('staff_id, anomaly_reason, clock_in_time')
+              .select('staff_id, anomaly_reason, clock_in_time, clock_out_time, anomaly_status')
               .eq('clinic_id', currentClinicId)
-              .not('anomaly_reason', 'is', null);
+              .not('anomaly_reason', 'is', null)
+              .or('anomaly_status.eq.pending,anomaly_status.is.null');
 
             const anomalyList = (anomalyData || []).map((a: any) => ({
               name: staffMap[a.staff_id] || '未知',

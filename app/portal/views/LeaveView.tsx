@@ -39,6 +39,7 @@ interface LeaveViewProps {
   setShowAnnualHistory: (value: boolean) => void;
 }
 
+// 強制手動計算 AM/PM，保證全平台顯示一致
 const formatDateTime = (iso: string | null | undefined) => {
   if (!iso) return '';
   const d = new Date(iso);
