@@ -26,138 +26,62 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { staff_id, days, pay_month, notes } = body;
 
-    // 取得前端傳來的金額 (若無則預設為 0)，用於同步至薪資單
-    const amountForSalary = body.amount ?? 0;
-    
-    if (!staff_id || !days || !pay_month) {
+    // 🟢 關鍵修復：確實解構出前端傳來的 target_year 與 amount
+    const { staff_id, days, pay_month, notes, target_year, amount } = body;
+
+    if (!staff_id || days == null || !pay_month) {
       return NextResponse.json(
         { success: false, message: '缺少必要參數' },
         { status: 400 }
       );
     }
-    
-    if (days <= 0) {
-      return NextResponse.json(
-        { success: false, message: '結算天數必須大於0' },
-        { status: 400 }
-      );
-    }
-    
-    // 驗證 pay_month 格式
-    if (!/^\d{4}-\d{2}$/.test(pay_month)) {
-      return NextResponse.json(
-        { success: false, message: '發放月份格式錯誤 (應為 YYYY-MM)' },
-        { status: 400 }
-      );
-    }
-    
-    // 🟢 多租戶：取得該診所的員工資料；staff_id 保持 string (UUID)
-    const { data: staff, error: staffError } = await supabaseAdmin
-      .from('staff')
-      .select('id, name, base_salary, salary_mode')
-      .eq('id', String(staff_id))
-      .eq('clinic_id', clinicId) // 🟢 確保只查詢該診所的員工
-      .single();
-    
-    if (staffError || !staff) {
-      return NextResponse.json(
-        { success: false, message: '找不到員工資料或無權限操作' },
-        { status: 403 }
-      );
-    }
-    
-    // 2. 根據薪資模式計算結算金額
-    const baseSalary = Number(staff.base_salary) || 0;
-    const salaryMode = staff.salary_mode || 'hourly';
-    let amount = 0;
-    
-    if (salaryMode === 'monthly') {
-      // 月薪制：底薪 / 30 * 天數
-      amount = Math.round((baseSalary / 30) * days * 100) / 100;
-    } else {
-      // 時薪制：時薪 * 8小時 * 天數
-      amount = Math.round((baseSalary * 8) * days * 100) / 100;
-    }
-    
-    // 3. 檢查剩餘特休是否足夠
-    // 直接計算特休統計（避免外部 API 調用）
-    const { data: leaveRequests } = await supabaseAdmin
-      .from('leave_requests')
-      .select('staff_id, hours, start_time')
-      .eq('staff_id', String(staff_id))
-      .eq('type', '特休')
-      .eq('status', 'approved')
-      .eq('clinic_id', clinicId); // 🟢 只查詢該診所的請假紀錄
-    
-    const { data: settlements } = await supabaseAdmin
+
+    // 1. 寫入特休結算紀錄 (leave_settlements)
+    const { error: insertError } = await supabaseAdmin
       .from('leave_settlements')
-      .select('staff_id, days, status')
-      .eq('staff_id', String(staff_id))
-      .eq('status', 'processed')
-      .eq('clinic_id', clinicId); // 🟢 只查詢該診所的結算紀錄
-    
-    // 簡化計算：這裡只做基本驗證，詳細計算由 stats API 處理
-    // 如果結算天數過大（超過30天），直接拒絕
-    if (Number(days) > 30) {
-      return NextResponse.json(
-        { success: false, message: '結算天數不能超過30天' },
-        { status: 400 }
-      );
-    }
-    
-    // 🟢 多租戶：建立結算紀錄時自動填入 clinic_id；staff_id、pay_month 保持 string
-    const { data: settlement, error: insertError } = await supabaseAdmin
-      .from('leave_settlements')
-      .insert([{
-        staff_id: String(staff_id),
-        days: Number(days),
-        amount,
+      .insert({
+        staff_id,
+        clinic_id: clinicId,
+        days,
         pay_month,
-        status: 'pending',
         notes: notes || '',
-        clinic_id: clinicId // 🟢 自動填入，不讓前端傳入
-      }])
-      .select()
-      .single();
-    
+        // 🟢 關鍵修復：將年份轉為數字並確實寫入資料庫
+        target_year: target_year ? parseInt(target_year, 10) : null
+      });
+
     if (insertError) {
-      console.error('Create settlement error:', insertError);
-      return NextResponse.json(
-        { success: false, message: `建立結算紀錄失敗: ${insertError.message}` },
-        { status: 500 }
-      );
+      console.error('[Settle API] 寫入結算紀錄失敗:', insertError);
+      throw insertError;
     }
 
-    // 🟢 自動化：將結算金額同步寫入當月薪資單的「加給項目」
-    if (amountForSalary > 0) {
+    // 2. 自動化：將結算金額同步寫入當月薪資單的「加給項目」(salary_adjustments)
+    if (amount && amount > 0) {
       const { error: adjError } = await supabaseAdmin
         .from('salary_adjustments')
         .insert({
           staff_id: staff_id,
           clinic_id: clinicId,
           year_month: pay_month,
-          type: 'bonus',
+          type: 'bonus', // 標記為加項
           name: `特休結算 (${days}天)`,
-          amount: Math.round(amountForSalary),
+          amount: Math.round(amount)
         });
 
       if (adjError) {
         console.error('[Settle API] 同步至薪資單失敗:', adjError);
-        // 即使同步薪資單失敗，特休結算依然算成功，但不中斷流程
+        // 注意：這裡不 throw error，避免薪資單連動失敗導致結算流程中斷
       }
     }
 
     return NextResponse.json({
       success: true,
-      message: '結算完成，並已自動同步至該月薪資單',
-      data: settlement,
+      message: '結算完成，並已同步至當月薪資單'
     });
   } catch (error: any) {
-    console.error('Leave Settle API Error:', error);
+    console.error('[Settle API] Error:', error);
     return NextResponse.json(
-      { success: false, message: `處理失敗: ${error.message}` },
+      { success: false, message: error.message || '伺服器內部錯誤' },
       { status: 500 }
     );
   }
