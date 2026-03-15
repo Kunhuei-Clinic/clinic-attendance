@@ -46,7 +46,7 @@ const formatDateTime = (iso: string | null | undefined) =>
         day: 'numeric',
         hour: '2-digit',
         minute: '2-digit',
-        hour12: false,
+        hour12: true,
       })
     : '';
 

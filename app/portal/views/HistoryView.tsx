@@ -28,7 +28,7 @@ const formatTime = (iso: string | null | undefined) =>
     ? new Date(iso).toLocaleTimeString('zh-TW', {
         hour: '2-digit',
         minute: '2-digit',
-        hour12: false,
+        hour12: true,
       })
     : '--:--';
 

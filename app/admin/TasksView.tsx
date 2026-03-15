@@ -3,8 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import { CheckCircle, XCircle, Clock, Calendar, FileText, Filter, AlertCircle } from 'lucide-react';
 
-const formatDate = (iso: string) => new Date(iso).toLocaleString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
-const formatTime = (iso: string) => new Date(iso).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false });
+const formatDate = (iso: string) => new Date(iso).toLocaleString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true });
+const formatTime = (iso: string) => new Date(iso).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: true });
 
 const FILTER_LABELS: Record<string, string> = {
   pending: '待審核',
