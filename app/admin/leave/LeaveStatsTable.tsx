@@ -112,7 +112,12 @@ export default function LeaveStatsTable({
                         </button>
                         {remaining > 0 && (
                           <button
-                            onClick={() => onOpenSettle(stat)}
+                            // 🟢 核心改變：不再呼叫外層的 onOpenSettle，而是統一打開歷年詳情 (存摺)
+                            // 目前做法：彈出提示，並自動帶入員工存摺畫面，讓老闆在存摺中選擇要結算哪一年度
+                            onClick={() => {
+                              alert('為確保資料正確性，請在「歷年詳情」存摺中點擊對應年度進行結算。');
+                              onOpenHistory(stat);
+                            }}
                             className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-bold hover:bg-green-700 transition flex items-center gap-1"
                           >
                             <DollarSign size={14} /> 結算兌現
