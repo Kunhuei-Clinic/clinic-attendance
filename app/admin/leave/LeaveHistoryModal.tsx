@@ -272,12 +272,13 @@ export default function LeaveHistoryModal({
     setShowSettleModal(true);
   };
 
-  // 處理結算提交（包含目標年度資訊）
+  // 處理結算提交（包含目標年度與金額資訊）
   const handleSettle = async (settleForm: {
     days: number;
     pay_month: string;
     notes: string;
     target_year?: string;
+    amount?: number; // 🟢 1. 補上 amount 型別
   }) => {
     const staffId = staff?.staff_id || staff?.id;
     if (!staffId || !selectedYearForSettle) return;
@@ -290,22 +291,26 @@ export default function LeaveHistoryModal({
           staff_id: staffId,
           days: Number(settleForm.days),
           pay_month: settleForm.pay_month,
+          // 🟢 2. 關鍵修復：把金額確實傳給後端
+          amount: settleForm.amount || 0,
           notes:
             settleForm.notes ||
             `${settleForm.target_year ?? selectedYearForSettle.year} 年度特休結算`,
-          // 告知後端這筆結算是針對哪一年度的特休
           target_year: settleForm.target_year ?? String(selectedYearForSettle.year),
         }),
       });
 
       const result = await response.json();
       if (result.success) {
-        alert('結算紀錄已建立！');
+        alert('✅ 結算紀錄已建立，並已連動至當月薪資單！');
         setShowSettleModal(false);
         setSelectedYearForSettle(null);
         // 重新載入摘要資料
-        await fetchSummary();
-        // 如果有 onSaved callback，也觸發它（讓父層更新統計列表）
+        if (typeof (window as any).fetchSummary === 'function') {
+          (window as any).fetchSummary();
+        } else {
+          fetchSummary();
+        }
         if (onSaved) onSaved();
       } else {
         alert('結算失敗: ' + result.message);
