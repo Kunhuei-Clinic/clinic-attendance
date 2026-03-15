@@ -50,6 +50,17 @@ const formatDateTime = (iso: string | null | undefined) => {
   return `${d.getMonth() + 1}/${d.getDate()} ${ampm} ${hh}:${m}`;
 };
 
+// 將 HH:mm 轉成「上午/下午 H:mm」供表單時間欄位旁顯示
+const timeToAmPmDisplay = (hhmm: string): string => {
+  if (!hhmm || !hhmm.trim()) return '';
+  const parts = hhmm.trim().split(':');
+  const h = parseInt(parts[0] || '0', 10);
+  const m = (parts[1] || '00').padStart(2, '0');
+  const ampm = h >= 12 ? '下午' : '上午';
+  const hh = h % 12 || 12;
+  return `${ampm} ${hh}:${m}`;
+};
+
 export default function LeaveView({
   staffUser,
   leaveForm,
@@ -359,6 +370,11 @@ export default function LeaveView({
                   })
                 }
               />
+              {leaveForm.startTime && (
+                <p className="text-xs text-teal-600 font-bold mt-0.5">
+                  {timeToAmPmDisplay(leaveForm.startTime)}
+                </p>
+              )}
             </div>
             <div>
               <label className="text-[10px] text-slate-400">結束日期</label>
@@ -387,6 +403,11 @@ export default function LeaveView({
                   })
                 }
               />
+              {leaveForm.endTime && (
+                <p className="text-xs text-teal-600 font-bold mt-0.5">
+                  {timeToAmPmDisplay(leaveForm.endTime)}
+                </p>
+              )}
             </div>
           </div>
           <input

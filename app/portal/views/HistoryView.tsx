@@ -34,6 +34,17 @@ const formatTime = (iso: string | null | undefined) => {
   return `${ampm} ${hh}:${m}`;
 };
 
+// 將 HH:mm 轉成「上午/下午 H:mm」供表單時間欄位旁顯示
+const timeToAmPmDisplay = (hhmm: string): string => {
+  if (!hhmm || !hhmm.trim()) return '';
+  const parts = hhmm.trim().split(':');
+  const h = parseInt(parts[0] || '0', 10);
+  const m = (parts[1] || '00').padStart(2, '0');
+  const ampm = h >= 12 ? '下午' : '上午';
+  const hh = h % 12 || 12;
+  return `${ampm} ${hh}:${m}`;
+};
+
 export default function HistoryView({
   staffUser,
   logs,
@@ -213,6 +224,11 @@ export default function HistoryView({
                   disabled={isCheckOut}
                   required={isCheckIn || isFull}
                 />
+                {missedForm.startTime && (
+                  <p className="text-xs text-teal-600 font-bold mt-0.5">
+                    {timeToAmPmDisplay(missedForm.startTime)}
+                  </p>
+                )}
               </div>
               <div>
                 <label className="text-xs text-slate-400 font-bold">下班時間</label>
@@ -233,6 +249,11 @@ export default function HistoryView({
                   disabled={isCheckIn}
                   required={isCheckOut || isFull}
                 />
+                {missedForm.endTime && (
+                  <p className="text-xs text-teal-600 font-bold mt-0.5">
+                    {timeToAmPmDisplay(missedForm.endTime)}
+                  </p>
+                )}
               </div>
             </div>
 
