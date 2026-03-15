@@ -53,18 +53,39 @@ export default function LeaveHistoryModal({
   const [selectedYearForSettle, setSelectedYearForSettle] = useState<YearSummary | null>(null);
   const [leaveDetails, setLeaveDetails] = useState<Record<number, any[]>>({});
 
-  // 🟢 處理特休遞延至次年
+  // 🟢 處理特休遞延至次年 (留存稽核軌跡)
   const handleCarryOver = async (yearData: YearSummary) => {
-    if (!confirm(`確定要將「滿 ${yearData.year} 年」的剩餘特休 ${yearData.balance} 天，遞延至次年度嗎？`)) return;
+    if (!confirm(`確定要將「滿 ${yearData.year} 年」的剩餘特休 ${yearData.balance} 天，遞延至次年度嗎？\n\n(系統將自動保留此額度，並留下勞資協議遞延的稽核紀錄)`)) return;
 
-    // TODO: 這裡之後會串接後端 API
-    alert('此功能即將與後端 API 串接完成！');
+    try {
+      const res = await fetch('/api/leave/settle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          staff_id: staff?.staff_id || staff?.id,
+          days: 0, // 🟢 遞延不扣除天數，僅留存紀錄
+          amount: 0,
+          pay_month: new Date().toISOString().slice(0, 7),
+          notes: `【法定遞延】滿 ${yearData.year} 年特休遞延至次年`,
+          target_year: String(yearData.year)
+        })
+      });
+      if (res.ok) {
+        alert('✅ 已成功紀錄遞延！此額度將繼續保留於總餘額中。');
+        fetchSummary();
+        if (onSaved) onSaved();
+      } else {
+        alert('❌ 遞延紀錄失敗');
+      }
+    } catch (e) {
+      alert('系統錯誤');
+    }
   };
 
-  // 🟢 處理手動微調額度 (期初開帳用)
+  // 🟢 處理手動微調額度 (期初開帳用)，加入自訂原因
   const handleManualAdjust = async (yearData: YearSummary) => {
     const input = prompt(
-      `【期初開帳 / 手動微調】\n目前「滿 ${yearData.year} 年」額度為 ${yearData.quota} 天，已休 ${yearData.used} 天，已結算 ${yearData.settled} 天。\n\n若前雇主已折算過，請直接輸入「新的總結算天數」：`,
+      `【期初開帳 / 手動微調】\n目前「滿 ${yearData.year} 年」額度為 ${yearData.quota} 天，已休 ${yearData.used} 天，已結算 ${yearData.settled} 天。\n\n請直接輸入「新的總結算天數」：`,
       String(yearData.settled)
     );
 
@@ -75,6 +96,13 @@ export default function LeaveHistoryModal({
     const diff = newSettled - yearData.settled;
     if (diff === 0) return; // 沒有改變就不動作
 
+    // 🟢 讓使用者輸入自訂微調原因
+    const reason = prompt(
+      '請輸入微調原因：\n(例如：前雇主已結算、系統導入期初開帳等)',
+      '期初開帳 / 手動微調'
+    );
+    if (reason === null) return; // 按取消則中斷
+
     try {
       const res = await fetch('/api/leave/settle', {
         method: 'POST',
@@ -83,14 +111,14 @@ export default function LeaveHistoryModal({
           staff_id: staff?.staff_id || staff?.id,
           days: diff,
           pay_month: new Date().toISOString().slice(0, 7),
-          notes: '期初開帳/手動微調',
+          notes: reason, // 🟢 寫入自訂原因
           target_year: String(yearData.year)
         })
       });
       if (res.ok) {
         alert('✅ 微調成功！額度已更新。');
-        fetchSummary(); // 重新撈取存摺資料
-        if (onSaved) onSaved(); // 通知父元件更新大表
+        fetchSummary();
+        if (onSaved) onSaved();
       } else {
         alert('❌ 微調失敗');
       }
@@ -399,33 +427,33 @@ export default function LeaveHistoryModal({
                                     {y.status === 'active' ? '使用中' : '已到期'}
                                   </span>
                                 </td>
-                                {/* 🟢 修正：加入遞延與微調按鈕 */}
+                                {/* 🟢 修正：按鈕放大、移除圖示、排版優化 */}
                                 <td className="p-4 text-right align-top">
-                                  <div className="flex flex-col gap-1.5 items-end">
+                                  <div className="flex flex-col gap-2 items-end">
                                     {y.balance > 0 && (
-                                      <div className="flex gap-1">
+                                      <div className="flex gap-2">
                                         <button
                                           onClick={() => {
                                             setSelectedYearForSettle(y);
                                             setShowSettleModal(true);
                                           }}
-                                          className="px-2 py-1 bg-emerald-600 text-white rounded text-[10px] font-bold shadow-sm hover:bg-emerald-700"
+                                          className="px-3 py-1.5 bg-emerald-600 text-white rounded text-xs font-bold shadow-sm hover:bg-emerald-700 transition-colors"
                                         >
-                                          💰 結算
+                                          結算
                                         </button>
                                         <button
                                           onClick={() => handleCarryOver(y)}
-                                          className="px-2 py-1 bg-blue-600 text-white rounded text-[10px] font-bold shadow-sm hover:bg-blue-700"
+                                          className="px-3 py-1.5 bg-blue-600 text-white rounded text-xs font-bold shadow-sm hover:bg-blue-700 transition-colors"
                                         >
-                                          ➡️ 遞延
+                                          遞延
                                         </button>
                                       </div>
                                     )}
                                     <button
                                       onClick={() => handleManualAdjust(y)}
-                                      className="text-[10px] text-slate-400 hover:text-slate-700 underline mt-1"
+                                      className="text-xs text-slate-500 hover:text-slate-800 underline mt-1 font-bold transition-colors"
                                     >
-                                      ✏️ 微調開帳
+                                      微調開帳
                                     </button>
                                   </div>
                                 </td>
