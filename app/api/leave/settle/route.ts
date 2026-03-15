@@ -46,8 +46,9 @@ export async function POST(request: NextRequest) {
         days,
         pay_month,
         notes: notes || '',
-        // 🟢 關鍵修復：將年份轉為數字並確實寫入資料庫
-        target_year: target_year ? parseInt(target_year, 10) : null
+        // 🟢 修正：使用 parseFloat 保留「滿半年 (0.5)」的小數點
+        target_year: target_year ? parseFloat(target_year) : null,
+        status: 'approved' // 確保寫入時就是核准狀態
       });
 
     if (insertError) {

@@ -53,30 +53,49 @@ export default function LeaveHistoryModal({
   const [selectedYearForSettle, setSelectedYearForSettle] = useState<YearSummary | null>(null);
   const [leaveDetails, setLeaveDetails] = useState<Record<number, any[]>>({});
 
-  // 🟢 處理特休遞延至次年 (留存稽核軌跡)
+  // 🟢 處理特休遞延至次年 (會計魔法轉移)
   const handleCarryOver = async (yearData: YearSummary) => {
-    if (!confirm(`確定要將「滿 ${yearData.year} 年」的剩餘特休 ${yearData.balance} 天，遞延至次年度嗎？\n\n(系統將自動保留此額度，並留下勞資協議遞延的稽核紀錄)`)) return;
+    if (!confirm(`確定要將「滿 ${yearData.year} 年」的剩餘特休 ${yearData.balance} 天，遞延至次年度嗎？\n\n(系統將自動把額度轉移至今年度的存摺中)`)) return;
+
+    // 找出目前生效中的年度 (要接收遞延天數的年度)
+    const activeYear = summaryData?.years.find(y => y.status === 'active');
+    if (!activeYear) {
+      alert('找不到目前生效中的特休週期，無法進行遞延！');
+      return;
+    }
 
     try {
-      const res = await fetch('/api/leave/settle', {
+      // 1. 結算舊年度 (將舊年度剩餘天數扣除歸零)
+      await fetch('/api/leave/settle', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           staff_id: staff?.staff_id || staff?.id,
-          days: 0, // 🟢 遞延不扣除天數，僅留存紀錄
+          days: yearData.balance,
           amount: 0,
           pay_month: new Date().toISOString().slice(0, 7),
-          notes: `【法定遞延】滿 ${yearData.year} 年特休遞延至次年`,
+          notes: `【遞延】轉移至滿 ${activeYear.year} 年週期`,
           target_year: String(yearData.year)
         })
       });
-      if (res.ok) {
-        alert('✅ 已成功紀錄遞延！此額度將繼續保留於總餘額中。');
-        fetchSummary();
-        if (onSaved) onSaved();
-      } else {
-        alert('❌ 遞延紀錄失敗');
-      }
+
+      // 2. 加值新年度 (寫入負數的結算天數，利用負負得正增加新年度餘額)
+      await fetch('/api/leave/settle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          staff_id: staff?.staff_id || staff?.id,
+          days: -yearData.balance, // 🟢 負數！
+          amount: 0,
+          pay_month: new Date().toISOString().slice(0, 7),
+          notes: `【遞延】自滿 ${yearData.year} 年週期轉入`,
+          target_year: String(activeYear.year)
+        })
+      });
+
+      alert('✅ 已成功遞延！額度已完美轉移至本年度。');
+      fetchSummary();
+      if (onSaved) onSaved();
     } catch (e) {
       alert('系統錯誤');
     }

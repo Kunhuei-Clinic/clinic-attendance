@@ -68,7 +68,9 @@ export async function GET(request: NextRequest) {
     const { data: allSettlements } = await supabaseAdmin
       .from('leave_settlements')
       .select('*')
-      .eq('clinic_id', clinicId);
+      .eq('clinic_id', clinicId)
+      // 🟢 修正：大表也只承認已核准的結算/遞延紀錄
+      .or('status.eq.approved,status.is.null');
 
     const now = new Date();
     const stats = [];
@@ -100,7 +102,8 @@ export async function GET(request: NextRequest) {
           const used = calculateUsed(staffRequests, halfYearStart, halfYearEnd);
           const settled = calculateSettled(staffSettlements, 0);
           const balance = quota - used - settled;
-          if (now <= halfYearEnd || balance > 0) { // 還在週期內，或是過期但還有餘額
+          // 🟢 修正：只加總尚未過期的額度
+          if (now <= halfYearEnd) {
              totalQuota += quota; totalUsed += used; totalSettled += settled; totalRemaining += balance;
           }
         }
@@ -119,7 +122,8 @@ export async function GET(request: NextRequest) {
           const settled = calculateSettled(staffSettlements, y);
           const balance = quota - used - settled;
 
-          if ((now >= cycleStart && now <= cycleEnd) || balance > 0) {
+          // 🟢 修正：只加總尚未過期的額度
+          if (now >= cycleStart && now <= cycleEnd) {
              totalQuota += quota; totalUsed += used; totalSettled += settled; totalRemaining += balance;
           }
         }

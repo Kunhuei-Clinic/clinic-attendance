@@ -77,12 +77,13 @@ export async function GET(request: NextRequest) {
       .eq('type', '特休')
       .eq('status', 'approved');
 
-    // 4. 讀取結算紀錄
+    // 4. 讀取結算紀錄 (包含微調開帳與遞延)
     const { data: settlements } = await supabaseAdmin
       .from('leave_settlements')
-      .select('days, pay_month, notes, created_at, target_year')
+      .select('days, pay_month, notes, created_at, target_year, status')
       .eq('clinic_id', clinicId)
-      .eq('staff_id', staffId);
+      .eq('staff_id', staffId)
+      .or('status.eq.approved,status.is.null');
 
     const cycles: any[] = [];
     const allRequests = leaveRequests || [];

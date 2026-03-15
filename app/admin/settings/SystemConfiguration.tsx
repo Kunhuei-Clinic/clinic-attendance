@@ -104,7 +104,6 @@ export default function SystemConfiguration() {
   const [jobTitles, setJobTitles] = useState<JobTitleConfig[]>([]);
   const [specialClinics, setSpecialClinics] = useState<string[]>([]);
   const [businessHours, setBusinessHours] = useState<BusinessHoursConfig>(DEFAULT_BUSINESS_HOURS);
-  const [leaveCalculationSystem, setLeaveCalculationSystem] = useState<'anniversary' | 'calendar'>('anniversary');
   const [overtimeThreshold, setOvertimeThreshold] = useState(9);
   const [overtimeApprovalRequired, setOvertimeApprovalRequired] = useState(true);
   const [clockIgnoreGps, setClockIgnoreGps] = useState(false);
@@ -114,7 +113,6 @@ export default function SystemConfiguration() {
     roles: false,
     shifts: false,
     special: false,
-    leave: false,
     overtime: false,
   });
 
@@ -207,9 +205,6 @@ export default function SystemConfiguration() {
           }
           if (item.key === 'special_clinic_types') {
             try { setSpecialClinics(JSON.parse(item.value)); } catch (e) { }
-          }
-          if (item.key === 'leave_calculation_system') {
-            setLeaveCalculationSystem(item.value === 'calendar' ? 'calendar' : 'anniversary');
           }
         });
         
@@ -642,54 +637,6 @@ export default function SystemConfiguration() {
                   className="flex items-center gap-2 bg-slate-800 text-white px-5 py-2 rounded-lg text-sm font-bold hover:bg-black transition"
                 >
                   <Save size={16}/> 儲存門診類型
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* 特休計算制 */}
-        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 transition-all">
-          <div className="flex justify-between items-center cursor-pointer select-none" onClick={() => toggleSection('leave')}>
-            <label className="text-sm font-bold text-slate-700 flex items-center gap-2"><CalendarDays size={16}/> 特休計算制</label>
-            {expanded.leave ? <ChevronUp size={20} className="text-slate-400"/> : <ChevronDown size={20} className="text-slate-400"/>}
-          </div>
-          {expanded.leave && (
-            <div className="mt-4 pt-4 border-t border-slate-200 animate-fade-in">
-              <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 mb-4">
-                <p className="text-sm text-blue-800 mb-2"><strong>週年制</strong>：以員工到職日為基準，每年週年日重新計算。</p>
-                <p className="text-sm text-blue-800"><strong>曆年制</strong>：以日曆年度為基準，每年1月1日重新計算特休天數。</p>
-              </div>
-              <div className="flex gap-4">
-                <button 
-                  onClick={() => setLeaveCalculationSystem('anniversary')} 
-                  className={`flex-1 p-4 rounded-xl border-2 transition ${
-                    leaveCalculationSystem === 'anniversary' 
-                      ? 'bg-blue-50 border-blue-500 text-blue-700 font-bold' 
-                      : 'bg-white border-slate-200 text-slate-600 hover:border-blue-300'
-                  }`}
-                >
-                  <div className="text-lg font-bold mb-1">週年制</div>
-                  <div className="text-xs opacity-80">Anniversary System</div>
-                </button>
-                <button 
-                  onClick={() => setLeaveCalculationSystem('calendar')} 
-                  className={`flex-1 p-4 rounded-xl border-2 transition ${
-                    leaveCalculationSystem === 'calendar' 
-                      ? 'bg-blue-50 border-blue-500 text-blue-700 font-bold' 
-                      : 'bg-white border-slate-200 text-slate-600 hover:border-blue-300'
-                  }`}
-                >
-                  <div className="text-lg font-bold mb-1">曆年制</div>
-                  <div className="text-xs opacity-80">Calendar System</div>
-                </button>
-              </div>
-              <div className="mt-6 pt-4 border-t border-slate-200 flex justify-end">
-                <button 
-                  onClick={() => handleSaveSystemSetting('leave_calculation_system', leaveCalculationSystem)} 
-                  className="flex items-center gap-2 bg-slate-800 text-white px-5 py-2 rounded-lg text-sm font-bold hover:bg-black transition"
-                >
-                  <Save size={16}/> 儲存特休制度
                 </button>
               </div>
             </div>
