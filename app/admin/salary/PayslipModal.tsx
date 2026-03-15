@@ -123,7 +123,12 @@ function PrintContent({ report, yearMonth, clinicName }: any) {
               <div className="text-base font-bold mt-1">{report.staff_role}：{report.staff_name}</div>
               <div className="text-xs text-slate-500 mt-1 flex flex-col items-end gap-0.5">
               <span className="bg-slate-100 px-2 py-0.5 rounded">工時制: {getWorkRuleLabel(report.work_rule)}</span>
-              <span className="text-slate-400">到職日: {report.hire_date || '未設定'} | 享有特休: {report.annual_leave_days ?? 0} 天</span>
+              <span className="text-slate-400">
+                到職日: {report.hire_date || '未設定'} |
+                今年特休總額: {report.annual_leave_days ?? 0} 天 |
+                已休: {report.annual_leave_used ?? 0} 天 |
+                剩餘: {report.annual_leave_remaining ?? 0} 天
+              </span>
             </div>
             </div>
           </div>
