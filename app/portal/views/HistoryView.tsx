@@ -23,14 +23,15 @@ interface HistoryViewProps {
   onSubmitMissedPunch: (form: MissedPunchForm) => Promise<void> | void;
 }
 
-const formatTime = (iso: string | null | undefined) =>
-  iso
-    ? new Date(iso).toLocaleTimeString('zh-TW', {
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true,
-      })
-    : '--:--';
+const formatTime = (iso: string | null | undefined) => {
+  if (!iso) return '--:--';
+  const d = new Date(iso);
+  const h = d.getHours();
+  const m = String(d.getMinutes()).padStart(2, '0');
+  const ampm = h >= 12 ? '下午' : '上午';
+  const hh = h % 12 || 12;
+  return `${ampm} ${hh}:${m}`;
+};
 
 export default function HistoryView({
   staffUser,
@@ -193,7 +194,7 @@ export default function HistoryView({
 
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="text-xs text-slate-400 font-bold">上班時間 (24小時制)</label>
+                <label className="text-xs text-slate-400 font-bold">上班時間</label>
                 <input
                   type="time"
                   value={missedForm.startTime}
@@ -213,7 +214,7 @@ export default function HistoryView({
                 />
               </div>
               <div>
-                <label className="text-xs text-slate-400 font-bold">下班時間 (24小時制)</label>
+                <label className="text-xs text-slate-400 font-bold">下班時間</label>
                 <input
                   type="time"
                   value={missedForm.endTime}

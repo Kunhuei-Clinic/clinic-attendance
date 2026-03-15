@@ -220,9 +220,9 @@ export default function HomeView(props: HomeViewProps) {
 
       {/* 🟢 主管明細彈出視窗 (Modal) */}
       {detailModal && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm sm:items-center">
-          <div className="w-full sm:max-w-sm bg-slate-50 rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col max-h-[80vh] animate-fade-in-up">
-            <div className="flex justify-between items-center p-4 bg-white rounded-t-2xl border-b border-slate-100">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="w-full max-w-sm bg-slate-50 rounded-2xl shadow-2xl flex flex-col max-h-[80vh] overflow-hidden animate-fade-in-up">
+            <div className="flex justify-between items-center p-4 bg-white border-b border-slate-100 shrink-0">
               <h3 className="font-bold text-slate-800 flex items-center gap-2">
                 {detailModal === 'attendance' && <><Users size={18} className="text-teal-600"/> 今日出勤名單</>}
                 {detailModal === 'leaves' && <><FileText size={18} className="text-orange-600"/> 待核准假單</>}

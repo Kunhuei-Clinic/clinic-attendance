@@ -39,16 +39,15 @@ interface LeaveViewProps {
   setShowAnnualHistory: (value: boolean) => void;
 }
 
-const formatDateTime = (iso: string | null | undefined) =>
-  iso
-    ? new Date(iso).toLocaleString('zh-TW', {
-        month: 'numeric',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true,
-      })
-    : '';
+const formatDateTime = (iso: string | null | undefined) => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const h = d.getHours();
+  const m = String(d.getMinutes()).padStart(2, '0');
+  const ampm = h >= 12 ? '下午' : '上午';
+  const hh = h % 12 || 12;
+  return `${d.getMonth() + 1}/${d.getDate()} ${ampm} ${hh}:${m}`;
+};
 
 export default function LeaveView({
   staffUser,
@@ -67,7 +66,11 @@ export default function LeaveView({
     await onSubmitLeave();
   };
 
-  const annualStats = leaveStats?.annual;
+  // 同時支援英文與中文的屬性名稱，確保一定讀得到資料
+  const annualStats = leaveStats?.annual || leaveStats?.['特休'];
+  const personalStats = leaveStats?.personal || leaveStats?.['事假'];
+  const sickStats = leaveStats?.sick || leaveStats?.['病假'];
+
   const quota =
     staffLeaveInfo?.annual_leave_quota ??
     (annualStats?.quota !== undefined ? annualStats.quota : null);
@@ -76,7 +79,7 @@ export default function LeaveView({
     annualStats?.remaining !== undefined
       ? annualStats.remaining
       : quota !== null
-      ? quota
+      ? quota - usedDays
       : undefined;
 
   const renderOtherLeaveStats = () => {
@@ -88,30 +91,30 @@ export default function LeaveView({
           其他假別 (今年度)
         </h4>
 
-        {leaveStats.personal && (
+        {personalStats && (
           <div className="bg-white/80 p-2 rounded-lg border border-slate-200">
             <div className="flex justify-between items-center">
               <span className="text-xs font-bold text-slate-600">事假</span>
               <span className="text-sm font-black text-slate-700">
-                已用 {Number((leaveStats.personal.used || 0) / 8).toFixed(1)} 天
+                已用 {Number((personalStats.used || 0) / 8).toFixed(1)} 天
               </span>
             </div>
           </div>
         )}
 
-        {leaveStats.sick && (
+        {sickStats && (
           <div className="bg-white/80 p-2 rounded-lg border border-slate-200">
             <div className="flex justify-between items-center">
               <span className="text-xs font-bold text-slate-600">病假</span>
               <span className="text-sm font-black text-slate-700">
-                已用 {Number((leaveStats.sick.used || 0) / 8).toFixed(1)} 天
+                已用 {Number((sickStats.used || 0) / 8).toFixed(1)} 天
               </span>
             </div>
           </div>
         )}
 
         {Object.entries(leaveStats).map(([key, value]: [string, any]) => {
-          if (['annual', 'personal', 'sick'].includes(key)) return null;
+          if (['annual', 'personal', 'sick', '特休', '事假', '病假'].includes(key)) return null;
           const typeLabels: Record<string, string> = {
             menstrual: '生理假',
             bereavement: '喪假',
@@ -229,21 +232,16 @@ export default function LeaveView({
             </div>
           )}
 
-          {/* 今年特休 */}
-          {(leaveStats?.annual || staffLeaveInfo?.annual_leave_quota) && (
+          {/* 今年特休 (相容 annual / 特休) */}
+          {(annualStats || quota != null) && (
             <div className="bg-white/90 p-3 rounded-lg border-2 border-teal-300">
               <div className="flex justify-between items-center mb-2">
                 <span className="text-sm font-bold text-slate-700">
                   今年特休
                 </span>
                 <span className="text-lg font-black text-teal-700">
-                  {staffLeaveInfo?.annual_leave_quota !== null &&
-                  staffLeaveInfo?.annual_leave_quota !== undefined
-                    ? `${Number(
-                        staffLeaveInfo.annual_leave_quota,
-                      ).toFixed(1)} 天`
-                    : leaveStats?.annual?.quota !== undefined
-                    ? `${Number(leaveStats.annual.quota).toFixed(1)} 天`
+                  {quota !== null && quota !== undefined
+                    ? `${Number(quota).toFixed(1)} 天`
                     : '未設定額度'}
                 </span>
               </div>
@@ -251,25 +249,14 @@ export default function LeaveView({
                 <div className="bg-slate-50 p-2 rounded">
                   <div className="text-slate-500 mb-0.5">已用</div>
                   <div className="font-bold text-orange-600">
-                    {leaveStats?.annual
-                      ? `${Number(
-                          (leaveStats.annual.used || 0) / 8,
-                        ).toFixed(1)} 天`
-                      : '0 天'}
+                    {Number(usedDays).toFixed(1)} 天
                   </div>
                 </div>
                 <div className="bg-teal-50 p-2 rounded">
                   <div className="text-slate-500 mb-0.5">剩餘</div>
                   <div className="font-bold text-teal-700">
-                    {leaveStats?.annual?.remaining !== undefined
-                      ? `${Number(
-                          leaveStats.annual.remaining,
-                        ).toFixed(1)} 天`
-                      : staffLeaveInfo?.annual_leave_quota !== null &&
-                        staffLeaveInfo?.annual_leave_quota !== undefined
-                      ? `${Number(
-                          staffLeaveInfo.annual_leave_quota,
-                        ).toFixed(1)} 天`
+                    {remaining !== undefined
+                      ? `${Number(remaining).toFixed(1)} 天`
                       : '--'}
                   </div>
                 </div>
@@ -359,7 +346,7 @@ export default function LeaveView({
               />
             </div>
             <div>
-              <label className="text-[10px] text-slate-400">時間 (24小時制, 例: 14:00)</label>
+              <label className="text-[10px] text-slate-400">時間</label>
               <input
                 type="time"
                 className="w-full border rounded p-1 text-sm"
@@ -387,7 +374,7 @@ export default function LeaveView({
               />
             </div>
             <div>
-              <label className="text-[10px] text-slate-400">時間 (24小時制, 例: 14:00)</label>
+              <label className="text-[10px] text-slate-400">時間</label>
               <input
                 type="time"
                 className="w-full border rounded p-1 text-sm"
