@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Coffee, Calendar, ChevronRight } from 'lucide-react';
 import PortalTopHeader from './PortalTopHeader';
 
@@ -50,15 +50,10 @@ const formatDateTime = (iso: string | null | undefined) => {
   return `${d.getMonth() + 1}/${d.getDate()} ${ampm} ${hh}:${m}`;
 };
 
-// 將 HH:mm 轉成「上午/下午 H:mm」供表單時間欄位旁顯示
-const timeToAmPmDisplay = (hhmm: string): string => {
+const getAmPmIndicator = (hhmm: string): string => {
   if (!hhmm || !hhmm.trim()) return '';
-  const parts = hhmm.trim().split(':');
-  const h = parseInt(parts[0] || '0', 10);
-  const m = (parts[1] || '00').padStart(2, '0');
-  const ampm = h >= 12 ? '下午' : '上午';
-  const hh = h % 12 || 12;
-  return `${ampm} ${hh}:${m}`;
+  const h = parseInt(hhmm.split(':')[0] || '0', 10);
+  return h >= 12 ? '下午' : '上午';
 };
 
 export default function LeaveView({
@@ -73,6 +68,35 @@ export default function LeaveView({
   setShowAnnualHistory,
 }: LeaveViewProps) {
   const typeTabs = ['事假', '病假', '特休', '補休'];
+
+  // 從後端精算 API 抓取真實特休資料
+  const [realSummary, setRealSummary] = useState<any>(null);
+  useEffect(() => {
+    const fetchRealLeaveSummary = async () => {
+      const staffId = staffUser?.id || staffUser?.staff_id;
+      if (!staffId) return;
+      try {
+        const res = await fetch(`/api/staff/leave-summary?staff_id=${staffId}`);
+        const data = await res.json();
+        if (data && data.years) {
+          let totalQuota = 0;
+          let totalUsed = 0;
+          let totalBalance = 0;
+          data.years.filter((y: any) => y.status === 'active').forEach((y: any) => {
+            totalQuota += y.quota;
+            totalUsed += y.used;
+            totalBalance += y.balance;
+          });
+          if (totalQuota > 0) {
+            setRealSummary({ quota: totalQuota, used: totalUsed, balance: totalBalance });
+          }
+        }
+      } catch (e) {
+        console.error('Fetch leave summary error', e);
+      }
+    };
+    fetchRealLeaveSummary();
+  }, [staffUser]);
 
   const handleSubmit = async () => {
     await onSubmitLeave();
@@ -358,7 +382,14 @@ export default function LeaveView({
               />
             </div>
             <div>
-              <label className="text-[10px] text-slate-400">時間</label>
+              <div className="flex justify-between items-end mb-1">
+                <label className="text-[10px] text-slate-400 leading-none">時間</label>
+                {leaveForm.startTime && (
+                  <span className="text-[10px] font-bold text-teal-700 bg-teal-100 px-1.5 py-0.5 rounded leading-none">
+                    {getAmPmIndicator(leaveForm.startTime)}
+                  </span>
+                )}
+              </div>
               <input
                 type="time"
                 className="w-full border rounded p-1 text-sm"
@@ -370,11 +401,6 @@ export default function LeaveView({
                   })
                 }
               />
-              {leaveForm.startTime && (
-                <p className="text-xs text-teal-600 font-bold mt-0.5">
-                  {timeToAmPmDisplay(leaveForm.startTime)}
-                </p>
-              )}
             </div>
             <div>
               <label className="text-[10px] text-slate-400">結束日期</label>
@@ -391,7 +417,14 @@ export default function LeaveView({
               />
             </div>
             <div>
-              <label className="text-[10px] text-slate-400">時間</label>
+              <div className="flex justify-between items-end mb-1">
+                <label className="text-[10px] text-slate-400 leading-none">時間</label>
+                {leaveForm.endTime && (
+                  <span className="text-[10px] font-bold text-teal-700 bg-teal-100 px-1.5 py-0.5 rounded leading-none">
+                    {getAmPmIndicator(leaveForm.endTime)}
+                  </span>
+                )}
+              </div>
               <input
                 type="time"
                 className="w-full border rounded p-1 text-sm"
@@ -403,11 +436,6 @@ export default function LeaveView({
                   })
                 }
               />
-              {leaveForm.endTime && (
-                <p className="text-xs text-teal-600 font-bold mt-0.5">
-                  {timeToAmPmDisplay(leaveForm.endTime)}
-                </p>
-              )}
             </div>
           </div>
           <input

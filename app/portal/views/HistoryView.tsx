@@ -34,15 +34,10 @@ const formatTime = (iso: string | null | undefined) => {
   return `${ampm} ${hh}:${m}`;
 };
 
-// 將 HH:mm 轉成「上午/下午 H:mm」供表單時間欄位旁顯示
-const timeToAmPmDisplay = (hhmm: string): string => {
+const getAmPmIndicator = (hhmm: string): string => {
   if (!hhmm || !hhmm.trim()) return '';
-  const parts = hhmm.trim().split(':');
-  const h = parseInt(parts[0] || '0', 10);
-  const m = (parts[1] || '00').padStart(2, '0');
-  const ampm = h >= 12 ? '下午' : '上午';
-  const hh = h % 12 || 12;
-  return `${ampm} ${hh}:${m}`;
+  const h = parseInt(hhmm.split(':')[0] || '0', 10);
+  return h >= 12 ? '下午' : '上午';
 };
 
 export default function HistoryView({
@@ -206,7 +201,14 @@ export default function HistoryView({
 
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="text-xs text-slate-400 font-bold">上班時間</label>
+                <div className="flex justify-between items-end mb-1">
+                  <label className="text-xs text-slate-400 font-bold leading-none">上班時間</label>
+                  {missedForm.startTime && (
+                    <span className="text-[10px] font-bold text-teal-700 bg-teal-100 px-1.5 py-0.5 rounded leading-none">
+                      {getAmPmIndicator(missedForm.startTime)}
+                    </span>
+                  )}
+                </div>
                 <input
                   type="time"
                   value={missedForm.startTime}
@@ -224,14 +226,16 @@ export default function HistoryView({
                   disabled={isCheckOut}
                   required={isCheckIn || isFull}
                 />
-                {missedForm.startTime && (
-                  <p className="text-xs text-teal-600 font-bold mt-0.5">
-                    {timeToAmPmDisplay(missedForm.startTime)}
-                  </p>
-                )}
               </div>
               <div>
-                <label className="text-xs text-slate-400 font-bold">下班時間</label>
+                <div className="flex justify-between items-end mb-1">
+                  <label className="text-xs text-slate-400 font-bold leading-none">下班時間</label>
+                  {missedForm.endTime && (
+                    <span className="text-[10px] font-bold text-teal-700 bg-teal-100 px-1.5 py-0.5 rounded leading-none">
+                      {getAmPmIndicator(missedForm.endTime)}
+                    </span>
+                  )}
+                </div>
                 <input
                   type="time"
                   value={missedForm.endTime}
@@ -249,11 +253,6 @@ export default function HistoryView({
                   disabled={isCheckIn}
                   required={isCheckOut || isFull}
                 />
-                {missedForm.endTime && (
-                  <p className="text-xs text-teal-600 font-bold mt-0.5">
-                    {timeToAmPmDisplay(missedForm.endTime)}
-                  </p>
-                )}
               </div>
             </div>
 
