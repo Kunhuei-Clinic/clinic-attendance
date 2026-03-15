@@ -40,6 +40,12 @@ export default function LeaveHistoryModal({
   staff,
   onSaved,
 }: LeaveHistoryModalProps) {
+  // 🟢 強制轉換日期格式為 YYYY/MM/DD
+  const formatSlashDate = (dateStr: string | null | undefined) => {
+    if (!dateStr) return '';
+    return dateStr.split('T')[0].replace(/-/g, '/');
+  };
+
   const [summaryData, setSummaryData] = useState<LeaveSummaryResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [expandedYears, setExpandedYears] = useState<Set<number>>(new Set());
@@ -58,7 +64,7 @@ export default function LeaveHistoryModal({
   // 🟢 處理手動微調額度 (期初開帳用)
   const handleManualAdjust = async (yearData: YearSummary) => {
     const input = prompt(
-      `【期初開帳 / 手動微調】\n目前「滿 ${yearData.year} 年」額度為 ${yearData.quota} 天，已休 ${yearData.used} 天，已結算 ${yearData.settled} 天。\n\n若前雇主已折算過，請直接輸入「新的已結算天數」：`,
+      `【期初開帳 / 手動微調】\n目前「滿 ${yearData.year} 年」額度為 ${yearData.quota} 天，已休 ${yearData.used} 天，已結算 ${yearData.settled} 天。\n\n若前雇主已折算過，請直接輸入「新的總結算天數」：`,
       String(yearData.settled)
     );
 
@@ -66,8 +72,31 @@ export default function LeaveHistoryModal({
     const newSettled = parseFloat(input);
     if (isNaN(newSettled) || newSettled < 0) return alert('請輸入有效數字');
 
-    // TODO: 這裡之後會串接後端 API
-    alert('此功能即將與後端 API 串接完成！');
+    const diff = newSettled - yearData.settled;
+    if (diff === 0) return; // 沒有改變就不動作
+
+    try {
+      const res = await fetch('/api/leave/settle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          staff_id: staff?.staff_id || staff?.id,
+          days: diff,
+          pay_month: new Date().toISOString().slice(0, 7),
+          notes: '期初開帳/手動微調',
+          target_year: String(yearData.year)
+        })
+      });
+      if (res.ok) {
+        alert('✅ 微調成功！額度已更新。');
+        fetchSummary(); // 重新撈取存摺資料
+        if (onSaved) onSaved(); // 通知父元件更新大表
+      } else {
+        alert('❌ 微調失敗');
+      }
+    } catch (e) {
+      alert('系統錯誤');
+    }
   };
 
   // 計算目前可休總餘額（所有 active 年度的 balance 總和）
@@ -344,7 +373,7 @@ export default function LeaveHistoryModal({
                                     滿 {y.year} 年特休
                                   </div>
                                   <div className="text-[10px] text-slate-500 font-mono bg-slate-100 inline-block px-1.5 py-0.5 rounded">
-                                    {y.cycle_start} ~ {y.cycle_end}
+                                    {formatSlashDate(y.cycle_start)} - {formatSlashDate(y.cycle_end)}
                                   </div>
                                 </td>
                                 <td className="p-4 font-bold text-slate-700 text-center align-top">
