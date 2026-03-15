@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
     // 1. 抓取全院有效員工
     const { data: staffList } = await supabaseAdmin
       .from('staff')
-      .select('id, name, start_date, is_active')
+      .select('id, name, start_date, is_active, base_salary, salary_mode') // 🟢 補上薪資欄位
       .eq('clinic_id', clinicId)
       .eq('is_active', true);
 
@@ -133,6 +133,8 @@ export async function GET(request: NextRequest) {
         staff_id: staff.id,
         staff_name: staff.name,
         start_date: staff.start_date,
+        base_salary: staff.base_salary, // 🟢 補上底薪
+        salary_mode: staff.salary_mode, // 🟢 補上計薪模式
         quota: totalQuota,
         used: totalUsed,
         settled: totalSettled,

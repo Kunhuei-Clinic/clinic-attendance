@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
     // 2. 讀取員工基本資料
     const { data: staff, error: staffError } = await supabaseAdmin
       .from('staff')
-      .select('id, name, role, start_date')
+      .select('id, name, role, start_date, base_salary, salary_mode') // 🟢 補上薪資欄位
       .eq('id', staffId)
       .eq('clinic_id', clinicId)
       .single();
@@ -68,10 +68,10 @@ export async function GET(request: NextRequest) {
     
     const today = new Date();
 
-    // 3. 讀取「特休」請假紀錄
+    // 3. 讀取「特休」請假紀錄 (含 reason 供前端顯示事由)
     const { data: leaveRequests } = await supabaseAdmin
       .from('leave_requests')
-      .select('hours, start_time')
+      .select('hours, start_time, reason')
       .eq('clinic_id', clinicId)
       .eq('staff_id', staffId)
       .eq('type', '特休')
@@ -166,8 +166,12 @@ export async function GET(request: NextRequest) {
         staff_name: staff.name,
         role: staff.role ?? null,
         start_date: staff.start_date,
+        base_salary: staff.base_salary,
+        salary_mode: staff.salary_mode,
       },
       years: cycles,
+      raw_requests: allRequests,
+      raw_settlements: allSettlements,
     });
 
   } catch (error: any) {

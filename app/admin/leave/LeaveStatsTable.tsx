@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { TrendingUp, DollarSign, FileText } from 'lucide-react';
+import { TrendingUp, FileText } from 'lucide-react';
 
 type LeaveStatsTableProps = {
   stats: any[];
@@ -102,27 +102,14 @@ export default function LeaveStatsTable({
                       {Number(remaining).toFixed(1)}
                     </td>
                     <td className="p-4 text-center">
-                      <div className="flex items-center justify-center gap-2">
+                      <div className="flex items-center justify-center">
                         <button
                           onClick={() => onOpenHistory(stat)}
-                          className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 transition flex items-center gap-1"
-                          title="查看歷年詳情與設定"
+                          className="px-4 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 transition flex items-center gap-1 shadow-sm"
+                          title="打開特休存摺進行結算與管理"
                         >
-                          <FileText size={14} /> 歷年詳情
+                          <FileText size={14} /> 特休存摺 / 結算
                         </button>
-                        {remaining > 0 && (
-                          <button
-                            // 🟢 核心改變：不再呼叫外層的 onOpenSettle，而是統一打開歷年詳情 (存摺)
-                            // 目前做法：彈出提示，並自動帶入員工存摺畫面，讓老闆在存摺中選擇要結算哪一年度
-                            onClick={() => {
-                              alert('為確保資料正確性，請在「歷年詳情」存摺中點擊對應年度進行結算。');
-                              onOpenHistory(stat);
-                            }}
-                            className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-bold hover:bg-green-700 transition flex items-center gap-1"
-                          >
-                            <DollarSign size={14} /> 結算兌現
-                          </button>
-                        )}
                       </div>
                     </td>
                   </tr>

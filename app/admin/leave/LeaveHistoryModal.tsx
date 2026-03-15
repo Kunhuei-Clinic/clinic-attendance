@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useMemo } from 'react';
-import { Calendar, DollarSign, FileText, X, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react';
+import { Calendar, DollarSign, FileText, X, ChevronDown, ChevronUp, RefreshCw, Printer } from 'lucide-react';
 import LeaveSettleModal from './LeaveSettleModal';
 
 type LeaveHistoryModalProps = {
@@ -26,12 +26,16 @@ type YearSummary = {
 // API 回傳的完整資料結構
 type LeaveSummaryResponse = {
   staff: {
-    id: string; // 🟢 修正為 UUID (string)
+    id: string;
     name: string;
     role: string | null;
     start_date: string | null;
+    base_salary?: number;
+    salary_mode?: string;
   };
   years: YearSummary[];
+  raw_requests?: any[];
+  raw_settlements?: any[];
 };
 
 export default function LeaveHistoryModal({
@@ -51,7 +55,6 @@ export default function LeaveHistoryModal({
   const [expandedYears, setExpandedYears] = useState<Set<number>>(new Set());
   const [showSettleModal, setShowSettleModal] = useState(false);
   const [selectedYearForSettle, setSelectedYearForSettle] = useState<YearSummary | null>(null);
-  const [leaveDetails, setLeaveDetails] = useState<Record<number, any[]>>({});
 
   // 🟢 處理特休遞延至次年 (會計魔法轉移)
   const handleCarryOver = async (yearData: YearSummary) => {
@@ -194,15 +197,19 @@ export default function LeaveHistoryModal({
         return;
       }
 
-      // 標準化 API 回傳的資料結構（支援 staff_id/staff_name 或 id/name）
+      // 標準化 API 回傳的資料結構（含 raw_requests / raw_settlements）
       const normalizedResult: LeaveSummaryResponse = {
         staff: {
           id: result.staff?.id || result.staff?.staff_id || staffId,
           name: result.staff?.name || result.staff?.staff_name || staff?.staff_name || staff?.name || '未知',
           role: result.staff?.role || null,
           start_date: result.staff?.start_date || null,
-        },
+          base_salary: result.staff?.base_salary ?? staff?.base_salary ?? 0,
+          salary_mode: result.staff?.salary_mode ?? staff?.salary_mode ?? 'hourly',
+        } as any,
         years: result.years || [],
+        raw_requests: result.raw_requests ?? [],
+        raw_settlements: result.raw_settlements ?? [],
       };
       
       console.log('LeaveHistoryModal: 標準化後的資料', normalizedResult);
@@ -215,31 +222,6 @@ export default function LeaveHistoryModal({
     }
   };
 
-  // 載入特定年度的請假明細
-  const fetchLeaveDetails = async (year: number, cycleStart: string, cycleEnd: string) => {
-    const staffId = staff?.staff_id || staff?.id;
-    if (!staffId) return;
-    try {
-      const response = await fetch(
-        `/api/leave?selectedStaffId=${staffId}&statusFilter=approved&useDateFilter=true&startDate=${cycleStart}&endDate=${cycleEnd}`
-      );
-      const result = await response.json();
-
-      if (result.data) {
-        // 只篩選特休類型
-        const annualLeaves = result.data.filter(
-          (req: any) => req.type === '特休' && req.status === 'approved'
-        );
-        setLeaveDetails((prev) => ({
-          ...prev,
-          [year]: annualLeaves,
-        }));
-      }
-    } catch (error) {
-      console.error('Fetch leave details error:', error);
-    }
-  };
-
   // 當 Modal 開啟時載入資料
   useEffect(() => {
     if (isOpen && staff) {
@@ -248,16 +230,12 @@ export default function LeaveHistoryModal({
   }, [isOpen, staff]);
 
   // 切換年度展開/收合
-  const toggleYearExpansion = (year: number, cycleStart: string, cycleEnd: string) => {
+  const toggleYearExpansion = (year: number) => {
     const newExpanded = new Set(expandedYears);
     if (newExpanded.has(year)) {
       newExpanded.delete(year);
     } else {
       newExpanded.add(year);
-      // 如果還沒載入過，就載入請假明細
-      if (!leaveDetails[year]) {
-        fetchLeaveDetails(year, cycleStart, cycleEnd);
-      }
     }
     setExpandedYears(newExpanded);
   };
@@ -324,35 +302,34 @@ export default function LeaveHistoryModal({
   if (!isOpen || !staff) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
+    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm print:static print:bg-white print:p-0 print:block">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col print:shadow-none print:max-h-none print:overflow-visible print:block">
         {/* Header */}
-        <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-6 flex justify-between items-center shrink-0">
+        <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-6 flex justify-between items-center shrink-0 print:bg-none print:text-black print:border-b-2 print:border-black">
           <div>
             <h3 className="text-2xl font-bold flex items-center gap-2">
-              <FileText size={24} /> 特休自動結算儀表板
+              <FileText size={24} className="print:hidden" /> 特休存摺明細表
             </h3>
-            <p className="text-blue-100 mt-1">{staff.staff_name || staff.name || '未知員工'}</p>
+            <p className="text-blue-100 print:text-slate-600 mt-1">{staff.staff_name || staff.name || '未知員工'}</p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 print:hidden">
             <button
-              onClick={fetchSummary}
-              className="p-2 hover:bg-white/20 rounded-full transition"
-              title="重新整理"
+              onClick={() => window.print()}
+              className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg text-sm font-bold transition shadow-sm"
             >
+              <Printer size={16} /> 匯出 PDF
+            </button>
+            <button onClick={fetchSummary} className="p-2 hover:bg-white/20 rounded-full transition" title="重新整理">
               <RefreshCw size={20} />
             </button>
-            <button
-              onClick={onClose}
-              className="p-2 hover:bg-white/20 rounded-full transition"
-            >
+            <button onClick={onClose} className="p-2 hover:bg-white/20 rounded-full transition">
               <X size={24} />
             </button>
           </div>
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        <div className="flex-1 overflow-y-auto p-6 space-y-6 print:overflow-visible">
           {loading ? (
             <div className="text-center py-12 text-slate-400">載入中...</div>
           ) : !summaryData ? (
@@ -422,7 +399,7 @@ export default function LeaveHistoryModal({
                                 {/* 🟢 加上 onClick 讓整格可以點擊展開 */}
                                 <td
                                   className="p-4 align-top cursor-pointer group"
-                                  onClick={() => toggleYearExpansion(y.year, y.cycle_start, y.cycle_end)}
+                                  onClick={() => toggleYearExpansion(y.year)}
                                 >
                                   <div className="font-bold text-slate-800 text-sm mb-1 flex items-center gap-1 group-hover:text-blue-600 transition">
                                     {expandedYears.has(y.year) ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}
@@ -486,52 +463,83 @@ export default function LeaveHistoryModal({
                                   </div>
                                 </td>
                               </tr>
-                              {/* 🟢 點擊展開的明細區塊 */}
-                              {expandedYears.has(y.year) && (
-                                <tr className="bg-slate-50/80 border-b-2 border-slate-200">
-                                  <td colSpan={7} className="p-0">
-                                    <div className="p-4 pl-8 border-l-4 border-teal-400 m-2 bg-white rounded shadow-sm">
-                                      <h5 className="text-xs font-bold text-slate-500 mb-3 flex items-center gap-2">
-                                        <FileText size={14} /> 滿 {y.year} 年週期內 - 實際請假明細
-                                      </h5>
+                              {/* 展開的明細區塊 (包含請假與結算) */}
+                              {expandedYears.has(y.year) && (() => {
+                                const cycleStart = new Date(y.cycle_start);
+                                const cycleEnd = new Date(y.cycle_end);
 
-                                      {/* 明細列表 */}
-                                      {leaveDetails[y.year] === undefined ? (
-                                        <div className="text-xs text-slate-400 py-2">載入明細中...</div>
-                                      ) : leaveDetails[y.year].length === 0 ? (
-                                        <div className="text-xs text-slate-400 py-2">此週期尚無已核准的請假紀錄</div>
-                                      ) : (
-                                        <ul className="space-y-2">
-                                          {leaveDetails[y.year].map((req: any, idx: number) => (
-                                            <li key={idx} className="flex justify-between items-center text-sm border-b border-slate-100 pb-2">
-                                              <div className="flex items-center gap-3">
-                                                <span className="font-mono text-slate-600 bg-slate-100 px-2 py-0.5 rounded text-xs">
-                                                  {formatSlashDate(req.start_time)}
-                                                </span>
-                                                <span className="font-bold text-slate-700">
-                                                  請假 {Number(req.hours / 8).toFixed(1)} 天
-                                                </span>
-                                                <span className="text-slate-400 text-xs">{req.reason || '無事由'}</span>
-                                              </div>
-                                              {/* 刪除按鈕 (防呆：刪除等同作廢) */}
-                                              <button
-                                                onClick={() => {
-                                                  if (confirm('確定要作廢這筆請假紀錄嗎？作廢後額度將自動歸還。')) {
-                                                    alert('此紀錄需至「請假管理」列表作廢/刪除');
-                                                  }
-                                                }}
-                                                className="text-xs text-red-400 hover:text-red-600 underline"
-                                              >
-                                                查看/作廢
-                                              </button>
-                                            </li>
-                                          ))}
-                                        </ul>
-                                      )}
-                                    </div>
-                                  </td>
-                                </tr>
-                              )}
+                                const yearReqs = summaryData.raw_requests?.filter((r: any) => {
+                                  const d = new Date(r.start_time);
+                                  return d >= cycleStart && d <= cycleEnd;
+                                }) || [];
+
+                                const yearSetts = summaryData.raw_settlements?.filter((s: any) => {
+                                  if (s.target_year != null) return Number(s.target_year) === y.year;
+                                  if (s.notes && (s.notes.includes(`${y.year}年`) || s.notes.includes(`滿${y.year}年`))) return true;
+                                  const dateStr = s.created_at || s.pay_month;
+                                  if (dateStr) {
+                                    const d = new Date(dateStr);
+                                    return !isNaN(d.getTime()) && d >= cycleStart && d <= cycleEnd;
+                                  }
+                                  return false;
+                                }) || [];
+
+                                return (
+                                  <tr className="bg-slate-50/80 border-b-2 border-slate-200 print:break-inside-avoid">
+                                    <td colSpan={7} className="p-0">
+                                      <div className="p-4 border-l-4 border-teal-400 m-2 bg-white rounded shadow-sm flex flex-col md:flex-row gap-6 print:border-l-2 print:border-slate-300 print:shadow-none">
+                                        {/* 請假明細 */}
+                                        <div className="flex-1">
+                                          <h5 className="text-xs font-bold text-slate-500 mb-3 flex items-center gap-2">
+                                            <FileText size={14} /> 實際請假紀錄
+                                          </h5>
+                                          {yearReqs.length === 0 ? (
+                                            <div className="text-xs text-slate-400 py-2">此週期尚無請假紀錄</div>
+                                          ) : (
+                                            <ul className="space-y-2">
+                                              {yearReqs.map((req: any, idx: number) => (
+                                                <li key={idx} className="flex items-center gap-3 text-sm border-b border-slate-100 pb-2">
+                                                  <span className="font-mono text-slate-600 bg-slate-100 px-2 py-0.5 rounded text-xs print:bg-transparent print:p-0">
+                                                    {formatSlashDate(req.start_time)}
+                                                  </span>
+                                                  <span className="font-bold text-slate-700">
+                                                    休假 {Number(req.hours / 8).toFixed(1)} 天
+                                                  </span>
+                                                  <span className="text-slate-400 text-xs truncate max-w-xs">{req.reason || '無事由'}</span>
+                                                </li>
+                                              ))}
+                                            </ul>
+                                          )}
+                                        </div>
+
+                                        {/* 結算與遞延明細 */}
+                                        <div className="flex-1">
+                                          <h5 className="text-xs font-bold text-slate-500 mb-3 flex items-center gap-2">
+                                            <DollarSign size={14} /> 結算與異動紀錄
+                                          </h5>
+                                          {yearSetts.length === 0 ? (
+                                            <div className="text-xs text-slate-400 py-2">此週期尚無結算或遞延紀錄</div>
+                                          ) : (
+                                            <ul className="space-y-2">
+                                              {yearSetts.map((sett: any, idx: number) => (
+                                                <li key={idx} className="flex items-center gap-3 text-sm border-b border-slate-100 pb-2">
+                                                  <span className="font-mono text-slate-600 bg-slate-100 px-2 py-0.5 rounded text-xs print:bg-transparent print:p-0">
+                                                    {formatSlashDate(sett.created_at || sett.pay_month)}
+                                                  </span>
+                                                  <span className={`font-bold ${sett.days < 0 ? 'text-emerald-600' : 'text-blue-600'}`}>
+                                                    {sett.days < 0 ? '轉入/補回' : '結算扣除'} {Math.abs(Number(sett.days)).toFixed(1)} 天
+                                                  </span>
+                                                  <span className="text-slate-400 text-xs truncate max-w-xs">{sett.notes || '無註記'}</span>
+                                                </li>
+                                              ))}
+                                            </ul>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })()}
                             </React.Fragment>
                           );
                         })
