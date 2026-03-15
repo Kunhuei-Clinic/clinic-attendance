@@ -84,10 +84,12 @@ export default function LeaveSettleModal({
       return;
     }
 
+    // 🟢 將計算好的金額 (amount) 一併打包傳給後端
     await onSubmit({
       ...form,
       target_year: targetYear,
-    });
+      amount: calculateAmount(),
+    } as any);
   };
 
   return (

@@ -268,32 +268,30 @@ export default function LeaveView({
             </div>
           )}
 
-          {/* 今年特休 (相容 annual / 特休) */}
-          {(annualStats || quota != null) && (
-            <div className="bg-white/90 p-3 rounded-lg border-2 border-teal-300">
-              <div className="flex justify-between items-center mb-2">
+          {/* 🟢 完美對接後端的特休顯示 */}
+          {(realSummary || annualStats || quota != null) && (
+            <div className="bg-white/90 p-4 rounded-xl border-2 border-teal-400 shadow-sm">
+              <div className="flex justify-between items-center mb-3">
                 <span className="text-sm font-bold text-slate-700">
-                  今年特休
+                  特休餘額
                 </span>
-                <span className="text-lg font-black text-teal-700">
-                  {quota !== null && quota !== undefined
-                    ? `${Number(quota).toFixed(1)} 天`
-                    : '未設定額度'}
+                <span className="text-xl font-black text-teal-700">
+                  {realSummary
+                    ? `共 ${realSummary.quota.toFixed(1)} 天`
+                    : (quota !== null && quota !== undefined ? `共 ${Number(quota).toFixed(1)} 天` : '未設定額度')}
                 </span>
               </div>
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <div className="bg-slate-50 p-2 rounded">
-                  <div className="text-slate-500 mb-0.5">已用</div>
-                  <div className="font-bold text-orange-600">
-                    {Number(usedDays).toFixed(1)} 天
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                  <div className="text-slate-500 text-xs mb-0.5">已休天數</div>
+                  <div className="font-black text-orange-600">
+                    {realSummary ? `${realSummary.used.toFixed(1)} 天` : `${Number(usedDays).toFixed(1)} 天`}
                   </div>
                 </div>
-                <div className="bg-teal-50 p-2 rounded">
-                  <div className="text-slate-500 mb-0.5">剩餘</div>
-                  <div className="font-bold text-teal-700">
-                    {remaining !== undefined
-                      ? `${Number(remaining).toFixed(1)} 天`
-                      : '--'}
+                <div className="bg-teal-50 p-2.5 rounded-lg border border-teal-100">
+                  <div className="text-teal-700 text-xs mb-0.5">剩餘可用</div>
+                  <div className="font-black text-teal-700">
+                    {realSummary ? `${realSummary.balance.toFixed(1)} 天` : (remaining !== undefined ? `${Number(remaining).toFixed(1)} 天` : '--')}
                   </div>
                 </div>
               </div>

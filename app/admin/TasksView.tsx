@@ -25,8 +25,56 @@ export default function TasksView() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('pending');
   const [typeFilter, setTypeFilter] = useState<'all' | 'leave' | 'missed_punch' | 'overtime' | 'anomaly'>('all');
+  const [leaveAlerts, setLeaveAlerts] = useState<any[]>([]);
 
-  useEffect(() => { fetchTasks(); }, [filter, typeFilter]);
+  // 🟢 自動掃描全院即將到期/已過期的特休
+  const fetchLeaveAlerts = async () => {
+    try {
+      const staffRes = await fetch('/api/staff');
+      const staffJson = await staffRes.json();
+      const staffList = staffJson.data || [];
+
+      const alerts: any[] = [];
+      const now = new Date();
+      const warningDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30天內到期
+
+      await Promise.all(staffList.map(async (s: any) => {
+        if (!s.is_active || s.role === '醫師') return;
+        try {
+          const sumRes = await fetch(`/api/staff/leave-summary?staff_id=${s.id}`);
+          if (!sumRes.ok) return;
+          const summary = await sumRes.json();
+          if (summary && summary.years) {
+            summary.years.forEach((y: any) => {
+              if (y.balance > 0) {
+                const endDate = new Date(y.cycle_end);
+                if (endDate < warningDate) {
+                  alerts.push({
+                    staff_id: s.id,
+                    staff_name: s.name,
+                    year: y.year,
+                    balance: y.balance,
+                    endDate: y.cycle_end,
+                    isExpired: endDate < now,
+                  });
+                }
+              }
+            });
+          }
+        } catch (e) {}
+      }));
+
+      alerts.sort((a, b) => new Date(a.endDate).getTime() - new Date(b.endDate).getTime());
+      setLeaveAlerts(alerts);
+    } catch (e) {
+      console.error('Fetch leave alerts error:', e);
+    }
+  };
+
+  useEffect(() => {
+    fetchTasks();
+    fetchLeaveAlerts();
+  }, [filter, typeFilter]);
 
   const fetchTasks = async () => {
     setLoading(true);
@@ -138,6 +186,36 @@ export default function TasksView() {
 
   return (
     <div className="w-full animate-fade-in p-4">
+      {/* 🟢 特休到期警報橫幅 */}
+      {leaveAlerts.length > 0 && (
+        <div className="mb-8 bg-orange-50 border-l-4 border-orange-500 p-5 rounded-r-2xl shadow-sm">
+          <h3 className="text-orange-800 font-bold flex items-center gap-2 mb-3">
+            <AlertCircle size={20} className="animate-pulse" />
+            ⚠️ 待處理：近期到期 / 已過期特休
+          </h3>
+          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+            {leaveAlerts.map((alert, idx) => (
+              <div key={idx} className="bg-white p-3.5 rounded-xl border border-orange-200 flex justify-between items-center shadow-sm">
+                <div>
+                  <div className="font-bold text-slate-800 text-sm">{alert.staff_name}</div>
+                  <div className="text-xs text-slate-500 mt-1">
+                    {alert.year}年度 • 剩餘 <span className="font-black text-orange-600">{alert.balance.toFixed(1)} 天</span>
+                  </div>
+                  <div className={`text-[10px] mt-1.5 font-bold px-2 py-0.5 rounded inline-block ${
+                    alert.isExpired ? 'bg-red-100 text-red-600' : 'bg-orange-100 text-orange-600'
+                  }`}>
+                    {alert.isExpired ? `已於 ${alert.endDate} 過期` : `將於 ${alert.endDate} 到期`}
+                  </div>
+                </div>
+                <div className="text-[10px] text-slate-400 font-bold bg-slate-50 px-2 py-1 rounded border border-slate-100">
+                  請至特休模組<br />進行結算
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="flex justify-between items-center mb-8">
         <div>
           <h1 className="text-3xl font-bold text-slate-800 flex items-center gap-3">

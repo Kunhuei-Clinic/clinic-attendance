@@ -27,6 +27,9 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const { staff_id, days, pay_month, notes } = body;
+
+    // 取得前端傳來的金額 (若無則預設為 0)，用於同步至薪資單
+    const amountForSalary = body.amount ?? 0;
     
     if (!staff_id || !days || !pay_month) {
       return NextResponse.json(
@@ -126,11 +129,30 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       );
     }
-    
+
+    // 🟢 自動化：將結算金額同步寫入當月薪資單的「加給項目」
+    if (amountForSalary > 0) {
+      const { error: adjError } = await supabaseAdmin
+        .from('salary_adjustments')
+        .insert({
+          staff_id: staff_id,
+          clinic_id: clinicId,
+          year_month: pay_month,
+          type: 'bonus',
+          name: `特休結算 (${days}天)`,
+          amount: Math.round(amountForSalary),
+        });
+
+      if (adjError) {
+        console.error('[Settle API] 同步至薪資單失敗:', adjError);
+        // 即使同步薪資單失敗，特休結算依然算成功，但不中斷流程
+      }
+    }
+
     return NextResponse.json({
       success: true,
-      message: '結算紀錄已建立',
-      data: settlement
+      message: '結算完成，並已自動同步至該月薪資單',
+      data: settlement,
     });
   } catch (error: any) {
     console.error('Leave Settle API Error:', error);
