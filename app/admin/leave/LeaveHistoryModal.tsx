@@ -414,9 +414,13 @@ export default function LeaveHistoryModal({
                           return (
                             <React.Fragment key={y.year}>
                               <tr className="hover:bg-slate-50 transition">
-                                {/* 🟢 修正：清楚顯示是滿幾年的特休，以及日期週期 */}
-                                <td className="p-4 align-top">
-                                  <div className="font-bold text-slate-800 text-sm mb-1">
+                                {/* 🟢 加上 onClick 讓整格可以點擊展開 */}
+                                <td
+                                  className="p-4 align-top cursor-pointer group"
+                                  onClick={() => toggleYearExpansion(y.year, y.cycle_start, y.cycle_end)}
+                                >
+                                  <div className="font-bold text-slate-800 text-sm mb-1 flex items-center gap-1 group-hover:text-blue-600 transition">
+                                    {expandedYears.has(y.year) ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}
                                     滿 {y.year} 年特休
                                   </div>
                                   <div className="text-[10px] text-slate-500 font-mono bg-slate-100 inline-block px-1.5 py-0.5 rounded">
@@ -477,6 +481,52 @@ export default function LeaveHistoryModal({
                                   </div>
                                 </td>
                               </tr>
+                              {/* 🟢 點擊展開的明細區塊 */}
+                              {expandedYears.has(y.year) && (
+                                <tr className="bg-slate-50/80 border-b-2 border-slate-200">
+                                  <td colSpan={7} className="p-0">
+                                    <div className="p-4 pl-8 border-l-4 border-teal-400 m-2 bg-white rounded shadow-sm">
+                                      <h5 className="text-xs font-bold text-slate-500 mb-3 flex items-center gap-2">
+                                        <FileText size={14} /> 滿 {y.year} 年週期內 - 實際請假明細
+                                      </h5>
+
+                                      {/* 明細列表 */}
+                                      {leaveDetails[y.year] === undefined ? (
+                                        <div className="text-xs text-slate-400 py-2">載入明細中...</div>
+                                      ) : leaveDetails[y.year].length === 0 ? (
+                                        <div className="text-xs text-slate-400 py-2">此週期尚無已核准的請假紀錄</div>
+                                      ) : (
+                                        <ul className="space-y-2">
+                                          {leaveDetails[y.year].map((req: any, idx: number) => (
+                                            <li key={idx} className="flex justify-between items-center text-sm border-b border-slate-100 pb-2">
+                                              <div className="flex items-center gap-3">
+                                                <span className="font-mono text-slate-600 bg-slate-100 px-2 py-0.5 rounded text-xs">
+                                                  {formatSlashDate(req.start_time)}
+                                                </span>
+                                                <span className="font-bold text-slate-700">
+                                                  請假 {Number(req.hours / 8).toFixed(1)} 天
+                                                </span>
+                                                <span className="text-slate-400 text-xs">{req.reason || '無事由'}</span>
+                                              </div>
+                                              {/* 刪除按鈕 (防呆：刪除等同作廢) */}
+                                              <button
+                                                onClick={() => {
+                                                  if (confirm('確定要作廢這筆請假紀錄嗎？作廢後額度將自動歸還。')) {
+                                                    alert('此紀錄需至「請假管理」列表作廢/刪除');
+                                                  }
+                                                }}
+                                                className="text-xs text-red-400 hover:text-red-600 underline"
+                                              >
+                                                查看/作廢
+                                              </button>
+                                            </li>
+                                          ))}
+                                        </ul>
+                                      )}
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
                             </React.Fragment>
                           );
                         })
