@@ -47,6 +47,29 @@ export default function LeaveHistoryModal({
   const [selectedYearForSettle, setSelectedYearForSettle] = useState<YearSummary | null>(null);
   const [leaveDetails, setLeaveDetails] = useState<Record<number, any[]>>({});
 
+  // 🟢 處理特休遞延至次年
+  const handleCarryOver = async (yearData: YearSummary) => {
+    if (!confirm(`確定要將「滿 ${yearData.year} 年」的剩餘特休 ${yearData.balance} 天，遞延至次年度嗎？`)) return;
+
+    // TODO: 這裡之後會串接後端 API
+    alert('此功能即將與後端 API 串接完成！');
+  };
+
+  // 🟢 處理手動微調額度 (期初開帳用)
+  const handleManualAdjust = async (yearData: YearSummary) => {
+    const input = prompt(
+      `【期初開帳 / 手動微調】\n目前「滿 ${yearData.year} 年」額度為 ${yearData.quota} 天，已休 ${yearData.used} 天，已結算 ${yearData.settled} 天。\n\n若前雇主已折算過，請直接輸入「新的已結算天數」：`,
+      String(yearData.settled)
+    );
+
+    if (input === null) return;
+    const newSettled = parseFloat(input);
+    if (isNaN(newSettled) || newSettled < 0) return alert('請輸入有效數字');
+
+    // TODO: 這裡之後會串接後端 API
+    alert('此功能即將與後端 API 串接完成！');
+  };
+
   // 計算目前可休總餘額（所有 active 年度的 balance 總和）
   const currentTotalBalance = useMemo(() => {
     if (!summaryData) return 0;
@@ -311,142 +334,73 @@ export default function LeaveHistoryModal({
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {summaryData.years.length > 0 ? (
-                        summaryData.years.map((yearData) => {
-                          const isExpanded = expandedYears.has(yearData.year);
-                          const details = leaveDetails[yearData.year] || [];
-
+                        summaryData.years.map((y) => {
                           return (
-                            <React.Fragment key={yearData.year}>
+                            <React.Fragment key={y.year}>
                               <tr className="hover:bg-slate-50 transition">
-                                <td className="p-3">
-                                  <div className="flex items-center gap-2">
-                                    <button
-                                      onClick={() =>
-                                        toggleYearExpansion(
-                                          yearData.year,
-                                          yearData.cycle_start,
-                                          yearData.cycle_end
-                                        )
-                                      }
-                                      className="p-1 hover:bg-slate-200 rounded transition"
-                                    >
-                                      {isExpanded ? (
-                                        <ChevronUp size={16} className="text-slate-600" />
-                                      ) : (
-                                        <ChevronDown size={16} className="text-slate-600" />
-                                      )}
-                                    </button>
-                                    <div>
-                                      <div className="font-bold text-slate-800">
-                                        {yearData.year}
-                                      </div>
-                                      <div className="text-xs text-slate-500 font-mono">
-                                        {new Date(yearData.cycle_start).toLocaleDateString('zh-TW', {
-                                          month: '2-digit',
-                                          day: '2-digit',
-                                        })}{' '}
-                                        ~{' '}
-                                        {new Date(yearData.cycle_end).toLocaleDateString('zh-TW', {
-                                          month: '2-digit',
-                                          day: '2-digit',
-                                        })}
-                                      </div>
-                                    </div>
+                                {/* 🟢 修正：清楚顯示是滿幾年的特休，以及日期週期 */}
+                                <td className="p-4 align-top">
+                                  <div className="font-bold text-slate-800 text-sm mb-1">
+                                    滿 {y.year} 年特休
+                                  </div>
+                                  <div className="text-[10px] text-slate-500 font-mono bg-slate-100 inline-block px-1.5 py-0.5 rounded">
+                                    {y.cycle_start} ~ {y.cycle_end}
                                   </div>
                                 </td>
-                                <td className="p-3 text-right font-mono font-bold text-slate-800">
-                                  {yearData.quota.toFixed(1)} 天
+                                <td className="p-4 font-bold text-slate-700 text-center align-top">
+                                  {y.quota.toFixed(1)}
                                 </td>
-                                <td className="p-3 text-right font-mono">
-                                  <button
-                                    onClick={() =>
-                                      toggleYearExpansion(
-                                        yearData.year,
-                                        yearData.cycle_start,
-                                        yearData.cycle_end
-                                      )
-                                    }
-                                    className="text-blue-600 hover:text-blue-800 hover:underline font-bold"
+                                <td className="p-4 text-orange-600 font-bold text-center align-top">
+                                  {y.used.toFixed(1)}
+                                </td>
+                                <td className="p-4 text-blue-600 font-bold text-center align-top">
+                                  {y.settled.toFixed(1)}
+                                </td>
+                                <td className="p-4 font-black text-emerald-600 text-lg text-center align-top">
+                                  {y.balance.toFixed(1)}
+                                </td>
+                                <td className="p-4 text-center align-top">
+                                  <span
+                                    className={`px-2 py-1 rounded text-[10px] font-bold ${
+                                      y.status === 'active'
+                                        ? 'bg-emerald-100 text-emerald-700'
+                                        : 'bg-slate-100 text-slate-500'
+                                    }`}
                                   >
-                                    {yearData.used.toFixed(1)} 天
-                                  </button>
+                                    {y.status === 'active' ? '使用中' : '已到期'}
+                                  </span>
                                 </td>
-                                <td className="p-3 text-right font-mono text-orange-700">
-                                  {yearData.settled.toFixed(1)} 天
-                                </td>
-                                <td className="p-3 text-right font-mono font-bold text-green-700">
-                                  {yearData.balance.toFixed(1)} 天
-                                </td>
-                                <td className="p-3 text-center">
-                                  {yearData.status === 'active' ? (
-                                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold bg-green-100 text-green-700">
-                                      進行中
-                                    </span>
-                                  ) : (
-                                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-600">
-                                      已過期
-                                    </span>
-                                  )}
-                                </td>
-                                <td className="p-3 text-center">
-                                  {yearData.balance > 0 ? (
+                                {/* 🟢 修正：加入遞延與微調按鈕 */}
+                                <td className="p-4 text-right align-top">
+                                  <div className="flex flex-col gap-1.5 items-end">
+                                    {y.balance > 0 && (
+                                      <div className="flex gap-1">
+                                        <button
+                                          onClick={() => {
+                                            setSelectedYearForSettle(y);
+                                            setShowSettleModal(true);
+                                          }}
+                                          className="px-2 py-1 bg-emerald-600 text-white rounded text-[10px] font-bold shadow-sm hover:bg-emerald-700"
+                                        >
+                                          💰 結算
+                                        </button>
+                                        <button
+                                          onClick={() => handleCarryOver(y)}
+                                          className="px-2 py-1 bg-blue-600 text-white rounded text-[10px] font-bold shadow-sm hover:bg-blue-700"
+                                        >
+                                          ➡️ 遞延
+                                        </button>
+                                      </div>
+                                    )}
                                     <button
-                                      onClick={() => handleOpenSettle(yearData)}
-                                      className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-bold hover:bg-green-700 transition flex items-center gap-1 mx-auto"
+                                      onClick={() => handleManualAdjust(y)}
+                                      className="text-[10px] text-slate-400 hover:text-slate-700 underline mt-1"
                                     >
-                                      <DollarSign size={14} /> 結算/兌現
+                                      ✏️ 微調開帳
                                     </button>
-                                  ) : (
-                                    <span className="text-xs text-slate-400">已結清</span>
-                                  )}
+                                  </div>
                                 </td>
                               </tr>
-                              {/* 展開的請假明細 */}
-                              {isExpanded && (
-                                <tr>
-                                  <td colSpan={7} className="p-0 bg-slate-50">
-                                    <div className="p-4">
-                                      <div className="text-xs font-bold text-slate-600 mb-2">
-                                        請假明細 ({details.length} 筆)
-                                      </div>
-                                      {details.length > 0 ? (
-                                        <div className="space-y-2">
-                                          {details.map((req: any, idx: number) => (
-                                            <div
-                                              key={idx}
-                                              className="bg-white p-3 rounded border border-slate-200 text-xs"
-                                            >
-                                              <div className="flex justify-between items-center">
-                                                <div>
-                                                  <span className="font-bold text-slate-800">
-                                                    {new Date(req.start_time).toLocaleDateString(
-                                                      'zh-TW',
-                                                      {
-                                                        month: '2-digit',
-                                                        day: '2-digit',
-                                                      }
-                                                    )}
-                                                  </span>
-                                                  <span className="text-slate-500 ml-2">
-                                                    {req.reason || '無事由'}
-                                                  </span>
-                                                </div>
-                                                <div className="font-mono font-bold text-blue-600">
-                                                  {(Number(req.hours) / 8).toFixed(1)} 天
-                                                </div>
-                                              </div>
-                                            </div>
-                                          ))}
-                                        </div>
-                                      ) : (
-                                        <div className="text-center py-4 text-slate-400 text-xs">
-                                          此週期內無特休請假紀錄
-                                        </div>
-                                      )}
-                                    </div>
-                                  </td>
-                                </tr>
-                              )}
                             </React.Fragment>
                           );
                         })
