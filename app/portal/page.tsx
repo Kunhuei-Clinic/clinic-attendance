@@ -5,11 +5,11 @@ import liff from '@line/liff';
 import { Clock, User, Lock } from 'lucide-react';
 import PortalSalaryView from './components/SalaryView';
 import BottomNav from './components/BottomNav';
-import HomeView from './views/HomeView';
-import HistoryView from './views/HistoryView';
-import RosterView from './views/RosterView';
-import LeaveView from './views/LeaveView';
-import ProfileView from './views/ProfileView';
+import PortalHomeView from './views/PortalHomeView';
+import PortalHistoryView from './views/PortalHistoryView';
+import PortalRosterView from './views/PortalRosterView';
+import PortalLeaveView from './views/PortalLeaveView';
+import PortalProfileView from './views/PortalProfileView';
 import { usePortalData } from './hooks/usePortalData';
 import { useClocking } from './hooks/useClocking';
 
@@ -410,7 +410,7 @@ export default function EmployeePortal() {
       )}
 
       {portalData.view === 'home' && (
-        <HomeView
+        <PortalHomeView
           staffUser={portalData.profile || staffUser}
           isWorking={isWorking}
           logs={portalData.logs}
@@ -427,7 +427,7 @@ export default function EmployeePortal() {
       )}
 
       {portalData.view === 'history' && (
-        <HistoryView
+        <PortalHistoryView
           staffUser={staffUser}
           logs={portalData.historyLogs}
           selectedMonth={portalData.selectedMonth}
@@ -438,11 +438,11 @@ export default function EmployeePortal() {
       )}
 
       {portalData.view === 'roster' && (
-        <RosterView rosterData={portalData.rosterData} staffUser={staffUser} />
+        <PortalRosterView rosterData={portalData.rosterData} staffUser={staffUser} />
       )}
 
       {portalData.view === 'leave' && (
-        <LeaveView
+        <PortalLeaveView
           staffUser={staffUser}
           leaveForm={portalData.leaveForm}
           setLeaveForm={portalData.setLeaveForm}
@@ -464,7 +464,7 @@ export default function EmployeePortal() {
       )}
 
       {portalData.view === 'profile' && (
-        <ProfileView
+        <PortalProfileView
           user={portalData.profile || staffUser}
           staffUser={staffUser}
           onUpdateProfile={portalData.updateProfile}

@@ -33,7 +33,7 @@ const maskSensitiveData = (value: string | null | undefined, showLength = 3) => 
   return `${start}${'*'.repeat(Math.max(4, value.length - showLength * 2))}${end}`;
 };
 
-export default function ProfileView({
+export default function PortalProfileView({
   user,
   staffUser,
   onUpdateProfile,

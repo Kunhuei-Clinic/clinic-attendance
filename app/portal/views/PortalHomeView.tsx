@@ -40,7 +40,7 @@ function getGpsStatusText(status: string) {
   }
 }
 
-export default function HomeView(props: HomeViewProps) {
+export default function PortalHomeView(props: HomeViewProps) {
   const {
     staffUser,
     isWorking,

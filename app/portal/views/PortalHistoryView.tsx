@@ -40,7 +40,7 @@ const getAmPmIndicator = (hhmm: string): string => {
   return h >= 12 ? '下午' : '上午';
 };
 
-export default function HistoryView({
+export default function PortalHistoryView({
   staffUser,
   logs,
   selectedMonth,

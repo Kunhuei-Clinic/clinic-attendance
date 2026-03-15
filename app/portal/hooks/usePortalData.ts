@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import type { MissedPunchForm } from '../views/HistoryView';
+import type { MissedPunchForm } from '../views/PortalHistoryView';
 
 type ViewType = 'home' | 'history' | 'roster' | 'leave' | 'payslip' | 'profile';
 

@@ -24,7 +24,7 @@ interface RosterViewProps {
     staffUser: { role?: string | null; name?: string | null } | any;
 }
 
-export default function RosterView({ rosterData, staffUser }: RosterViewProps) {
+export default function PortalRosterView({ rosterData, staffUser }: RosterViewProps) {
     const [activeTab, setActiveTab] = useState<'general' | 'doctor'>('general');
     const [isLoading, setIsLoading] = useState(true);
     const [currentDate, setCurrentDate] = useState<Date | null>(null);
