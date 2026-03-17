@@ -303,7 +303,8 @@ export default function LeaveHistoryModal({
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm print:static print:bg-white print:p-0 print:block">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col print:shadow-none print:max-h-none print:overflow-visible print:block">
+      {/* 🟢 一般網頁畫面 (列印時完全隱藏) */}
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col print:hidden">
         {/* Header */}
         <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-6 flex justify-between items-center shrink-0 print:bg-none print:text-black print:border-b-2 print:border-black">
           <div>
@@ -558,6 +559,117 @@ export default function LeaveHistoryModal({
               </div>
             </>
           )}
+        </div>
+      </div>
+
+      {/* 🟢 列印專屬畫面 (一般時隱藏，列印時顯示為標準 A4 報表) */}
+      <div className="hidden print:block w-full max-w-4xl mx-auto bg-white text-black p-8 font-sans">
+        <div className="text-center mb-6 border-b-2 border-slate-800 pb-4">
+          <h2 className="text-3xl font-black mb-3">特休存摺歷年明細表</h2>
+          <div className="flex justify-between text-sm font-bold text-slate-700">
+            <span>員工姓名：{staff.staff_name || staff.name || '未知'}</span>
+            <span>到職日期：{summaryData?.staff.start_date ? formatSlashDate(summaryData?.staff.start_date) : '未設定'}</span>
+            <span>列印日期：{formatSlashDate(new Date().toISOString())}</span>
+          </div>
+        </div>
+
+        {summaryData?.years.length === 0 && (
+          <div className="text-center py-10 text-slate-500">尚無特休紀錄</div>
+        )}
+
+        {summaryData?.years.map(y => {
+          const cycleStart = new Date(y.cycle_start);
+          const cycleEnd = new Date(y.cycle_end);
+          
+          const yearReqs = summaryData.raw_requests?.filter(r => {
+             const d = new Date(r.start_time);
+             return d >= cycleStart && d <= cycleEnd;
+          }) || [];
+
+          const yearSetts = summaryData.raw_settlements?.filter(s => {
+             if (s.target_year != null) return Number(s.target_year) === y.year;
+             if (s.notes && (s.notes.includes(`${y.year}年`) || s.notes.includes(`滿${y.year}年`))) return true;
+             const dateStr = s.created_at || s.pay_month;
+             if (dateStr) {
+                 const d = new Date(dateStr);
+                 return !isNaN(d.getTime()) && d >= cycleStart && d <= cycleEnd;
+             }
+             return false;
+          }) || [];
+
+          return (
+            <div key={y.year} className="mb-8 break-inside-avoid border border-slate-300 rounded-lg overflow-hidden">
+              {/* 年度標題與統計 */}
+              <div className="bg-slate-100 p-3 border-b border-slate-300">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-lg font-black text-slate-800">
+                    滿 {y.year} 年特休週期 <span className="text-sm font-normal text-slate-600">({formatSlashDate(y.cycle_start)} - {formatSlashDate(y.cycle_end)})</span>
+                  </span>
+                  <span className={`px-2 py-0.5 rounded text-xs font-bold border ${y.status === 'active' ? 'border-slate-800 text-slate-800' : 'border-slate-400 text-slate-500'}`}>
+                    {y.status === 'active' ? '使用中' : '已到期'}
+                  </span>
+                </div>
+                <div className="flex gap-4 text-sm font-bold text-slate-700">
+                  <div>法定額度：{y.quota.toFixed(1)} 天</div>
+                  <div className="text-slate-400">|</div>
+                  <div className="text-orange-700">已休：{y.used.toFixed(1)} 天</div>
+                  <div className="text-slate-400">|</div>
+                  <div className="text-blue-700">已結算/異動：{y.settled.toFixed(1)} 天</div>
+                  <div className="text-slate-400">|</div>
+                  <div className="text-emerald-700 text-base">剩餘：{y.balance.toFixed(1)} 天</div>
+                </div>
+              </div>
+
+              {/* 雙向明細清單 */}
+              <div className="grid grid-cols-2 divide-x divide-slate-300 bg-white">
+                {/* 左側：請假明細 */}
+                <div className="p-3">
+                  <div className="font-bold text-slate-800 border-b border-slate-800 pb-1 mb-2 text-sm">實際請假紀錄</div>
+                  {yearReqs.length === 0 ? (
+                    <div className="text-xs text-slate-500 py-1">無請假紀錄</div>
+                  ) : (
+                    <table className="w-full text-left text-xs">
+                      <tbody>
+                        {yearReqs.map((req: any, i: number) => (
+                          <tr key={i} className="border-b border-slate-100 last:border-0">
+                            <td className="py-1.5 w-20 text-slate-600 font-mono">{formatSlashDate(req.start_time)}</td>
+                            <td className="py-1.5 w-16 font-bold">{Number(req.hours/8).toFixed(1)} 天</td>
+                            <td className="py-1.5 text-slate-500">{req.reason || '-'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+
+                {/* 右側：結算明細 */}
+                <div className="p-3">
+                  <div className="font-bold text-slate-800 border-b border-slate-800 pb-1 mb-2 text-sm">結算與異動紀錄</div>
+                  {yearSetts.length === 0 ? (
+                    <div className="text-xs text-slate-500 py-1">無結算或異動紀錄</div>
+                  ) : (
+                    <table className="w-full text-left text-xs">
+                      <tbody>
+                        {yearSetts.map((sett: any, i: number) => (
+                          <tr key={i} className="border-b border-slate-100 last:border-0">
+                            <td className="py-1.5 w-20 text-slate-600 font-mono">{formatSlashDate(sett.created_at || sett.pay_month)}</td>
+                            <td className={`py-1.5 w-20 font-bold ${sett.days < 0 ? 'text-emerald-600' : 'text-blue-600'}`}>
+                              {sett.days < 0 ? '轉入/補回' : '結算扣除'} {Math.abs(Number(sett.days)).toFixed(1)} 天
+                            </td>
+                            <td className="py-1.5 text-slate-500">{sett.notes || '-'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+        
+        <div className="text-center text-xs text-slate-400 mt-8 pt-4 border-t border-slate-200">
+          - 報表結束 -
         </div>
       </div>
 
