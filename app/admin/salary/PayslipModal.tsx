@@ -124,10 +124,11 @@ function PrintContent({ report, yearMonth, clinicName }: any) {
               <div className="text-xs text-slate-500 mt-1 flex flex-col items-end gap-0.5">
               <span className="bg-slate-100 px-2 py-0.5 rounded">工時制: {getWorkRuleLabel(report.work_rule)}</span>
               <span className="text-slate-400">
-                到職日: {report.hire_date || '未設定'} |
-                今年特休總額: {report.annual_leave_days ?? 0} 天 |
-                已休: {report.annual_leave_used ?? 0} 天 |
-                剩餘: {report.annual_leave_remaining ?? 0} 天
+                到職日: {report.hire_date || '未設定'} | 
+                今年特休總額: {report.annual_leave_days ?? 0} 天 | 
+                已休: {report.annual_leave_used ?? 0} 天 | 
+                {/* 🟢 加入自動相減邏輯，若後端未提供 remaining，則前端自行計算 (總額 - 已休) */}
+                剩餘: {report.annual_leave_remaining ?? ((report.annual_leave_days ?? 0) - (report.annual_leave_used ?? 0))} 天
               </span>
             </div>
             </div>

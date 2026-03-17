@@ -20,20 +20,6 @@ import AdjustmentModal from './AdjustmentModal';
 
 type Entity = { id: string; name: string };
 
-const calculateAnnualLeave = (startDateStr: string) => {
-  if (!startDateStr) return 0;
-  const start = new Date(startDateStr);
-  const diffTime = Math.abs(new Date().getTime() - start.getTime());
-  const years = diffTime / (1000 * 60 * 60 * 24 * 365);
-  if (years < 0.5) return 0;
-  if (years < 1) return 3;
-  if (years < 2) return 7;
-  if (years < 3) return 10;
-  if (years < 5) return 14;
-  if (years < 10) return 15;
-  return 15 + Math.floor(years - 10);
-};
-
 export default function SalaryPage() {
   const router = useRouter();
   const [selectedMonth, setSelectedMonth] = useState(
@@ -210,6 +196,11 @@ export default function SalaryPage() {
       const res = await fetch(`/api/salary/calculate?month=${selectedMonth}`);
       const json = await res.json();
 
+      // 🟢 新增：同步抓取全院特休精算大表的資料 (最精準的週年制引擎)
+      const leaveRes = await fetch('/api/leave/stats');
+      const leaveJson = await leaveRes.json();
+      const leaveStatsData = leaveJson.data || [];
+
       if (json.error) {
         console.error('Error fetching calculation data:', json.error);
         return;
@@ -311,6 +302,9 @@ export default function SalaryPage() {
           cash_amount = net_pay - transfer_amount;
         }
 
+        // 🟢 抓取該員工精算後的特休資料
+        const staffLeaveStat = leaveStatsData.find((s: any) => String(s.staff_id) === String(staff.id));
+
         let mergedReport: any = {
           ...calc,
           staff_id: staff.id,
@@ -321,7 +315,10 @@ export default function SalaryPage() {
           base_salary: staff.base_salary,
           online_hourly_rate: staff.online_hourly_rate,
           hire_date: staff.start_date,
-          annual_leave_days: calculateAnnualLeave(staff.start_date),
+          // 🟢 替換為精準的後端大腦特休資料
+          annual_leave_days: staffLeaveStat?.quota ?? 0,
+          annual_leave_used: staffLeaveStat?.used ?? 0,
+          annual_leave_remaining: staffLeaveStat?.remaining ?? 0,
           fixed_bonus_pay: fixedBonus,
           temp_bonus_pay: tempBonus,
           insurance_labor: staff.insurance_labor,
