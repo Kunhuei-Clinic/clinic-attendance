@@ -65,7 +65,7 @@ export default function PayslipModal({ report, yearMonth, clinicName, onClose }:
   );
 }
 
-function PrintContent({ report, yearMonth, clinicName }: any) {
+export function PrintContent({ report, yearMonth, clinicName }: any) {
   const [year, month] = yearMonth.split('-');
   const fmt = (n: number) => Math.round(n).toLocaleString();
 
@@ -240,6 +240,13 @@ function PrintContent({ report, yearMonth, clinicName }: any) {
            <div className="grid grid-cols-2 gap-20 mt-8 pt-8 text-center text-sm text-slate-500">
               <div className="border-t border-slate-400 pt-2">單位主管簽章</div>
               <div className="border-t border-slate-400 pt-2">員工簽收</div>
+           </div>
+           {/* 🟢 新增的免責聲明 */}
+           <div className="mt-6 p-3 bg-slate-50 border border-slate-200 text-xs text-slate-500 text-justify leading-relaxed rounded">
+             <strong>【勞資確認與免責聲明】</strong><br/>
+             1. 勞資雙方應依勞動基準法及相關法令，誠實核對本薪資明細表之各項出勤紀錄與收支金額。<br/>
+             2. 員工如對本期薪資計算、特休餘額、加班時數或扣款明細有任何疑義，請於薪資發放日起 <strong>三日內</strong> 向管理部提出複查。<br/>
+             3. 逾期未提出異議者，視同確認本薪資明細表內容正確無誤。本表僅供薪資核對使用，不作其他用途。
            </div>
            <div className="text-center text-xs text-slate-300 mt-4">第 1 頁，共 2 頁</div>
         </div>

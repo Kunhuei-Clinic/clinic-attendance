@@ -13,7 +13,7 @@ import {
 import { addMonths, format, subMonths } from 'date-fns';
 
 import SettingsModal from './SettingsModal';
-import PayslipModal from './PayslipModal';
+import PayslipModal, { PrintContent } from './PayslipModal';
 import { calculateStaffSalary } from './salaryEngine';
 import SalaryTable from './SalaryTable';
 import AdjustmentModal from './AdjustmentModal';
@@ -733,6 +733,19 @@ export default function SalaryPage() {
           <p className="text-xs text-slate-500">共 {liveReports.length} 筆資料</p>
         </div>
         <div className="flex gap-2">
+          {/* 🟢 一鍵批次列印按鈕 */}
+          <button
+            onClick={() => {
+              if (liveReports.length === 0) return alert('本月尚無薪資資料可列印');
+              // 觸發瀏覽器列印，利用 CSS 隱藏非列印區域
+              window.print();
+            }}
+            disabled={liveReports.length === 0}
+            className="flex items-center gap-2 bg-slate-800 text-white px-4 py-2 rounded-lg font-bold hover:bg-black transition shadow-sm disabled:opacity-50"
+          >
+            🖨️ 批次列印全部
+          </button>
+
           <button
             onClick={() => {
               const unlockedIds = liveReports.filter((r) => !r.is_locked).map((r) => String(r.staff_id));
@@ -875,6 +888,19 @@ export default function SalaryPage() {
           </div>
         </div>
       )}
+
+      {/* 🟢 批次列印專用的隱藏容器 (平時隱藏，只有在觸發 window.print() 時顯示) */}
+      <div className="hidden print:block w-full bg-white absolute top-0 left-0 z-[100]">
+        {filteredAndSortedReports.map((rpt, idx) => (
+          <div key={idx} style={{ pageBreakAfter: 'always', width: '100%' }}>
+            <PrintContent 
+              report={rpt} 
+              yearMonth={selectedMonth} 
+              clinicName={entityList.find((e) => e.id === rpt.staff_entity)?.name || '診所'} 
+            />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

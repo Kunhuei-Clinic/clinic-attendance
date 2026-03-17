@@ -143,6 +143,7 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
               ...initialData,
               role: initialData.role || defaultRole,
               entity: initialData.entity || defaultEntity,
+              email: initialData.email || '', // 🟢 獨立的聯絡信箱
               password: '', // 🟢 編輯模式：密碼預設空白
               system_role: initialData.system_role || 'staff',
               admin_role: initialData.admin_role ?? 'none',
@@ -166,6 +167,7 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
             const defaultEntity = loadedEntities[0]?.id || 'clinic';
             setEditData({
               name: '',
+              email: '', // 🟢 獨立的聯絡信箱
               role: defaultRole,
               entity: defaultEntity,
               is_active: true,
@@ -210,6 +212,7 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
             }
             setEditData({
               ...initialData,
+              email: initialData.email || '', // 🟢 獨立的聯絡信箱
               password: '',
               system_role: initialData.system_role || 'staff',
               admin_role: initialData.admin_role ?? 'none',
@@ -229,6 +232,7 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
           } else {
             setEditData({
               name: '',
+              email: '', // 🟢 獨立的聯絡信箱
               role: DEFAULT_JOB_TITLES[0].name,
               entity: FALLBACK_ENTITIES[0].id,
               is_active: true,
@@ -326,6 +330,7 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
 
     const payload: any = {
       name: editData.name,
+      email: editData.email?.trim() || null, // 🟢 儲存一般聯絡信箱
       role: editData.role,
       entity: editData.entity || 'clinic',
       is_active: editData.is_active,
@@ -532,6 +537,19 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
                   <p className="text-xs text-slate-400 mt-1">
                     手機號碼為綁定帳號，務必填寫
                   </p>
+                {/* 🟢 獨立的聯絡信箱欄位 (用於接收薪資單等通知) */}
+                <div className="col-span-2 mt-2">
+                  <label className="block text-xs font-bold text-slate-500 mb-1">
+                    電子信箱 (Email)
+                  </label>
+                  <input 
+                    type="email" 
+                    value={editData.email || ''} 
+                    onChange={e => setEditData({...editData, email: e.target.value})} 
+                    className="w-full border p-2 rounded bg-white"
+                    placeholder="用於接收薪資單通知或系統信件"
+                  />
+                </div>
                 </div>
               </div>
             )}
