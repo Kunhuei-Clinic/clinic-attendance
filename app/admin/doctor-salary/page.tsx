@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Stethoscope, Settings, Printer, Save, X, Trash2, Lock, Unlock, FileEdit, Landmark, PenLine, Sparkles, ShieldAlert, ChevronLeft, ChevronRight } from 'lucide-react';
 import PayslipModal from './PayslipModal';
+import SettingsModal from '../salary/SettingsModal';
 
 type Item = { id: string | number; name: string; amount: number; rate?: number };
 
@@ -19,52 +20,6 @@ const DEFAULT_PPF_DATA = {
     extra_items: [] as Item[],
     past_base_salary: 0,
     status: 'draft' as 'draft' | 'locked'
-};
-
-    const DoctorSettingsModal = ({ doctor, onClose, onUpdate }: any) => {
-    const [form, setForm] = useState({ ...doctor });
-    const handleSave = async () => {
-        try {
-          await fetch('/api/staff', {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              id: doctor.id,
-              doctor_base_mode: form.doctor_base_mode,
-              doctor_license_fee: form.doctor_license_fee,
-              doctor_guarantee_salary: form.doctor_guarantee_salary,
-              doctor_hourly_rate: form.doctor_hourly_rate,
-              doctor_nhi_rate: form.doctor_nhi_rate,
-              doctor_hours_per_shift: form.doctor_hours_per_shift,
-              insurance_labor: form.insurance_labor,
-              insurance_health: form.insurance_health
-            })
-          });
-          onUpdate();
-          onClose();
-        } catch (error: any) {
-          console.error('Error updating doctor settings:', error);
-          alert('更新失敗: ' + error.message);
-        }
-    };
-    return (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
-                <div className="bg-teal-700 text-white p-4 flex justify-between items-center"><h3 className="font-bold flex items-center gap-2"><Settings size={18} /> 參數設定</h3><button onClick={onClose}><X size={20} /></button></div>
-                <div className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
-                    <div className="bg-slate-50 p-3 rounded border"><label className="text-xs font-bold text-slate-500 block mb-2">計算模式</label><div className="flex gap-2"><button onClick={() => setForm({ ...form, doctor_base_mode: 'guarantee' })} className={`flex-1 py-1.5 rounded text-sm font-bold border ${form.doctor_base_mode !== 'license' ? 'bg-teal-600 text-white border-teal-600' : 'bg-white text-slate-500'}`}>保底 +/- 時數</button><button onClick={() => setForm({ ...form, doctor_base_mode: 'license' })} className={`flex-1 py-1.5 rounded text-sm font-bold border ${form.doctor_base_mode === 'license' ? 'bg-teal-600 text-white border-teal-600' : 'bg-white text-slate-500'}`}>掛牌費 + 時薪</button></div></div>
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="col-span-2"><label className="text-xs font-bold text-slate-500">{form.doctor_base_mode === 'license' ? '每月掛牌費' : '每月保障薪'}</label><input type="number" value={form.doctor_base_mode === 'license' ? form.doctor_license_fee : form.doctor_guarantee_salary} onChange={e => setForm({ ...form, [form.doctor_base_mode === 'license' ? 'doctor_license_fee' : 'doctor_guarantee_salary']: Number(e.target.value) })} className="w-full border p-2 rounded text-right font-bold text-blue-700" /></div>
-                        <div><label className="text-xs font-bold text-slate-500">計算時薪</label><input type="number" value={form.doctor_hourly_rate} onChange={e => setForm({ ...form, doctor_hourly_rate: Number(e.target.value) })} className="w-full border p-2 rounded text-right" /></div>
-                        <div><label className="text-xs font-bold text-slate-500">每診標準時數</label><input type="number" value={form.doctor_hours_per_shift} onChange={e => setForm({ ...form, doctor_hours_per_shift: Number(e.target.value) })} className="w-full border p-2 rounded text-right" /></div>
-                        <div><label className="text-xs font-bold text-slate-500">健保抽成率</label><input type="number" step="0.01" value={form.doctor_nhi_rate} onChange={e => setForm({ ...form, doctor_nhi_rate: Number(e.target.value) })} className="w-full border p-2 rounded text-right" /></div>
-                    </div>
-                    <div className="border-t pt-4 grid grid-cols-2 gap-4"><div><label className="text-xs font-bold text-slate-500">勞保自付</label><input type="number" value={form.insurance_labor} onChange={e => setForm({ ...form, insurance_labor: Number(e.target.value) })} className="w-full border p-2 rounded text-right text-red-500" /></div><div><label className="text-xs font-bold text-slate-500">健保自付</label><input type="number" value={form.insurance_health} onChange={e => setForm({ ...form, insurance_health: Number(e.target.value) })} className="w-full border p-2 rounded text-right text-red-500" /></div></div>
-                    <button onClick={handleSave} className="w-full bg-teal-600 text-white py-3 rounded-xl font-bold hover:bg-teal-700 mt-4">儲存設定</button>
-                </div>
-            </div>
-        </div>
-    );
 };
 
 export default function DoctorSalaryPage() {
@@ -449,7 +404,18 @@ export default function DoctorSalaryPage() {
             </div>
             <div className="flex gap-2 overflow-x-auto pb-4 mb-2 items-center">{doctors.map(d => (<button key={d.id} onClick={() => setSelectedDoctorId(d.id)} className={`px-4 py-2 rounded-full font-bold whitespace-nowrap transition ${selectedDoctorId === d.id ? 'bg-teal-600 text-white shadow-lg' : 'bg-white text-slate-500 border hover:bg-slate-50'}`}>{d.name}</button>))}{selectedDoctorId && (<><div className="w-px h-6 bg-slate-300 mx-2"></div><button onClick={() => setShowSettings(true)} className="flex items-center gap-1 px-3 py-1.5 rounded-full border border-slate-300 text-slate-600 text-xs font-bold hover:bg-slate-100"><Settings size={14} /> 參數</button><button onClick={() => setShowPayslip(true)} className={`flex items-center gap-1 px-3 py-1.5 rounded-full border text-xs font-bold ${basePayData ? 'border-blue-300 text-blue-600 hover:bg-blue-50' : 'border-gray-200 text-gray-300 cursor-not-allowed'}`}><Printer size={14} /> 薪資單</button></>)}</div>
 
-            {showSettings && currentDoctor && <DoctorSettingsModal doctor={currentDoctor} onClose={() => setShowSettings(false)} onUpdate={() => fetchDoctors()} />}
+            {/* 🟢 呼叫全系統統一的薪資設定積木彈窗 */}
+            {showSettings && currentDoctor && (
+              <SettingsModal 
+                staff={currentDoctor} 
+                onClose={() => setShowSettings(false)} 
+                onSaveSuccess={() => {
+                  fetchDoctors();
+                  // 若有需要，可以加上重新載入當前醫師薪資的邏輯
+                  setHasConfirmedMonth(true); 
+                }} 
+              />
+            )}
 
             {showPayslip && currentDoctor && (
                 <PayslipModal

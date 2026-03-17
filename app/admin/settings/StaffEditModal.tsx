@@ -26,7 +26,11 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
   useEffect(() => {
     if (isOpen) {
       if (initialData) {
-        setEditData({ ...initialData });
+        setEditData({ 
+          ...initialData,
+          // 🟢 自動判斷：若資料庫有 auth_user_id，代表已開通權限，自動打勾
+          enable_login: !!initialData.auth_user_id 
+        });
       } else {
         setEditData({
           name: '', email: '', role: '護理師', entity: 'clinic',
@@ -100,7 +104,8 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
         </div>
 
         {/* 內容區塊 (動態渲染積木) */}
-        <div className="flex-1 overflow-y-auto p-6 bg-slate-50">
+        {/* 🟢 加入 min-h-[550px] 固定高度，防止切換 Tab 時忽大忽小 */}
+        <div className="flex-1 overflow-y-auto p-6 bg-slate-50 min-h-[550px]">
           {activeTab === 'basic' && (
             <BasicInfoPanel data={editData} onChange={handleChange} jobTitles={DEFAULT_JOB_TITLES} entities={FALLBACK_ENTITIES} />
           )}
