@@ -95,7 +95,7 @@ const AttendanceToolbar: React.FC<Props> = ({
           ) : (
             <ToggleLeft size={16} className="text-slate-400" />
           )}
-          篩選
+          時間篩選
         </button>
 
         {useDateFilter && (
