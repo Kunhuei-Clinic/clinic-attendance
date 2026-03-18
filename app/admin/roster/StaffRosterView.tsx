@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, Settings } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Settings, HelpCircle } from 'lucide-react';
 
 import {
     Staff,
@@ -15,8 +15,7 @@ import {
 import RosterTable from './RosterTable';
 
 const FALLBACK_ENTITIES: Entity[] = [
-    { id: 'clinic', name: '診所' },
-    { id: 'pharmacy', name: '藥局' },
+    { id: 'default', name: '預設單位' }
 ];
 
 export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'manager' }) {
@@ -184,17 +183,6 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
                 holidaysRes.json(),
             ]);
 
-            if (staffResult.data) {
-                const roleWeight: Record<string, number> = { 醫師: 1, 主管: 2, 櫃台: 3, 護理師: 4, 營養師: 5, 診助: 6, 藥師: 7, 藥局助理: 8 };
-                const sorted = [...staffResult.data].sort((a, b) => {
-                    const aWeight = roleWeight[a.role || ''] ?? 999;
-                    const bWeight = roleWeight[b.role || ''] ?? 999;
-                    if (aWeight !== bWeight) return aWeight - bWeight;
-                    return (a.name || '').localeCompare(b.name || '');
-                });
-                setStaffList(sorted);
-            }
-
             const map: Record<string, RosterData> = {};
             if (rosterResult.data) {
                 rosterResult.data.forEach((r: any) => {
@@ -213,6 +201,41 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
                 });
             }
             setRosterMap(map);
+
+            if (staffResult.data) {
+                // 🟢 智能隱藏離職人員邏輯：若已離職，且本月完全沒排班，才從班表隱藏
+                const activeAndScheduledStaff = staffResult.data.filter((s: any) => {
+                    if (s.is_active !== false) return true;
+                    const hasRosterThisMonth = Object.keys(map).some(key => 
+                        key.startsWith(`${s.id}_`) && 
+                        (map[key].shifts.length > 0 || map[key].day_type !== 'normal')
+                    );
+                    return hasRosterThisMonth;
+                });
+
+                // 🌟 通用化排序：依據「系統設定」中的職稱陣列順序來決定權重
+                // 若客戶在設定裡把「店長」排第一，「護理師」排第二，這裡就會自動抓到那個順序
+                const getRoleWeight = (roleName: string) => {
+                    const index = jobTitleConfigs.findIndex(j => j.name === roleName);
+                    return index === -1 ? 999 : index; // 找不到的排最後
+                };
+
+                const sorted = activeAndScheduledStaff.sort((a: any, b: any) => {
+                    // 先比職稱權重
+                    const aWeight = getRoleWeight(a.role || '');
+                    const bWeight = getRoleWeight(b.role || '');
+                    if (aWeight !== bWeight) return aWeight - bWeight;
+
+                    // 職稱相同則比員工自訂的 display_order (若有)
+                    const aOrder = a.display_order ?? 999;
+                    const bOrder = b.display_order ?? 999;
+                    if (aOrder !== bOrder) return aOrder - bOrder;
+
+                    // 最後依姓名排序
+                    return (a.name || '').localeCompare(b.name || '');
+                });
+                setStaffList(sorted);
+            }
 
             if (holidaysResult.data) {
                 setHolidays(holidaysResult.data);
@@ -243,7 +266,17 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
         if (!start || !end) return 0;
         const [h1, m1] = start.split(':').map(Number);
         const [h2, m2] = end.split(':').map(Number);
-        return ((h2 * 60 + m2) - (h1 * 60 + m1)) / 60;
+
+        let startMins = h1 * 60 + m1;
+        let endMins = h2 * 60 + m2;
+
+        // 🌟 跨夜班處理 (例如 22:00 ~ 06:00)
+        // 如果結束時間小於開始時間，代表跨過了午夜 00:00，結束時間要加上 24 小時 (1440 分鐘)
+        if (endMins < startMins) {
+            endMins += 1440;
+        }
+
+        return (endMins - startMins) / 60;
     };
 
     const validateCompliance = () => {
@@ -451,18 +484,18 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
                         <Settings size={14} /> 一鍵排整天
                     </button>
 
-                    {/* 印章工具列 */}
+                    {/* 🟢 升級：單日屬性標籤 (取代印章) */}
                     <div className="flex items-center gap-1 bg-white p-1.5 rounded-lg border border-slate-300 shadow-sm text-xs">
-                        <span className="text-slate-400 font-bold px-2 flex items-center gap-1">
-                            印章<ChevronRight size={12}/>
+                        <span className="text-slate-500 font-bold px-2 border-r border-slate-200 mr-1">
+                            單日屬性
                         </span>
-                        {(['normal', 'rest', 'regular', 'holiday', 'shifted'] as DayType[]).map(type => {
+
+                        {/* 第一組：常規屬性 */}
+                        {(['normal', 'rest', 'regular'] as DayType[]).map(type => {
                             let label = '平日';
-                            let color = 'text-slate-500 bg-slate-50 hover:bg-slate-200 border-slate-200';
-                            if (type === 'rest') { label = '休'; color = 'text-emerald-800 bg-emerald-100 hover:bg-emerald-200 border-emerald-200'; }
-                            if (type === 'regular') { label = '例'; color = 'text-red-800 bg-red-100 hover:bg-red-200 border-red-200'; }
-                            if (type === 'holiday') { label = '國'; color = 'text-pink-900 bg-pink-200 hover:bg-pink-300 border-pink-200'; }
-                            if (type === 'shifted') { label = '調'; color = 'text-slate-700 bg-slate-300 hover:bg-slate-400 border-slate-300'; }
+                            let color = 'text-slate-500 hover:bg-slate-200 bg-slate-50 border-slate-200';
+                            if (type === 'rest') { label = '休息日'; color = 'text-emerald-800 hover:bg-emerald-200 bg-emerald-50 border-emerald-200'; }
+                            if (type === 'regular') { label = '例假日'; color = 'text-red-800 hover:bg-red-200 bg-red-50 border-red-200'; }
 
                             const isActive = activeStamp === type;
                             return (
@@ -470,13 +503,48 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
                                     key={type}
                                     onClick={() => setActiveStamp(type)}
                                     className={`px-3 py-1.5 rounded border font-bold transition-all ${
-                                        isActive ? `ring-2 ring-blue-400 ring-offset-1 shadow-md ${color}` : `${color} opacity-60 hover:opacity-100`
+                                        isActive ? `ring-2 ring-blue-400 ring-offset-1 shadow-md ${color}` : `${color} opacity-70 hover:opacity-100`
                                     }`}
                                 >
                                     {label}
                                 </button>
                             );
                         })}
+
+                        <div className="w-px h-4 bg-slate-300 mx-1"></div>
+
+                        {/* 第二組：特殊屬性 */}
+                        {(['holiday', 'shifted'] as DayType[]).map(type => {
+                            let label = '國定假日';
+                            let color = 'text-pink-900 hover:bg-pink-200 bg-pink-50 border-pink-200';
+                            if (type === 'shifted') { label = '變形調移'; color = 'text-slate-700 hover:bg-slate-300 bg-slate-100 border-slate-300'; }
+
+                            const isActive = activeStamp === type;
+                            return (
+                                <button
+                                    key={type}
+                                    onClick={() => setActiveStamp(type)}
+                                    className={`px-3 py-1.5 rounded border font-bold transition-all ${
+                                        isActive ? `ring-2 ring-blue-400 ring-offset-1 shadow-md ${color}` : `${color} opacity-70 hover:opacity-100`
+                                    }`}
+                                >
+                                    {label}
+                                </button>
+                            );
+                        })}
+
+                        {/* 提示 Tooltip */}
+                        <div className="group relative ml-1 flex items-center justify-center">
+                            <HelpCircle size={16} className="text-slate-400 cursor-help hover:text-blue-500 transition" />
+                            <div className="absolute top-full mt-2 right-0 w-64 p-3 bg-slate-800 text-white text-xs rounded-lg shadow-xl opacity-0 group-hover:opacity-100 pointer-events-none transition z-50 leading-relaxed">
+                                <strong>💡 屬性標籤使用說明：</strong><br/>
+                                1. 點選上方標籤後，再點擊員工排班表上的格子，即可寫入該屬性。<br/>
+                                2. <span className="text-pink-300">國定假日</span>：用於標記個別員工的國假出勤或調休補假。<br/>
+                                3. <span className="text-slate-300">變形調移</span>：用於標記實施變形工時的調班日。<br/><br/>
+                                <strong className="text-yellow-300">📅 全院休假快捷鍵：</strong><br/>
+                                若遇到全診所休診（如颱風假、特定國假），請直接點擊 <strong className="text-white">表格頂部的「日期數字」</strong>，即可一鍵將該日設為全院國定假日！
+                            </div>
+                        </div>
                     </div>
 
                     {/* 編輯模式切換 */}
