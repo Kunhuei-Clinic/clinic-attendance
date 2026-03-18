@@ -454,22 +454,50 @@ const ScannerModal: React.FC<Props> = ({ isOpen, onClose }) => {
             </div>
           </div>
 
-          <div className="flex flex-col">
-            <div className="px-4 pt-4">
-              {/* 🟢 新增：OCR 系統稽核防呆警語 */}
-              <div className="mt-4 mb-4 bg-orange-50 border border-orange-200 p-3 rounded-lg flex gap-2 items-start text-orange-800 text-xs leading-relaxed shadow-sm">
-                <AlertCircle size={16} className="shrink-0 mt-0.5 text-orange-600" />
+          {/* ================= 右側：辨識結果與人工核對 ================= */}
+          <div className="flex flex-col h-full bg-slate-50 border-l border-slate-200 overflow-hidden">
+            {/* 1. 右側專屬標題列 (與左側操作區對齊風格) */}
+            <div className="p-3 border-b border-slate-200 bg-white flex justify-between items-center shrink-0 shadow-sm z-10">
+              <span className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                📝 辨識結果與人工核對
+              </span>
+              {attendanceRecords.length > 0 && (
+                <span className="text-xs font-bold text-blue-700 bg-blue-100 px-2.5 py-0.5 rounded-full">
+                  已辨識 {attendanceRecords.length} 筆
+                </span>
+              )}
+            </div>
+
+            <div className="flex-1 overflow-hidden p-4 flex flex-col min-h-0 gap-4">
+              {/* 2. 優化後的系統稽核防呆警語 (變成柔和的提示卡片) */}
+              <div className="bg-orange-50/80 border border-orange-200 p-4 rounded-xl flex gap-3 items-start text-orange-800 text-xs leading-relaxed shadow-sm shrink-0">
+                <AlertCircle size={18} className="shrink-0 text-orange-600 mt-0.5" />
                 <div>
-                  <strong className="text-sm">⚠️ 系統稽核提醒：</strong><br/>
-                  OCR 影像辨識結果可能因照片清晰度而有微小誤差。送出紀錄前，請務必人工核對 <strong>「員工姓名」</strong> 與 <strong>「打卡時間」</strong> 是否與實體卡鐘照片完全一致，以免造成薪資溢發或短少！
+                  <strong className="text-sm font-bold block mb-1 text-orange-900">
+                    ⚠️ 系統稽核與防呆提醒
+                  </strong>
+                  OCR 影像辨識結果可能因照片清晰度或卡鐘墨水產生誤差。<br />
+                  為保障勞資權益，送出前請務必核對{' '}
+                  <strong className="text-red-600 bg-red-50 px-1 py-0.5 rounded border border-red-100">
+                    員工姓名
+                  </strong>{' '}
+                  與{' '}
+                  <strong className="text-red-600 bg-red-50 px-1 py-0.5 rounded border border-red-100">
+                    打卡時間
+                  </strong>{' '}
+                  是否與左側原圖完全一致！
                 </div>
               </div>
+
+              {/* 3. 結果表格區塊 (加入白底卡片與邊框，讓視覺更集中) */}
+              <div className="flex-1 bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm flex flex-col min-h-0">
+                <ResultTable
+                  ocrResult={ocrResult}
+                  records={attendanceRecords}
+                  setRecords={setAttendanceRecords}
+                />
+              </div>
             </div>
-            <ResultTable
-              ocrResult={ocrResult}
-              records={attendanceRecords}
-              setRecords={setAttendanceRecords}
-            />
           </div>
         </div>
       </div>

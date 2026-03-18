@@ -50,6 +50,10 @@ export default function AttendanceView() {
   // 🟢 新增：批次選取與寫入時間篩選狀態
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [writeTimeFilter, setWriteTimeFilter] = useState<string>('all'); // 'all', '1h', 'today'
+
+  // 🟢 批次刪除密碼鎖狀態
+  const [showSudoModal, setShowSudoModal] = useState(false);
+  const [sudoPassword, setSudoPassword] = useState('');
   
   // 篩選器
   const [useDateFilter, setUseDateFilter] = useState(false);
@@ -206,27 +210,43 @@ export default function AttendanceView() {
     }
   };
 
-  // 🟢 新增：批次刪除功能
-  const handleBatchDelete = async () => {
+  // 🟢 點擊工具列的刪除按鈕時，先檢查並開啟密碼鎖
+  const handleBatchDeleteClick = () => {
     if (selectedIds.size === 0) return;
-    if (
-      !confirm(
-        `⚠️ 警告：確定要永久刪除選取的 ${selectedIds.size} 筆打卡紀錄嗎？\n此操作無法復原！`
-      )
-    )
+    setSudoPassword('');
+    setShowSudoModal(true);
+  };
+
+  // 🟢 在密碼鎖內點擊「確認刪除」時，發送單一批次 API
+  const executeBatchDelete = async () => {
+    if (!sudoPassword) {
+      alert('請輸入登入密碼！');
       return;
+    }
 
     setIsSubmitting(true);
     try {
-      await Promise.all(
-        Array.from(selectedIds).map((id) =>
-          fetch(`/api/attendance?id=${id}`, { method: 'DELETE' })
-        )
-      );
+      // 🟢 改為發送單一的 PATCH 請求，讓後端去驗證密碼並執行批次軟刪除
+      const response = await fetch('/api/attendance', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'batch_delete',
+          ids: Array.from(selectedIds),
+          sudoPassword: sudoPassword,
+        }),
+      });
 
-      alert(`✅ 成功刪除 ${selectedIds.size} 筆紀錄！`);
-      setSelectedIds(new Set()); // 清空選取
-      fetchLogs(); // 重新載入
+      const result = await response.json();
+
+      if (result.success) {
+        alert(`✅ 成功刪除 ${selectedIds.size} 筆紀錄！`);
+        setSelectedIds(new Set());
+        setShowSudoModal(false);
+        fetchLogs();
+      } else {
+        alert('刪除失敗: ' + (result.message || result.error));
+      }
     } catch (err: any) {
       alert('批次刪除過程發生錯誤: ' + err.message);
     } finally {
@@ -646,7 +666,7 @@ export default function AttendanceView() {
         writeTimeFilter={writeTimeFilter}
         setWriteTimeFilter={setWriteTimeFilter}
         selectedCount={selectedIds.size}
-        onBatchDelete={handleBatchDelete}
+        onBatchDelete={handleBatchDeleteClick} // 🟢 改為開啟密碼鎖
         isSubmitting={isSubmitting}
         onAddClick={openAddModal}
         onOpenOcr={() => setIsOcrModalOpen(true)}
@@ -783,6 +803,50 @@ export default function AttendanceView() {
         isOpen={isOcrModalOpen}
         onClose={() => setIsOcrModalOpen(false)}
       />
+
+      {/* 🟢 批次刪除密碼鎖 Modal */}
+      {showSudoModal && (
+        <div className="fixed inset-0 bg-slate-900/90 z-[100] flex items-center justify-center p-4 backdrop-blur-md animate-fade-in">
+          <div className="bg-white rounded-2xl p-8 max-w-sm w-full shadow-2xl border-4 border-red-500">
+            <h3 className="text-xl font-bold text-center mb-2 text-red-600 flex items-center justify-center gap-2">
+              <AlertCircle size={24} /> 敏感操作確認
+            </h3>
+            <p className="text-xs text-slate-600 text-center mb-6 bg-red-50 p-3 rounded-lg border border-red-100">
+              您即將批次刪除{' '}
+              <strong className="text-red-600 text-lg">{selectedIds.size}</strong>{' '}
+              筆考勤紀錄。
+              <br />
+              <br />
+              為保護診所資訊安全，請輸入
+              <strong className="text-red-600">「您的登入密碼」</strong>
+              以驗證身分：
+            </p>
+            <input
+              type="password"
+              value={sudoPassword}
+              onChange={(e) => setSudoPassword(e.target.value)}
+              className="w-full border-2 border-slate-300 p-3 rounded-xl mb-6 text-center text-lg focus:border-red-500 outline-none font-mono tracking-widest"
+              placeholder="請輸入密碼"
+              autoFocus
+            />
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowSudoModal(false)}
+                className="flex-1 py-2.5 font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition"
+              >
+                取消
+              </button>
+              <button
+                onClick={executeBatchDelete}
+                disabled={isSubmitting}
+                className="flex-1 py-2.5 font-bold text-white bg-red-600 hover:bg-red-700 rounded-xl transition disabled:opacity-50 flex justify-center items-center gap-2 shadow-md"
+              >
+                {isSubmitting ? '刪除中...' : '確認刪除'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { getClinicIdFromRequest } from '@/lib/clinicHelper';
+// 🟢 新增下面這兩行，用於 Sudo Mode 密碼驗證
+import { createServerClient } from '@supabase/ssr';
+import { cookies } from 'next/headers';
 
 /**
  * GET /api/attendance
@@ -244,21 +247,10 @@ export async function POST(request: NextRequest) {
 
 /**
  * PATCH /api/attendance
- * 更新考勤紀錄（部分更新，例如加班審核）
- * 
- * Request Body:
- *   {
- *     id: number (required),
- *     overtime_status?: 'pending' | 'approved' | 'rejected',
- *     anomaly_reason?: string,
- *     ... (其他可更新欄位)
- *   }
- * 
- * Response: { success: boolean, message?: string }
+ * 更新考勤紀錄（包含單筆更新、加班審核、以及批次邏輯刪除）
  */
 export async function PATCH(request: NextRequest) {
   try {
-    // 🟢 多租戶：取得當前使用者的 clinic_id
     const clinicId = await getClinicIdFromRequest(request);
     if (!clinicId) {
       return NextResponse.json(
@@ -268,8 +260,85 @@ export async function PATCH(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { id, ...updateFields } = body;
+    const { id, action, ids, sudoPassword, ...updateFields } = body;
 
+    // ==========================================
+    // 🟢 處理「批次軟刪除」與 Sudo Mode 密碼驗證
+    // ==========================================
+    if (action === 'batch_delete') {
+      if (!ids || !Array.isArray(ids) || ids.length === 0) {
+        return NextResponse.json(
+          { success: false, message: '未提供要刪除的紀錄' },
+          { status: 400 }
+        );
+      }
+
+      if (!sudoPassword) {
+        return NextResponse.json(
+          { success: false, message: '請輸入密碼以驗證身分' },
+          { status: 401 }
+        );
+      }
+
+      // ⚠️ 核心防護：Sudo Mode 真實密碼驗證
+      const cookieStore = cookies();
+      const supabase = createServerClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        {
+          cookies: {
+            getAll() {
+              return cookieStore.getAll();
+            },
+            setAll() {}, // 僅驗證密碼，不寫入新 Cookie
+          },
+        }
+      );
+
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+      if (userError || !user || !user.email) {
+        return NextResponse.json(
+          { success: false, message: '未登入或 Session 已過期' },
+          { status: 401 }
+        );
+      }
+
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: sudoPassword,
+      });
+
+      if (signInError) {
+        return NextResponse.json(
+          { success: false, message: '登入密碼錯誤，拒絕執行刪除！' },
+          { status: 401 }
+        );
+      }
+
+      // 🟢 驗證完美通過！執行批次邏輯刪除 (Soft Delete)
+      const { error } = await supabaseAdmin
+        .from('attendance_logs')
+        .update({ deleted_at: new Date().toISOString() }) // 標記為已刪除
+        .in('id', ids)
+        .eq('clinic_id', clinicId);
+
+      if (error) {
+        console.error('Batch delete error:', error);
+        return NextResponse.json(
+          { success: false, message: `批次刪除失敗: ${error.message}` },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({ success: true, message: '批次刪除成功' });
+    }
+
+    // ==========================================
+    // 🟢 處理「單筆資料更新」(原有邏輯)
+    // ==========================================
     if (!id) {
       return NextResponse.json(
         { success: false, message: '缺少紀錄 ID' },
@@ -277,7 +346,7 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    // 🟢 多租戶：驗證該紀錄屬於當前診所
+    // 驗證該紀錄屬於當前診所
     const { data: existingLog } = await supabaseAdmin
       .from('attendance_logs')
       .select('id, clinic_id')
@@ -293,28 +362,23 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    // 更新欄位（移除 clinic_id，不允許前端修改）
     const { clinic_id, ...safeUpdateFields } = updateFields;
 
     const { error } = await supabaseAdmin
       .from('attendance_logs')
       .update(safeUpdateFields)
       .eq('id', id)
-      .eq('clinic_id', clinicId) // 🟢 確保只更新該診所的紀錄
+      .eq('clinic_id', clinicId)
       .is('deleted_at', null);
 
     if (error) {
-      console.error('Update attendance log error:', error);
       return NextResponse.json(
         { success: false, message: `更新失敗: ${error.message}` },
         { status: 500 }
       );
     }
 
-    return NextResponse.json({
-      success: true,
-      message: '更新成功'
-    });
+    return NextResponse.json({ success: true, message: '更新成功' });
   } catch (error: any) {
     console.error('Attendance PATCH API Error:', error);
     return NextResponse.json(
