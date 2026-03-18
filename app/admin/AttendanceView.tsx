@@ -16,7 +16,8 @@ import {
   Briefcase,
   Trash2,
   CheckCircle,
-  ScanLine
+  ScanLine,
+  ChevronDown
 } from 'lucide-react';
 import { saveAs } from 'file-saver';
 import ScannerModal from './ocr-scanner/ScannerModal';
@@ -50,6 +51,7 @@ export default function AttendanceView() {
   const [endDate, setEndDate] = useState(range.end);
   const [selectedRole, setSelectedRole] = useState<string>('all');
   const [selectedStaffId, setSelectedStaffId] = useState<string>('all');
+  const [showExportMenu, setShowExportMenu] = useState(false); // 🟢 新增：控制匯出選單
 
   // Modal 狀態
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -276,6 +278,12 @@ export default function AttendanceView() {
   const handleManualSubmit = async () => {
     if (!formData.staffId || !formData.date || !formData.startTime) {
       alert("請填寫完整資訊");
+      return;
+    }
+
+    // 🟢 新增：強制要求填寫備註
+    if (!formData.note || formData.note.trim() === '') {
+      alert("⚠️ 系統稽核要求：\n請務必填寫「備註」說明補登或修改的原因（例如：忘記帶手機、系統異常等），以利日後查核。");
       return;
     }
 
@@ -636,16 +644,31 @@ export default function AttendanceView() {
               <span className="block text-xs text-slate-400">總工時合計</span>
               <span className="text-xl font-bold text-blue-600 font-mono">{totalHours.toFixed(1)} <span className="text-sm">hr</span></span>
           </div>
-          <div className="flex gap-2">
-            <button onClick={exportToCSV} className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition text-sm">
-                <FileSpreadsheet size={18}/> 匯出 CSV
+          {/* 🟢 修改：將三個匯出按鈕合併為一個下拉選單 */}
+          <div className="relative">
+            <button 
+              onClick={() => setShowExportMenu(!showExportMenu)} 
+              className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition text-sm shadow-sm"
+            >
+                <FileSpreadsheet size={18}/> 匯出報表 <ChevronDown size={16}/>
             </button>
-            <button onClick={exportToTimecardCSV} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition text-sm">
-                <FileSpreadsheet size={18}/> 匯出打卡表 (排班格式)
-            </button>
-            <button onClick={exportFullMonthTimecardCSV} className="bg-fuchsia-600 hover:bg-fuchsia-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition text-sm">
-                <FileSpreadsheet size={18}/> 匯出單人全月表格
-            </button>
+            
+            {showExportMenu && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setShowExportMenu(false)}></div>
+                <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-xl border border-slate-100 overflow-hidden z-20 animate-fade-in">
+                  <button onClick={() => { exportToCSV(); setShowExportMenu(false); }} className="w-full text-left px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50 border-b border-slate-50 transition flex items-center gap-2">
+                    📄 匯出標準 CSV 總表
+                  </button>
+                  <button onClick={() => { exportToTimecardCSV(); setShowExportMenu(false); }} className="w-full text-left px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50 border-b border-slate-50 transition flex items-center gap-2">
+                    📅 匯出打卡表 (排班格式)
+                  </button>
+                  <button onClick={() => { exportFullMonthTimecardCSV(); setShowExportMenu(false); }} className="w-full text-left px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50 transition flex items-center gap-2">
+                    👤 匯出單人全月表格
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -730,13 +753,13 @@ export default function AttendanceView() {
 
                     {/* 🟢 新增：備註輸入框 */}
                     <div>
-                        <label className="block text-sm font-bold text-slate-600 mb-1">備註 (Note)</label>
+                        <label className="block text-sm font-bold text-slate-600 mb-1">備註 (Note) <span className="text-red-500">*</span></label>
                         <input 
                             type="text" 
                             value={formData.note} 
                             onChange={(e) => setFormData({...formData, note: e.target.value})}
-                            placeholder="例：忘記帶手機補登、補休調整..."
-                            className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                            placeholder="必填！例：忘記帶手機補登、補休調整..."
+                            className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-yellow-50 focus:bg-white transition placeholder:text-orange-300"
                         />
                     </div>
                 </div>

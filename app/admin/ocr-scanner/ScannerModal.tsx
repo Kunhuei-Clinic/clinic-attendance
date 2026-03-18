@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useRef, useState, useEffect } from 'react';
-import { X, RotateCcw, ZoomIn, Move } from 'lucide-react';
+import { X, RotateCcw, ZoomIn, Move, AlertCircle } from 'lucide-react';
 import { recognizeAttendanceCard, OcrGridResult, CardSide } from './RecognitionEngine';
 import ResultTable, { OcrAttendanceRecord } from './ResultTable';
 
@@ -455,6 +455,16 @@ const ScannerModal: React.FC<Props> = ({ isOpen, onClose }) => {
           </div>
 
           <div className="flex flex-col">
+            <div className="px-4 pt-4">
+              {/* 🟢 新增：OCR 系統稽核防呆警語 */}
+              <div className="mt-4 mb-4 bg-orange-50 border border-orange-200 p-3 rounded-lg flex gap-2 items-start text-orange-800 text-xs leading-relaxed shadow-sm">
+                <AlertCircle size={16} className="shrink-0 mt-0.5 text-orange-600" />
+                <div>
+                  <strong className="text-sm">⚠️ 系統稽核提醒：</strong><br/>
+                  OCR 影像辨識結果可能因照片清晰度而有微小誤差。送出紀錄前，請務必人工核對 <strong>「員工姓名」</strong> 與 <strong>「打卡時間」</strong> 是否與實體卡鐘照片完全一致，以免造成薪資溢發或短少！
+                </div>
+              </div>
+            </div>
             <ResultTable
               ocrResult={ocrResult}
               records={attendanceRecords}
