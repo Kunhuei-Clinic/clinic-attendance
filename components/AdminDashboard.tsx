@@ -63,6 +63,7 @@ export default function AdminDashboard() {
       const { data, error } = await supabase
         .from('attendance_logs')
         .select('*')
+        .is('deleted_at', null)
         .order('clock_in_time', { ascending: false });
 
       if (error) throw error;

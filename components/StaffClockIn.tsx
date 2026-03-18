@@ -31,6 +31,7 @@ export default function StaffClockIn() {
         .from('attendance_logs')
         .select('*')
         .eq('staff_name', staffName)
+        .is('deleted_at', null)
         .is('clock_out_time', null)
         .order('clock_in_time', { ascending: false })
         .maybeSingle();
@@ -90,6 +91,7 @@ export default function StaffClockIn() {
         .from('attendance_logs')
         .select('*')
         .eq('staff_name', selectedStaff)
+        .is('deleted_at', null)
         .is('clock_out_time', null)
         .order('clock_in_time', { ascending: false })
         .maybeSingle();
@@ -112,7 +114,8 @@ export default function StaffClockIn() {
           work_hours: workHours.toFixed(2),
           status: 'completed',
         })
-        .eq('id', activeSession.id);
+        .eq('id', activeSession.id)
+        .is('deleted_at', null);
 
       if (updateError) throw updateError;
 

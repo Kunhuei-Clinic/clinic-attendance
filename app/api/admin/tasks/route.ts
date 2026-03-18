@@ -56,6 +56,7 @@ export async function GET(request: NextRequest) {
       .from('attendance_logs')
       .select('id, staff_id, staff_name, clock_in_time, clock_out_time, work_hours, anomaly_reason, anomaly_status, status')
       .eq('clinic_id', clinicId)
+      .is('deleted_at', null)
       .not('anomaly_reason', 'is', null)
       .neq('anomaly_reason', '')
       .or(`anomaly_status.is.null,anomaly_status.eq.pending,and(anomaly_status.eq.resolved,clock_in_time.gte.${fourteenDaysAgo})`)
@@ -86,6 +87,7 @@ export async function GET(request: NextRequest) {
       .from('attendance_logs')
       .select('id, staff_id, staff_name, clock_in_time, clock_out_time, work_hours, is_overtime, overtime_status')
       .eq('clinic_id', clinicId)
+      .is('deleted_at', null)
       .eq('is_overtime', true)
       .or(`overtime_status.eq.pending,and(overtime_status.neq.pending,clock_in_time.gte.${fourteenDaysAgo})`)
       .order('clock_in_time', { ascending: false });

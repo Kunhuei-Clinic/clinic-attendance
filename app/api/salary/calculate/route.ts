@@ -29,7 +29,8 @@ export async function GET(request: NextRequest) {
       .select('*')
       .eq('clinic_id', clinicId) // 🟢 只查詢該診所的考勤紀錄
       .gte('clock_in_time', startDate)
-      .lt('clock_in_time', nextMonth);
+      .lt('clock_in_time', nextMonth)
+      .is('deleted_at', null); // 🟢 薪資防護網：絕對不計算被刪除的廢棄紀錄！
 
     if (logsError) {
       console.error('Error fetching attendance logs:', logsError);

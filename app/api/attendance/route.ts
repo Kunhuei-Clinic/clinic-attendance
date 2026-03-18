@@ -44,6 +44,7 @@ export async function GET(request: NextRequest) {
       .from('attendance_logs')
       .select('*')
       .eq('clinic_id', clinicId) // 只查詢該診所的考勤紀錄
+      .is('deleted_at', null) // 🟢 核心防護：永遠只撈出「未被刪除」的資料
       .order('clock_in_time', { ascending: false });
 
     // 日期篩選
@@ -194,6 +195,7 @@ export async function POST(request: NextRequest) {
         .select('id, clinic_id')
         .eq('id', id)
         .eq('clinic_id', clinicId)
+        .is('deleted_at', null)
         .single();
 
       if (!existingLog) {
@@ -208,7 +210,8 @@ export async function POST(request: NextRequest) {
         .from('attendance_logs')
         .update(payload)
         .eq('id', id)
-        .eq('clinic_id', clinicId); // 🟢 確保只更新該診所的紀錄
+        .eq('clinic_id', clinicId) // 🟢 確保只更新該診所的紀錄
+        .is('deleted_at', null);
       error = updateError;
     } else {
       // 新增
@@ -280,6 +283,7 @@ export async function PATCH(request: NextRequest) {
       .select('id, clinic_id')
       .eq('id', id)
       .eq('clinic_id', clinicId)
+      .is('deleted_at', null)
       .single();
 
     if (!existingLog) {
@@ -296,7 +300,8 @@ export async function PATCH(request: NextRequest) {
       .from('attendance_logs')
       .update(safeUpdateFields)
       .eq('id', id)
-      .eq('clinic_id', clinicId); // 🟢 確保只更新該診所的紀錄
+      .eq('clinic_id', clinicId) // 🟢 確保只更新該診所的紀錄
+      .is('deleted_at', null);
 
     if (error) {
       console.error('Update attendance log error:', error);
@@ -349,12 +354,12 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    // 🟢 多租戶：刪除時也要驗證該紀錄屬於當前診所
+    // 🟢 企業級 SaaS 作法：邏輯刪除 (Soft Delete)
     const { error } = await supabaseAdmin
       .from('attendance_logs')
-      .delete()
-        .eq('id', id)
-      .eq('clinic_id', clinicId); // 🟢 確保只刪除該診所的紀錄
+      .update({ deleted_at: new Date().toISOString() }) // 打上死亡印記，保留屍體供稽核
+      .eq('id', id)
+      .eq('clinic_id', clinicId);
 
     if (error) {
       console.error('Delete attendance log error:', error);

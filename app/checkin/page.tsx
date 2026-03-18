@@ -93,7 +93,13 @@ export default function CheckinPage() {
 
   const fetchTodayLogs = async (staffName: string) => {
     const today = new Date().toISOString().split('T')[0];
-    const { data } = await supabase.from('attendance_logs').select('*').eq('staff_name', staffName).gte('created_at', today + 'T00:00:00').order('created_at', { ascending: false });
+    const { data } = await supabase
+      .from('attendance_logs')
+      .select('*')
+      .eq('staff_name', staffName)
+      .is('deleted_at', null)
+      .gte('created_at', today + 'T00:00:00')
+      .order('created_at', { ascending: false });
     // @ts-ignore
     setLogs(data || []);
   };
@@ -109,7 +115,11 @@ export default function CheckinPage() {
     if (!lastSession) return;
     const now = new Date();
     const hours = (now.getTime() - new Date(lastSession.clock_in_time).getTime()) / 3600000;
-    const { error } = await supabase.from('attendance_logs').update({ clock_out_time: now.toISOString(), work_hours: hours, status: 'completed' }).eq('id', lastSession.id);
+    const { error } = await supabase
+      .from('attendance_logs')
+      .update({ clock_out_time: now.toISOString(), work_hours: hours, status: 'completed' })
+      .eq('id', lastSession.id)
+      .is('deleted_at', null);
     if (!error) { alert('下班成功！'); fetchTodayLogs(staffUser!.name); }
   };
 

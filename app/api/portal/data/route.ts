@@ -150,6 +150,7 @@ export async function GET(request: NextRequest) {
           .select('*')
           .eq('staff_id', staffId)
           .eq('clinic_id', clinicId)
+          .is('deleted_at', null)
           .gte('clock_in_time', todayStart)
           .lt('clock_in_time', todayEnd)
           .order('clock_in_time', { ascending: false });
@@ -190,6 +191,7 @@ export async function GET(request: NextRequest) {
               .from('attendance_logs')
               .select('staff_id, clock_in_time')
               .eq('clinic_id', currentClinicId)
+              .is('deleted_at', null)
               .gte('clock_in_time', `${todayStr}T00:00:00`)
               .lte('clock_in_time', `${todayStr}T23:59:59`)
               .order('clock_in_time', { ascending: true });
@@ -217,6 +219,7 @@ export async function GET(request: NextRequest) {
               .from('attendance_logs')
               .select('staff_id, anomaly_reason, clock_in_time, clock_out_time, anomaly_status')
               .eq('clinic_id', currentClinicId)
+              .is('deleted_at', null)
               .not('anomaly_reason', 'is', null)
               .or('anomaly_status.eq.pending,anomaly_status.is.null');
 
@@ -283,7 +286,8 @@ export async function GET(request: NextRequest) {
           .from('attendance_logs')
           .select('*')
           .eq('staff_id', staffId)
-          .eq('clinic_id', clinicId);
+          .eq('clinic_id', clinicId)
+          .is('deleted_at', null);
 
         if (month) {
           // 計算月份範圍

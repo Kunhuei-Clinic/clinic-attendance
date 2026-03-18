@@ -58,7 +58,8 @@ export async function POST(request: NextRequest) {
         .from('attendance_logs')
         .update({ overtime_status: newStatus })
         .eq('id', taskId)
-        .eq('clinic_id', clinicId);
+        .eq('clinic_id', clinicId)
+        .is('deleted_at', null);
       if (error) throw error;
       return NextResponse.json({
         success: true,
@@ -76,7 +77,8 @@ export async function POST(request: NextRequest) {
           anomaly_status: action === 'approve' ? 'resolved' : 'rejected',
         })
         .eq('id', taskId)
-        .eq('clinic_id', clinicId);
+        .eq('clinic_id', clinicId)
+        .is('deleted_at', null);
       if (error) throw error;
       return NextResponse.json({
         success: true,
@@ -151,6 +153,7 @@ export async function POST(request: NextRequest) {
           .select('id, anomaly_reason')
           .eq('staff_id', staffId)
           .eq('clinic_id', clinicId)
+          .is('deleted_at', null)
           .gte('clock_out_time', `${dateStr}T00:00:00`)
           .lte('clock_out_time', `${dateStr}T23:59:59`)
           .or('status.eq.orphan_out,anomaly_reason.ilike.%補下班%')
@@ -167,7 +170,8 @@ export async function POST(request: NextRequest) {
               anomaly_reason: `${prev.anomaly_reason || ''}, 補上班核准`.trim(),
             })
             .eq('id', prev.id)
-            .eq('clinic_id', clinicId);
+            .eq('clinic_id', clinicId)
+            .is('deleted_at', null);
           if (error) throw error;
         } else {
           const { error } = await supabaseAdmin.from('attendance_logs').insert([
@@ -194,6 +198,7 @@ export async function POST(request: NextRequest) {
           .select('id, clock_in_time, anomaly_reason')
           .eq('staff_id', staffId)
           .eq('clinic_id', clinicId)
+          .is('deleted_at', null)
           .eq('status', 'working')
           .gte('clock_in_time', `${dateStr}T00:00:00`)
           .lte('clock_in_time', `${dateStr}T23:59:59`)
@@ -215,7 +220,8 @@ export async function POST(request: NextRequest) {
               anomaly_reason: `${prev.anomaly_reason || ''}, 補下班核准`.trim(),
             })
             .eq('id', prev.id)
-            .eq('clinic_id', clinicId);
+            .eq('clinic_id', clinicId)
+            .is('deleted_at', null);
           if (error) throw error;
         } else {
           const { error } = await supabaseAdmin.from('attendance_logs').insert([

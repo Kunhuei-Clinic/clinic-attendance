@@ -100,6 +100,7 @@ export async function POST(request: NextRequest) {
         .select('*')
         .eq('id', target_id)
         .eq('clinic_id', clinicId) // 🟢 確保只查詢該診所的紀錄
+        .is('deleted_at', null)
         .single();
 
       if (!existing) {
@@ -139,7 +140,8 @@ export async function POST(request: NextRequest) {
         .from('attendance_logs')
         .update(updatePayload)
         .eq('id', target_id)
-        .eq('clinic_id', clinicId); // 🟢 確保只更新該診所的紀錄
+        .eq('clinic_id', clinicId) // 🟢 確保只更新該診所的紀錄
+        .is('deleted_at', null);
 
       if (error) {
         console.error('Update attendance log error:', error);
@@ -200,7 +202,8 @@ export async function GET(request: NextRequest) {
       .from('attendance_logs')
       .select('*')
       .eq('staff_name', staff_name)
-      .eq('clinic_id', clinicId); // 只查詢該診所的考勤紀錄
+      .eq('clinic_id', clinicId) // 只查詢該診所的考勤紀錄
+      .is('deleted_at', null);
 
     if (type === 'orphan') {
       // 查找孤兒記錄（只有下班，clock_in = clock_out）

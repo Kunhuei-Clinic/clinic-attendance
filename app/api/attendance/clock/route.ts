@@ -126,6 +126,7 @@ export async function POST(request: NextRequest) {
         .eq('id', logId)
         .eq('clinic_id', clinicId) // 🟢 確保只查詢該診所的紀錄
         .eq('staff_id', staffId) // 🟢 確保是該員工的紀錄
+        .is('deleted_at', null)
         .single();
 
       if (!existing) {
@@ -156,7 +157,8 @@ export async function POST(request: NextRequest) {
         .from('attendance_logs')
         .update(updatePayload)
         .eq('id', logId)
-        .eq('clinic_id', clinicId); // 🟢 確保只更新該診所的紀錄
+        .eq('clinic_id', clinicId) // 🟢 確保只更新該診所的紀錄
+        .is('deleted_at', null);
 
       if (updateError) {
         console.error('Clock out error:', updateError);
@@ -188,7 +190,8 @@ export async function POST(request: NextRequest) {
           .from('attendance_logs')
           .update(overtimeUpdate)
           .eq('id', logId)
-          .eq('clinic_id', clinicId);
+          .eq('clinic_id', clinicId)
+          .is('deleted_at', null);
 
         if (overtimeError) {
           console.error('Update overtime status error:', overtimeError);
@@ -203,7 +206,8 @@ export async function POST(request: NextRequest) {
             overtime_status: 'none'
           })
           .eq('id', logId)
-          .eq('clinic_id', clinicId);
+          .eq('clinic_id', clinicId)
+          .is('deleted_at', null);
 
         if (overtimeError) {
           console.error('Update overtime status error:', overtimeError);
