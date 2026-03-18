@@ -14,6 +14,7 @@ type AttendanceLog = {
   staff_name: string;
   clock_in_time?: string | null;
   clock_out_time?: string | null;
+  created_at?: string | null;
   work_type?: string;
   is_overtime?: boolean;
   overtime_status?: string | null;
@@ -30,6 +31,8 @@ type Props = {
   onOvertimeApproval: (logId: number, status: 'approved' | 'rejected') => void;
   onEdit: (log: AttendanceLog) => void;
   onDelete: (id: number) => void;
+  selectedIds: Set<number>;
+  setSelectedIds: React.Dispatch<React.SetStateAction<Set<number>>>;
 };
 
 const formatLocalDate = (isoString?: string | null) => {
@@ -48,6 +51,8 @@ const AttendanceTable: React.FC<Props> = ({
   onOvertimeApproval,
   onEdit,
   onDelete,
+  selectedIds,
+  setSelectedIds,
 }) => {
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
@@ -55,6 +60,18 @@ const AttendanceTable: React.FC<Props> = ({
         <table className="w-full text-left border-collapse">
           <thead className="bg-slate-50 text-slate-500 font-bold text-sm border-b">
             <tr>
+              {/* 🟢 新增：全選 Checkbox */}
+              <th className="p-4 w-12 text-center">
+                <input
+                  type="checkbox"
+                  checked={logs.length > 0 && selectedIds.size === logs.length}
+                  onChange={(e) => {
+                    if (e.target.checked) setSelectedIds(new Set(logs.map((l) => l.id)));
+                    else setSelectedIds(new Set());
+                  }}
+                  className="w-4 h-4 text-blue-600 rounded cursor-pointer"
+                />
+              </th>
               <th className="p-4">員工姓名</th>
               <th className="p-4">日期</th>
               <th className="p-4">班別</th>
@@ -69,19 +86,49 @@ const AttendanceTable: React.FC<Props> = ({
           <tbody className="divide-y divide-slate-100 text-sm">
             {loading ? (
               <tr>
-                <td colSpan={9} className="p-8 text-center text-slate-400">
+                <td colSpan={10} className="p-8 text-center text-slate-400">
                   載入中...
                 </td>
               </tr>
             ) : logs.length === 0 ? (
               <tr>
-                <td colSpan={9} className="p-8 text-center text-slate-400">
+                <td colSpan={10} className="p-8 text-center text-slate-400">
                   無符合資料
                 </td>
               </tr>
             ) : (
-              logs.map((log) => (
-                <tr key={log.id} className="hover:bg-slate-50 transition group">
+              logs.map((log) => {
+                const createdAtStr = log.created_at
+                  ? `建檔: ${
+                      new Date(log.created_at).getMonth() + 1
+                    }/${new Date(log.created_at).getDate()} ${String(
+                      new Date(log.created_at).getHours()
+                    ).padStart(2, '0')}:${String(
+                      new Date(log.created_at).getMinutes()
+                    ).padStart(2, '0')}`
+                  : '';
+
+                return (
+                  <tr
+                    key={log.id}
+                    className={`hover:bg-slate-50 transition group ${
+                      selectedIds.has(log.id) ? 'bg-blue-50/50' : ''
+                    }`}
+                  >
+                    {/* 🟢 新增：單選 Checkbox */}
+                    <td className="p-4 text-center">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(log.id)}
+                        onChange={(e) => {
+                          const newSet = new Set(selectedIds);
+                          if (e.target.checked) newSet.add(log.id);
+                          else newSet.delete(log.id);
+                          setSelectedIds(newSet);
+                        }}
+                        className="w-4 h-4 text-blue-600 rounded cursor-pointer"
+                      />
+                    </td>
                   <td className="p-4 font-bold text-slate-700 flex items-center gap-2">
                     <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-500 text-xs">
                       {log.staff_name?.slice(0, 1)}
@@ -93,8 +140,16 @@ const AttendanceTable: React.FC<Props> = ({
                       </div>
                     </div>
                   </td>
-                  <td className="p-4 text-slate-500 font-mono">
-                    {formatLocalDate(log.clock_in_time)}
+                  <td className="p-4">
+                    <div className="text-slate-500 font-mono">
+                      {formatLocalDate(log.clock_in_time)}
+                    </div>
+                    {/* 🟢 新增：顯示寫入(建檔)時間，方便核對 */}
+                    {createdAtStr && (
+                      <div className="text-[10px] text-orange-400 font-mono mt-0.5">
+                        {createdAtStr}
+                      </div>
+                    )}
                   </td>
                   <td className="p-4">
                     <div className="flex flex-col gap-1">
@@ -212,8 +267,9 @@ const AttendanceTable: React.FC<Props> = ({
                       <Trash2 size={16} />
                     </button>
                   </td>
-                </tr>
-              ))
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>

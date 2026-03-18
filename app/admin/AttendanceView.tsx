@@ -21,6 +21,8 @@ import {
 } from 'lucide-react';
 import { saveAs } from 'file-saver';
 import ScannerModal from './ocr-scanner/ScannerModal';
+import AttendanceToolbar from './AttendanceView/AttendanceToolbar';
+import AttendanceTable from './AttendanceView/AttendanceTable';
 
 const formatLocalDate = (isoString?: string) => {
   if (!isoString) return '-';
@@ -44,6 +46,10 @@ export default function AttendanceView() {
   const [logs, setLogs] = useState<any[]>([]);
   const [staffList, setStaffList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // 🟢 新增：批次選取與寫入時間篩選狀態
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [writeTimeFilter, setWriteTimeFilter] = useState<string>('all'); // 'all', '1h', 'today'
   
   // 篩選器
   const [useDateFilter, setUseDateFilter] = useState(false);
@@ -51,7 +57,6 @@ export default function AttendanceView() {
   const [endDate, setEndDate] = useState(range.end);
   const [selectedRole, setSelectedRole] = useState<string>('all');
   const [selectedStaffId, setSelectedStaffId] = useState<string>('all');
-  const [showExportMenu, setShowExportMenu] = useState(false); // 🟢 新增：控制匯出選單
 
   // Modal 狀態
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -201,6 +206,34 @@ export default function AttendanceView() {
     }
   };
 
+  // 🟢 新增：批次刪除功能
+  const handleBatchDelete = async () => {
+    if (selectedIds.size === 0) return;
+    if (
+      !confirm(
+        `⚠️ 警告：確定要永久刪除選取的 ${selectedIds.size} 筆打卡紀錄嗎？\n此操作無法復原！`
+      )
+    )
+      return;
+
+    setIsSubmitting(true);
+    try {
+      await Promise.all(
+        Array.from(selectedIds).map((id) =>
+          fetch(`/api/attendance?id=${id}`, { method: 'DELETE' })
+        )
+      );
+
+      alert(`✅ 成功刪除 ${selectedIds.size} 筆紀錄！`);
+      setSelectedIds(new Set()); // 清空選取
+      fetchLogs(); // 重新載入
+    } catch (err: any) {
+      alert('批次刪除過程發生錯誤: ' + err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const exportToCSV = () => {
     if (logs.length === 0) return alert("無資料可匯出");
 
@@ -345,7 +378,23 @@ export default function AttendanceView() {
     }
   };
 
-  const totalHours = logs.reduce((sum, log) => sum + (Number(log.work_hours) || 0), 0);
+  // 🟢 新增：根據「寫入時間 (created_at)」在前端進行二次過濾
+  const displayLogs = logs.filter((log) => {
+    if (writeTimeFilter === 'all') return true;
+    if (!log.created_at) return false;
+    const createdTime = new Date(log.created_at).getTime();
+    const now = new Date().getTime();
+    if (writeTimeFilter === '1h') return now - createdTime < 3600000; // 1小時內
+    if (writeTimeFilter === 'today')
+      return new Date(log.created_at).toDateString() === new Date().toDateString(); // 今日寫入
+    return true;
+  });
+
+  // 計算過濾後的總工時
+  const displayTotalHours = displayLogs.reduce(
+    (sum, log) => sum + (Number(log.work_hours) || 0),
+    0
+  );
 
   const exportToTimecardCSV = () => {
     if (logs.length === 0) return alert("無資料可匯出");
@@ -580,98 +629,31 @@ export default function AttendanceView() {
     <div className="w-full animate-fade-in space-y-6 relative">
       
       {/* 工具列 */}
-      <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-wrap justify-between items-center gap-4">
-        
-        <div className="flex items-center gap-4 flex-wrap">
-            <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2 shrink-0">
-                <Clock className="text-blue-600"/> 考勤紀錄
-            </h2>
-            <div className="h-8 w-px bg-slate-200 mx-2 hidden md:block"></div>
-            
-            <button 
-                onClick={() => setUseDateFilter(!useDateFilter)}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm font-bold transition ${useDateFilter ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-slate-50 border-slate-200 text-slate-500'}`}
-            >
-                {useDateFilter ? <ToggleRight size={20} className="text-blue-600"/> : <ToggleLeft size={20} className="text-slate-400"/>}
-                日期篩選
-            </button>
-
-            {useDateFilter && (
-                <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-lg border text-sm animate-fade-in">
-                    <CalendarIcon size={16} className="text-slate-400 ml-1"/>
-                    <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="bg-transparent font-bold text-slate-700 outline-none"/>
-                    <span className="text-slate-400">~</span>
-                    <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="bg-transparent font-bold text-slate-700 outline-none"/>
-                </div>
-            )}
-
-            <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-lg border text-sm w-40">
-                <Briefcase size={16} className="text-slate-400 ml-1"/>
-                <select value={selectedRole} onChange={(e) => { setSelectedRole(e.target.value); setSelectedStaffId('all'); }} className="bg-transparent font-bold text-slate-700 outline-none w-full">
-                    <option value="all">所有職位</option>
-                    {uniqueRoles.map(role => (
-                        <option key={role} value={role}>{role}</option>
-                    ))}
-                </select>
-            </div>
-
-            <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-lg border text-sm w-40">
-                <User size={16} className="text-slate-400 ml-1"/>
-                <select value={selectedStaffId} onChange={(e) => setSelectedStaffId(e.target.value)} className="bg-transparent font-bold text-slate-700 outline-none w-full">
-                    <option value="all">所有員工</option>
-                    {filteredStaffList.map(s => (
-                        <option key={s.id} value={s.id}>{s.name}</option>
-                    ))}
-                </select>
-            </div>
-        </div>
-
-        <div className="flex gap-4 items-center">
-          <button 
-              onClick={openAddModal}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition text-sm shadow-sm"
-          >
-              <Plus size={18}/> 補登打卡
-          </button>
-          <button
-              onClick={() => setIsOcrModalOpen(true)}
-              className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition text-sm shadow-sm"
-          >
-              <ScanLine size={18}/> 實體卡 OCR 辨識
-          </button>
-          
-          <div className="text-right hidden sm:block">
-              <span className="block text-xs text-slate-400">總工時合計</span>
-              <span className="text-xl font-bold text-blue-600 font-mono">{totalHours.toFixed(1)} <span className="text-sm">hr</span></span>
-          </div>
-          {/* 🟢 修改：將三個匯出按鈕合併為一個下拉選單 */}
-          <div className="relative">
-            <button 
-              onClick={() => setShowExportMenu(!showExportMenu)} 
-              className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition text-sm shadow-sm"
-            >
-                <FileSpreadsheet size={18}/> 匯出報表 <ChevronDown size={16}/>
-            </button>
-            
-            {showExportMenu && (
-              <>
-                <div className="fixed inset-0 z-10" onClick={() => setShowExportMenu(false)}></div>
-                <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-xl border border-slate-100 overflow-hidden z-20 animate-fade-in">
-                  <button onClick={() => { exportToCSV(); setShowExportMenu(false); }} className="w-full text-left px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50 border-b border-slate-50 transition flex items-center gap-2">
-                    📄 匯出標準 CSV 總表
-                  </button>
-                  <button onClick={() => { exportToTimecardCSV(); setShowExportMenu(false); }} className="w-full text-left px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50 border-b border-slate-50 transition flex items-center gap-2">
-                    📅 匯出打卡表 (排班格式)
-                  </button>
-                  <button onClick={() => { exportFullMonthTimecardCSV(); setShowExportMenu(false); }} className="w-full text-left px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50 transition flex items-center gap-2">
-                    👤 匯出單人全月表格
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
+      <AttendanceToolbar
+        useDateFilter={useDateFilter}
+        setUseDateFilter={setUseDateFilter}
+        startDate={startDate}
+        endDate={endDate}
+        setStartDate={setStartDate}
+        setEndDate={setEndDate}
+        uniqueRoles={uniqueRoles}
+        selectedRole={selectedRole}
+        setSelectedRole={setSelectedRole}
+        selectedStaffId={selectedStaffId}
+        setSelectedStaffId={setSelectedStaffId}
+        filteredStaffList={filteredStaffList}
+        totalHours={displayTotalHours}
+        writeTimeFilter={writeTimeFilter}
+        setWriteTimeFilter={setWriteTimeFilter}
+        selectedCount={selectedIds.size}
+        onBatchDelete={handleBatchDelete}
+        isSubmitting={isSubmitting}
+        onAddClick={openAddModal}
+        onOpenOcr={() => setIsOcrModalOpen(true)}
+        onExportCSV={exportToCSV}
+        onExportTimecard={exportToTimecardCSV}
+        onExportFullMonth={exportFullMonthTimecardCSV}
+      />
 
       {/* Modal */}
       {isModalOpen && (
@@ -785,125 +767,16 @@ export default function AttendanceView() {
       )}
 
       {/* 列表顯示 */}
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-        <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-            <thead className="bg-slate-50 text-slate-500 font-bold text-sm border-b">
-                <tr>
-                <th className="p-4">員工姓名</th>
-                <th className="p-4">日期</th>
-                <th className="p-4">班別</th>
-                <th className="p-4">上班時間</th>
-                <th className="p-4">下班時間</th>
-                <th className="p-4 text-right">工時 (hr)</th>
-                <th className="p-4">狀態</th>
-                <th className="p-4 text-center">備註</th>
-                <th className="p-4 text-center">操作</th>
-                </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 text-sm">
-                {loading ? (
-                    <tr><td colSpan={9} className="p-8 text-center text-slate-400">載入中...</td></tr>
-                ) : logs.length === 0 ? (
-                    <tr><td colSpan={9} className="p-8 text-center text-slate-400">無符合資料</td></tr>
-                ) : (
-                    logs.map((log) => (
-                    <tr key={log.id} className="hover:bg-slate-50 transition group">
-                        <td className="p-4 font-bold text-slate-700 flex items-center gap-2">
-                            <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-500 text-xs">
-                                {log.staff_name?.slice(0,1)}
-                            </div>
-                            <div>
-                                <div>{log.staff_name}</div>
-                                <div className="text-[10px] text-slate-400 font-normal">
-                                    {staffList.find(s=>s.name === log.staff_name)?.role}
-                                </div>
-                            </div>
-                        </td>
-                        <td className="p-4 text-slate-500 font-mono">{formatLocalDate(log.clock_in_time)}</td>
-                        <td className="p-4">
-                            <div className="flex flex-col gap-1">
-                                <span className={`px-2 py-1 rounded text-xs font-bold ${log.work_type === 'overtime' ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'}`}>
-                                    {log.work_type === 'overtime' ? '加班' : '正常班'}
-                                </span>
-                                {/* 🟢 新增：加班狀態標籤 */}
-                                {log.is_overtime && (
-                                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                                        log.overtime_status === 'approved' 
-                                            ? 'bg-green-100 text-green-700' 
-                                            : log.overtime_status === 'rejected'
-                                            ? 'bg-red-100 text-red-700'
-                                            : 'bg-yellow-100 text-yellow-700'
-                                    }`}>
-                                        {log.overtime_status === 'approved' ? '已核准' 
-                                         : log.overtime_status === 'rejected' ? '已駁回'
-                                         : '待審核'}
-                                    </span>
-                                )}
-                            </div>
-                        </td>
-                        <td className="p-4 font-mono text-slate-700 font-bold">
-                            {log.clock_in_time ? new Date(log.clock_in_time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '-'}
-                        </td>
-                        <td className="p-4 font-mono text-slate-700 font-bold">
-                            {log.clock_out_time ? new Date(log.clock_out_time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '-'}
-                        </td>
-                        <td className="p-4 text-right font-bold font-mono text-blue-600">
-                            {log.work_hours ? Number(log.work_hours).toFixed(1) : '-'}
-                        </td>
-                        <td className="p-4">
-                            {log.clock_out_time ? (
-                                <span className="text-green-600 flex items-center gap-1 text-xs"><div className="w-2 h-2 rounded-full bg-green-500"></div> 完成</span>
-                            ) : (
-                                <span className="text-red-500 flex items-center gap-1 text-xs animate-pulse"><div className="w-2 h-2 rounded-full bg-red-500"></div> 工作中</span>
-                            )}
-                        </td>
-                        <td className="p-4 text-center text-xs text-slate-500 max-w-[150px] truncate">
-                            {log.note || log.anomaly_reason || '-'}
-                        </td>
-                        <td className="p-4 text-center flex items-center justify-center gap-2">
-                            {/* 🟢 新增：加班審核按鈕 */}
-                            {log.is_overtime && log.overtime_status === 'pending' && (
-                                <>
-                                    <button 
-                                        onClick={() => handleOvertimeApproval(log.id, 'approved')}
-                                        className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition"
-                                        title="核准加班"
-                                    >
-                                        <CheckCircle size={16}/>
-                                    </button>
-                                    <button 
-                                        onClick={() => handleOvertimeApproval(log.id, 'rejected')}
-                                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
-                                        title="駁回加班"
-                                    >
-                                        <X size={16}/>
-                                    </button>
-                                </>
-                            )}
-                            <button 
-                                onClick={() => openEditModal(log)}
-                                className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition"
-                                title="修改"
-                            >
-                                <Pencil size={16}/>
-                            </button>
-                            {/* 🟢 新增：刪除按鈕 */}
-                            <button 
-                                onClick={() => handleDelete(log.id)}
-                                className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
-                                title="刪除"
-                            >
-                                <Trash2 size={16}/>
-                            </button>
-                        </td>
-                    </tr>
-                    ))
-                )}
-            </tbody>
-            </table>
-        </div>
-      </div>
+      <AttendanceTable
+        logs={displayLogs}
+        loading={loading}
+        staffList={staffList}
+        onOvertimeApproval={handleOvertimeApproval}
+        onEdit={openEditModal}
+        onDelete={handleDelete}
+        selectedIds={selectedIds}
+        setSelectedIds={setSelectedIds}
+      />
 
       {/* OCR 實體卡補登 (預備) */}
       <ScannerModal

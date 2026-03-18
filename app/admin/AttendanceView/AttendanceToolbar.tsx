@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Clock,
   User,
@@ -11,6 +11,8 @@ import {
   Plus,
   Briefcase,
   ScanLine,
+  Trash2,
+  ChevronDown,
 } from 'lucide-react';
 
 type Staff = {
@@ -33,10 +35,16 @@ type Props = {
   setSelectedStaffId: (value: string) => void;
   filteredStaffList: Staff[];
   totalHours: number;
+  writeTimeFilter: string;
+  setWriteTimeFilter: (value: string) => void;
+  selectedCount: number;
+  onBatchDelete: () => void;
+  isSubmitting?: boolean;
   onAddClick: () => void;
   onOpenOcr: () => void;
   onExportCSV: () => void;
   onExportTimecard: () => void;
+  onExportFullMonth: () => void;
 };
 
 const AttendanceToolbar: React.FC<Props> = ({
@@ -53,11 +61,19 @@ const AttendanceToolbar: React.FC<Props> = ({
   setSelectedStaffId,
   filteredStaffList,
   totalHours,
+  writeTimeFilter,
+  setWriteTimeFilter,
+  selectedCount,
+  onBatchDelete,
+  isSubmitting,
   onAddClick,
   onOpenOcr,
   onExportCSV,
   onExportTimecard,
+  onExportFullMonth,
 }) => {
+  const [showExportMenu, setShowExportMenu] = useState(false);
+
   return (
     <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-wrap justify-between items-center gap-4">
       <div className="flex items-center gap-4 flex-wrap">
@@ -135,9 +151,34 @@ const AttendanceToolbar: React.FC<Props> = ({
             ))}
           </select>
         </div>
+
+        {/* 🟢 新增：寫入時間篩選器 */}
+        <div className="flex items-center gap-2 bg-orange-50 p-1.5 rounded-lg border border-orange-200 text-sm w-44">
+          <Clock size={16} className="text-orange-500 ml-1" />
+          <select
+            value={writeTimeFilter}
+            onChange={(e) => setWriteTimeFilter(e.target.value)}
+            className="bg-transparent font-bold text-orange-800 outline-none w-full"
+          >
+            <option value="all">所有建檔時間</option>
+            <option value="1h">剛匯入 (1小時內)</option>
+            <option value="today">今日匯入/建檔</option>
+          </select>
+        </div>
       </div>
 
       <div className="flex gap-4 items-center">
+        {/* 🟢 新增：當有選取項目時，浮現批次刪除按鈕 */}
+        {selectedCount > 0 && (
+          <button
+            onClick={onBatchDelete}
+            disabled={isSubmitting}
+            className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition text-sm shadow-sm animate-fade-in disabled:opacity-50"
+          >
+            <Trash2 size={18} /> 批次刪除 ({selectedCount})
+          </button>
+        )}
+
         <button
           onClick={onAddClick}
           className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition text-sm shadow-sm"
@@ -157,19 +198,53 @@ const AttendanceToolbar: React.FC<Props> = ({
             {totalHours.toFixed(1)} <span className="text-sm">hr</span>
           </span>
         </div>
-        <div className="flex gap-2">
+
+        {/* 🟢 匯出報表下拉選單（避免擠滿工具列） */}
+        <div className="relative">
           <button
-            onClick={onExportCSV}
-            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition text-sm"
+            onClick={() => setShowExportMenu(!showExportMenu)}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition text-sm shadow-sm"
           >
-            <FileSpreadsheet size={18} /> 匯出 CSV
+            <FileSpreadsheet size={18} /> 匯出報表 <ChevronDown size={16} />
           </button>
-          <button
-            onClick={onExportTimecard}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition text-sm"
-          >
-            <FileSpreadsheet size={18} /> 匯出打卡表 (排班格式)
-          </button>
+
+          {showExportMenu && (
+            <>
+              <div
+                className="fixed inset-0 z-10"
+                onClick={() => setShowExportMenu(false)}
+              ></div>
+              <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-xl border border-slate-100 overflow-hidden z-20 animate-fade-in">
+                <button
+                  onClick={() => {
+                    onExportCSV();
+                    setShowExportMenu(false);
+                  }}
+                  className="w-full text-left px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50 border-b border-slate-50 transition flex items-center gap-2"
+                >
+                  📄 匯出標準 CSV 總表
+                </button>
+                <button
+                  onClick={() => {
+                    onExportTimecard();
+                    setShowExportMenu(false);
+                  }}
+                  className="w-full text-left px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50 border-b border-slate-50 transition flex items-center gap-2"
+                >
+                  📅 匯出打卡表 (排班格式)
+                </button>
+                <button
+                  onClick={() => {
+                    onExportFullMonth();
+                    setShowExportMenu(false);
+                  }}
+                  className="w-full text-left px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50 transition flex items-center gap-2"
+                >
+                  👤 匯出單人全月表格
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>
