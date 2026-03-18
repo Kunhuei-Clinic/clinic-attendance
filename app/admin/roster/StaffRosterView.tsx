@@ -213,28 +213,8 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
                     return hasRosterThisMonth;
                 });
 
-                // 🌟 通用化排序：依據「系統設定」中的職稱陣列順序來決定權重
-                // 若客戶在設定裡把「店長」排第一，「護理師」排第二，這裡就會自動抓到那個順序
-                const getRoleWeight = (roleName: string) => {
-                    const index = jobTitleConfigs.findIndex(j => j.name === roleName);
-                    return index === -1 ? 999 : index; // 找不到的排最後
-                };
-
-                const sorted = activeAndScheduledStaff.sort((a: any, b: any) => {
-                    // 先比職稱權重
-                    const aWeight = getRoleWeight(a.role || '');
-                    const bWeight = getRoleWeight(b.role || '');
-                    if (aWeight !== bWeight) return aWeight - bWeight;
-
-                    // 職稱相同則比員工自訂的 display_order (若有)
-                    const aOrder = a.display_order ?? 999;
-                    const bOrder = b.display_order ?? 999;
-                    if (aOrder !== bOrder) return aOrder - bOrder;
-
-                    // 最後依姓名排序
-                    return (a.name || '').localeCompare(b.name || '');
-                });
-                setStaffList(sorted);
+                // 🟢 只存原始資料，排序交給 useMemo
+                setStaffList(activeAndScheduledStaff);
             }
 
             if (holidaysResult.data) {
@@ -434,6 +414,26 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
     const configuredRoleSet = new Set(jobTitleConfigs.map(j => j.name));
     const allowedRoleSet = new Set(jobTitleConfigs.filter(j => j.in_roster).map(j => j.name));
 
+    // 🌟 動態排序：解決 API 載入時間差導致的排序失效問題
+    const sortedStaffList = React.useMemo(() => {
+        const getRoleWeight = (roleName: string) => {
+            const index = jobTitleConfigs.findIndex(j => j.name === roleName);
+            return index === -1 ? 999 : index;
+        };
+
+        return [...staffList].sort((a: any, b: any) => {
+            const aWeight = getRoleWeight(a.role || '');
+            const bWeight = getRoleWeight(b.role || '');
+            if (aWeight !== bWeight) return aWeight - bWeight;
+
+            const aOrder = a.display_order ?? 999;
+            const bOrder = b.display_order ?? 999;
+            if (aOrder !== bOrder) return aOrder - bOrder;
+
+            return (a.name || '').localeCompare(b.name || '');
+        });
+    }, [staffList, jobTitleConfigs]);
+
     if (!isMounted) return null;
 
     return (
@@ -567,7 +567,8 @@ export default function StaffRosterView({ authLevel }: { authLevel: 'boss' | 'ma
 
             {/* 根據系統設定動態產生排班表 */}
             {entities.map((ent, idx) => {
-                const staffForEntity = staffList.filter((s: Staff) => {
+                // 🟢 改用排序完成的 sortedStaffList 來進行過濾與渲染
+                const staffForEntity = sortedStaffList.filter((s: Staff) => {
                     if (s.entity !== ent.id) return false;
                     const role = s.role || '';
                     if (configuredRoleSet.size === 0) return true;
