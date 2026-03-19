@@ -74,7 +74,7 @@ const AttendanceToolbar: React.FC<Props> = ({
   const [showExportMenu, setShowExportMenu] = useState(false);
 
   return (
-    <div className="bg-white p-3 rounded-xl shadow-sm border border-slate-200 flex flex-wrap justify-between items-center gap-2">
+    <div className="sticky top-2 z-40 bg-white/95 backdrop-blur-md p-3 rounded-xl shadow-[0_4px_15px_-3px_rgba(0,0,0,0.05)] border border-slate-200 flex flex-wrap justify-between items-center gap-3 transition-all mb-4">
       {/* 🔴 左側篩選區 (縮小間距與欄位寬度) */}
       <div className="flex items-center gap-2 flex-wrap">
         <h2 className="text-lg font-bold text-slate-800 flex items-center gap-1.5 shrink-0">
