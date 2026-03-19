@@ -28,11 +28,85 @@ type BusinessHoursConfig = {
   shifts: ShiftConfig[];
 };
 
+type DbBusinessHours = {
+  openDays?: number[];
+  // DB 可能是：{ AM/PM/NIGHT: {start,end} } 或 shifts: ShiftConfig[]
+  shifts?: any;
+};
+
 const DEFAULT_SHIFTS: ShiftConfig[] = [
   { id: '1', code: 'M', name: '早班', start: '08:00', end: '12:00' },
   { id: '2', code: 'A', name: '午班', start: '14:00', end: '18:00' },
   { id: '3', code: 'N', name: '晚班', start: '18:30', end: '21:30' },
 ];
+
+const normalizeBusinessHoursForUi = (bh: DbBusinessHours | null | undefined): BusinessHoursConfig => {
+  const openDays = Array.isArray(bh?.openDays) ? bh!.openDays : [1, 2, 3, 4, 5, 6];
+  const rawShifts = bh?.shifts;
+
+  // shifts: ShiftConfig[]
+  if (Array.isArray(rawShifts)) {
+    const parsed: ShiftConfig[] = rawShifts
+      .map((s: any, idx: number) => ({
+        id: String(s?.id ?? idx),
+        code: String(s?.code ?? ''),
+        name: String(s?.name ?? ''),
+        start: String(s?.start ?? ''),
+        end: String(s?.end ?? ''),
+      }))
+      .filter((s: ShiftConfig) => s.code && s.start && s.end);
+
+    return { openDays, shifts: parsed.length > 0 ? parsed : DEFAULT_SHIFTS };
+  }
+
+  // shifts: { AM|PM|NIGHT: { start, end } }
+  if (rawShifts && typeof rawShifts === 'object') {
+    const mapShiftKeyToUi = (shiftKey: string) => {
+      if (shiftKey === 'AM') return { code: 'M', name: '早班' };
+      if (shiftKey === 'PM') return { code: 'A', name: '午班' };
+      if (shiftKey === 'NIGHT') return { code: 'N', name: '晚班' };
+      return { code: shiftKey, name: shiftKey };
+    };
+
+    const entries = Object.entries(rawShifts as Record<string, any>);
+    const parsed: ShiftConfig[] = entries
+      .map(([shiftKey, val]: any, idx: number) => {
+        const { code, name } = mapShiftKeyToUi(shiftKey);
+        return {
+          id: String(idx),
+          code,
+          name,
+          start: String(val?.start ?? ''),
+          end: String(val?.end ?? ''),
+        };
+      })
+      .filter((s: ShiftConfig) => s.start && s.end);
+
+    return { openDays, shifts: parsed.length > 0 ? parsed : DEFAULT_SHIFTS };
+  }
+
+  return { openDays, shifts: DEFAULT_SHIFTS };
+};
+
+const denormalizeBusinessHoursForDb = (bh: BusinessHoursConfig) => {
+  // DoctorRoster 使用 AM/PM/NIGHT 結構；StaffRosterView 也支援這種 object 格式
+  const shiftKeyByCode: Record<string, string> = {
+    M: 'AM',
+    A: 'PM',
+    N: 'NIGHT',
+  };
+
+  const shiftsObj: Record<string, { start: string; end: string }> = {};
+  bh.shifts.forEach((s) => {
+    const shiftKey = shiftKeyByCode[s.code] ?? s.code;
+    shiftsObj[shiftKey] = { start: s.start, end: s.end };
+  });
+
+  return {
+    openDays: bh.openDays,
+    shifts: shiftsObj,
+  };
+};
 
 const FALLBACK_ENTITIES: Entity[] = [
   { id: 'default', name: '預設單位' }
@@ -70,7 +144,7 @@ export default function SystemConfiguration() {
     const fetchAllData = async () => {
       setIsLoading(true);
       try {
-        // 1. 取得全域系統設定 (組織、職稱、特殊標籤)
+        // 1. 取得全域系統設定
         const sysRes = await fetch('/api/settings');
         const sysResult = await sysRes.json();
         if (sysResult.data) {
@@ -90,18 +164,55 @@ export default function SystemConfiguration() {
         const clinicRes = await fetch('/api/settings?type=clinic');
         const clinicResult = await clinicRes.json();
         if (clinicResult.data) {
-          // 🟢 確保 settings 被正確解析成物件，解決考勤與 GPS 無法讀取的問題
-          let settingsObj = clinicResult.data.settings || {};
+          // 安全解析 settings
+          let settingsObj: any = clinicResult.data.settings || {};
           if (typeof settingsObj === 'string') {
             try {
               settingsObj = JSON.parse(settingsObj);
             } catch (e) {}
           }
-
+          // 若 API 回傳為攤平結構 (沒有 clinicResult.data.settings)，則以 clinicResult.data 當作 settings
+          if (!clinicResult.data.settings) {
+            settingsObj = clinicResult.data;
+          }
           setClinicData({ ...clinicResult.data, settings: settingsObj });
 
-          if (clinicResult.data.business_hours) {
-            setBusinessHours(clinicResult.data.business_hours);
+          // 🟢 核心修復：班別資料格式轉換 (將舊版 Object 轉為新版 Array)
+          const loadedBh =
+            clinicResult.data?.settings?.business_hours ?? clinicResult.data.business_hours;
+
+          if (loadedBh) {
+            let upgradeBh: any = loadedBh;
+            if (typeof upgradeBh === 'string') {
+              try {
+                upgradeBh = JSON.parse(upgradeBh);
+              } catch (e) {}
+            }
+
+            let parsedShifts: any[] = [];
+            if (upgradeBh.shifts) {
+              if (Array.isArray(upgradeBh.shifts)) {
+                parsedShifts = upgradeBh.shifts;
+              } else {
+                // 發現舊版 { AM: {start, end}, PM: {...} }，自動轉換為陣列！
+                parsedShifts = Object.entries(upgradeBh.shifts).map(([key, val]: any, idx) => ({
+                  id: String(idx),
+                  code: key === 'AM' ? 'M' : key === 'PM' ? 'A' : 'N',
+                  name: key === 'AM' ? '早診' : key === 'PM' ? '午診' : '晚診',
+                  start: val.start || '00:00',
+                  end: val.end || '00:00'
+                }));
+              }
+            } else {
+              parsedShifts = DEFAULT_SHIFTS;
+            }
+
+            setBusinessHours({
+              openDays: upgradeBh.openDays || [1, 2, 3, 4, 5, 6],
+              shifts: parsedShifts
+            });
+          } else {
+            setBusinessHours({ openDays: [1, 2, 3, 4, 5, 6], shifts: DEFAULT_SHIFTS });
           }
 
           if (settingsObj.overtime_threshold !== undefined) setOvertimeThreshold(Number(settingsObj.overtime_threshold));
@@ -133,14 +244,16 @@ export default function SystemConfiguration() {
       await fetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ updates })
+        body: JSON.stringify(updates) // 🟢 修正：拔除多餘的 { updates }，直接傳陣列
       });
 
       // 2. 儲存租戶層級設定
       const clinicSettingsPayload = {
-        business_hours: businessHours,
+        type: 'clinic', // 🟢 修正：明確告知後端這是 clinic 設定
         settings: {
           ...(clinicData?.settings || {}),
+          // 🟢 修正：把 business_hours 放進 settings，確保 POST/GET 路徑一致並能寫入 DB
+          business_hours: businessHours,
           overtime_threshold: overtimeThreshold,
           overtime_approval_required: overtimeApprovalRequired,
           clock_ignore_gps: clockIgnoreGps,
