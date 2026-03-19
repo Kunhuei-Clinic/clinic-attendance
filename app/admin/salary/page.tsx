@@ -64,15 +64,28 @@ export default function SalaryPage() {
     setIsZipping(true); 
     try {
       const pdf = new jsPDF('p', 'mm', 'a4');
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      let isFirstPage = true;
+
       for (let i = 0; i < filteredAndSortedReports.length; i++) {
-        const el = document.getElementById(`zip-capture-${i}`); // 重複利用背景渲染的容器
-        if (el) {
-          const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
-          const imgData = canvas.toDataURL('image/png');
-          const pdfWidth = pdf.internal.pageSize.getWidth();
-          const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-          if (i > 0) pdf.addPage(); // 第一頁不加，後續每一張都加一新頁
-          pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+        const el = document.getElementById(`zip-capture-${i}`);
+        if (!el) continue;
+        
+        const page1 = el.querySelector('.pdf-page-1') as HTMLElement;
+        const page2 = el.querySelector('.pdf-page-2') as HTMLElement;
+        
+        if (page1) {
+          if (!isFirstPage) pdf.addPage();
+          const canvas1 = await html2canvas(page1, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+          const imgData1 = canvas1.toDataURL('image/png');
+          pdf.addImage(imgData1, 'PNG', 0, 0, pdfWidth, pdfWidth * (canvas1.height / canvas1.width));
+          isFirstPage = false;
+        }
+        if (page2) {
+          pdf.addPage();
+          const canvas2 = await html2canvas(page2, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+          const imgData2 = canvas2.toDataURL('image/png');
+          pdf.addImage(imgData2, 'PNG', 0, 0, pdfWidth, pdfWidth * (canvas2.height / canvas2.width));
         }
       }
       pdf.save(`${selectedMonth}_薪資單_合併列印.pdf`);
@@ -91,20 +104,30 @@ export default function SalaryPage() {
       const zip = new JSZip();
       for (let i = 0; i < filteredAndSortedReports.length; i++) {
         const rpt = filteredAndSortedReports[i];
-        // 改抓我們專門為 ZIP 準備的固定寬度隱藏容器
-        const el = document.getElementById(`zip-capture-${i}`);
-        if (el) {
-          const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
-          const imgData = canvas.toDataURL('image/png');
-          const pdf = new jsPDF('p', 'mm', 'a4');
-          const pdfWidth = pdf.internal.pageSize.getWidth();
-          const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-          pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+        const el = document.getElementById(`zip-capture-${i}`); 
+        if (!el) continue;
+        
+        const page1 = el.querySelector('.pdf-page-1') as HTMLElement;
+        const page2 = el.querySelector('.pdf-page-2') as HTMLElement;
+        
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        const pdfWidth = pdf.internal.pageSize.getWidth();
 
-          const pdfBlob = pdf.output('blob');
-          const safeName = (rpt.staff_name || '').replace(/\s+/g, '_');
-          zip.file(`${safeName}_${selectedMonth}_薪資單.pdf`, pdfBlob);
+        if (page1) {
+          const canvas1 = await html2canvas(page1, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+          const imgData1 = canvas1.toDataURL('image/png');
+          pdf.addImage(imgData1, 'PNG', 0, 0, pdfWidth, pdfWidth * (canvas1.height / canvas1.width));
         }
+        if (page2) {
+          pdf.addPage();
+          const canvas2 = await html2canvas(page2, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+          const imgData2 = canvas2.toDataURL('image/png');
+          pdf.addImage(imgData2, 'PNG', 0, 0, pdfWidth, pdfWidth * (canvas2.height / canvas2.width));
+        }
+        
+        const pdfBlob = pdf.output('blob');
+        const safeName = (rpt.staff_name || '').replace(/\s+/g, '_');
+        zip.file(`${safeName}_${selectedMonth}_薪資單.pdf`, pdfBlob);
       }
       const content = await zip.generateAsync({ type: 'blob' });
       saveAs(content, `${selectedMonth}_薪資單批次下載.zip`);
