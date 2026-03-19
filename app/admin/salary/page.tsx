@@ -793,7 +793,7 @@ export default function SalaryPage() {
             </div>
           </div>
         )}
-        <div className="max-w-7xl mx-auto space-y-6 print:hidden">
+        <div className="w-full p-4 animate-fade-in space-y-6 pb-20 print:hidden">
 
           {/* 🟢 升級：吸頂浮動工具列 (Sticky Toolbar) */}
           <div className="sticky top-2 z-40 bg-white/95 backdrop-blur-md p-3 rounded-xl shadow-[0_4px_15px_-3px_rgba(0,0,0,0.05)] border border-slate-200 flex flex-col xl:flex-row justify-between items-center gap-3 transition-all mb-4">
