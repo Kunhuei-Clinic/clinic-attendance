@@ -1,16 +1,42 @@
 'use client';
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Printer } from 'lucide-react';
+import { X, Printer, Download } from 'lucide-react';
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 
 export default function PayslipModal({ report, yearMonth, clinicName, onClose }: any) {
   const [mounted, setMounted] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
 
   useEffect(() => {
     setMounted(true);
     document.body.style.overflow = 'hidden';
     return () => { document.body.style.overflow = 'unset'; };
   }, []);
+
+  // 🟢 個別下載 PDF 功能 (取代原本的 window.print)
+  const handleDownloadPdf = async () => {
+    setIsDownloading(true);
+    try {
+      const el = document.getElementById('single-payslip-capture');
+      if (!el) return;
+      const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      
+      const safeName = (report.staff_name || '').replace(/\s+/g, '_');
+      pdf.save(`${clinicName}_${safeName}_${yearMonth}_薪資單.pdf`);
+    } catch (error) {
+      console.error('PDF 下載失敗:', error);
+      alert('產生 PDF 時發生錯誤');
+    } finally {
+      setIsDownloading(false);
+    }
+  };
 
   useEffect(() => {
     if (!report || !yearMonth || !clinicName) return;
@@ -20,8 +46,6 @@ export default function PayslipModal({ report, yearMonth, clinicName, onClose }:
     return () => { document.title = originalTitle; };
   }, [clinicName, report, yearMonth]);
 
-  const handlePrint = () => window.print();
-
   if (!mounted) return null;
 
   return (
@@ -29,17 +53,26 @@ export default function PayslipModal({ report, yearMonth, clinicName, onClose }:
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-4 print:hidden">
         <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl flex flex-col max-h-[90vh] overflow-hidden">
           <div className="bg-slate-800 text-white p-4 flex justify-between items-center shrink-0">
-            <h3 className="font-bold text-lg">薪資單預覽</h3>
-            <div className="flex gap-3">
-              <button onClick={handlePrint} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded-lg font-bold transition">
-                <Printer size={18}/> 列印 / PDF
+            <h3 className="font-bold">薪資單預覽</h3>
+            <div className="flex gap-2">
+              {/* 🟢 改為下載 PDF 按鈕 */}
+              <button
+                onClick={handleDownloadPdf}
+                disabled={isDownloading}
+                className="flex items-center gap-2 px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded font-bold transition disabled:opacity-50"
+              >
+                <Download size={16} /> {isDownloading ? '處理中...' : '下載 PDF'}
               </button>
-              <button onClick={onClose} className="p-2 hover:bg-slate-700 rounded-full"><X size={20}/></button>
+              <button onClick={onClose} className="p-1.5 hover:bg-slate-700 rounded-full transition">
+                <X size={20} />
+              </button>
             </div>
           </div>
-          <div className="overflow-y-auto flex-1 bg-gray-100 p-8">
-            <div className="bg-white shadow-sm min-h-[200mm] w-full mx-auto p-8">
-               <PrintContent report={report} yearMonth={yearMonth} clinicName={clinicName} />
+          
+          <div className="flex-1 overflow-y-auto p-4 bg-slate-100">
+            {/* 🟢 加上 ID 讓 html2canvas 可以精準抓取這一塊 */}
+            <div id="single-payslip-capture" className="max-w-2xl mx-auto bg-white shadow-sm border border-slate-200">
+              <PrintContent report={report} yearMonth={yearMonth} clinicName={clinicName} />
             </div>
           </div>
         </div>
@@ -68,6 +101,21 @@ export default function PayslipModal({ report, yearMonth, clinicName, onClose }:
 export function PrintContent({ report, yearMonth, clinicName }: any) {
   const [year, month] = yearMonth.split('-');
   const fmt = (n: number) => Math.round(n).toLocaleString();
+
+  // 🟢 加上工時制度的中文轉換字典
+  const workRuleMap: Record<string, string> = {
+    normal: '一般工時',
+    '2week': '雙週變形工時',
+    '4week': '四週變形工時',
+    '8week': '八週變形工時',
+    'online_consultation': '線上諮詢時數制',
+    'none': '責任制 / 無限制',
+  };
+  const translatedWorkRule =
+    workRuleMap[report.work_rule] || report.work_rule || '一般工時';
+  const empTypeStr = report.employment_type === 'part_time' ? '兼職' : '正職';
+  const salaryModeStr =
+    report.salary_mode === 'monthly' ? '月薪制' : '時薪制';
 
   // 🟢 萃取線上諮詢的申報時數
   const onlineBonus = report.temp_bonus_details?.find((b: any) => String(b.name).includes('線上諮詢'));
@@ -108,35 +156,32 @@ export function PrintContent({ report, yearMonth, clinicName }: any) {
 
   return (
     <div className="text-slate-900 font-sans w-full max-w-full">
-      
       {/* PAGE 1 */}
-      <div className="flex flex-col justify-between" style={{ minHeight: '260mm' }}>
+      <div
+        className="flex flex-col justify-between"
+        style={{ minHeight: '260mm' }}
+      >
         <div>
-          <div className="border-b-2 border-slate-900 pb-4 mb-6 flex justify-between items-start">
-            <div>
-              <div className="text-sm text-slate-500 mb-1">{clinicName || '診所名稱'}</div>
-              <h1 className="text-3xl font-extrabold text-slate-900">薪 資 明 細 單</h1>
-              <p className="text-slate-400 text-xs mt-1">Pay Slip</p>
+          {/* 🟢 優化後的表頭區塊 */}
+          <div className="text-center mb-6 border-b border-slate-300 pb-4">
+            <h2 className="text-2xl font-black text-slate-800 tracking-wider mb-2">
+              {clinicName || '診所名稱'}
+            </h2>
+            <div className="text-lg font-bold text-slate-600 mb-2">
+              {yearMonth.replace('-', '年')}月 薪資明細單
             </div>
-            <div className="text-right">
-              <div className="text-2xl font-bold text-blue-900">{year} 年 {month} 月</div>
-              <div className="text-slate-500 font-bold mb-1">
-                <span className={report.employment_type === 'part_time' ? 'text-orange-600' : 'text-blue-600'}>
-                  {report.employment_type === 'part_time' ? '兼職' : '正職'}
-                </span>
-                {' | '}{report.staff_role} | {report.work_rule} | {report.salary_mode === 'monthly' ? '月薪制' : '時薪制'}
-              </div>
-              <div className="text-base font-bold mt-1">{report.staff_role}：{report.staff_name}</div>
-              <div className="text-xs text-slate-500 mt-1 flex flex-col items-end gap-0.5">
-              <span className="bg-slate-100 px-2 py-0.5 rounded">工時制: {getWorkRuleLabel(report.work_rule)}</span>
-              <span className="text-slate-400">
-                到職日: {report.hire_date || '未設定'} | 
-                今年特休總額: {report.annual_leave_days ?? 0} 天 | 
-                已休: {report.annual_leave_used ?? 0} 天 | 
-                {/* 🟢 加入自動相減邏輯，若後端未提供 remaining，則前端自行計算 (總額 - 已休) */}
-                剩餘: {report.annual_leave_remaining ?? ((report.annual_leave_days ?? 0) - (report.annual_leave_used ?? 0))} 天
+            {/* 乾淨俐落的單行狀態列 (正職 護理師 | 四週變形工時・月薪制) */}
+            <div className="text-slate-600 font-medium text-sm flex items-center justify-center gap-2">
+              <span>
+                {empTypeStr} {report.staff_role}
+              </span>
+              <span className="text-slate-300">|</span>
+              <span>
+                {translatedWorkRule}・{salaryModeStr}
               </span>
             </div>
+            <div className="text-3xl font-black text-slate-800 mt-4 tracking-widest">
+              {report.staff_name}
             </div>
           </div>
 

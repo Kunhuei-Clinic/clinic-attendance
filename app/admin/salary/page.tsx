@@ -59,6 +59,31 @@ export default function SalaryPage() {
   // 新增：獎懲調整 Modal 狀態
   const [adjModalStaff, setAdjModalStaff] = useState<any | null>(null);
 
+  // 🟢 批次產生合併為「單一檔案」的 PDF
+  const handleBatchDownloadSinglePdf = async () => {
+    setIsZipping(true); 
+    try {
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      for (let i = 0; i < filteredAndSortedReports.length; i++) {
+        const el = document.getElementById(`zip-capture-${i}`); // 重複利用背景渲染的容器
+        if (el) {
+          const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+          const imgData = canvas.toDataURL('image/png');
+          const pdfWidth = pdf.internal.pageSize.getWidth();
+          const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+          if (i > 0) pdf.addPage(); // 第一頁不加，後續每一張都加一新頁
+          pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+        }
+      }
+      pdf.save(`${selectedMonth}_薪資單_合併列印.pdf`);
+    } catch (error) {
+      console.error('PDF 產生失敗:', error);
+      alert('合併 PDF 時發生錯誤');
+    } finally {
+      setIsZipping(false);
+    }
+  };
+
   // 🟢 批次產生獨立 PDF 並打包成 ZIP (完美版)
   const handleBatchDownloadZip = async () => {
     setIsZipping(true);
@@ -804,10 +829,11 @@ export default function SalaryPage() {
                 {showDownloadMenu && (
                   <div className="absolute right-0 mt-2 w-56 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden">
                     <button
-                      onClick={() => { window.print(); setShowDownloadMenu(false); }}
-                      className="w-full text-left px-4 py-3 hover:bg-slate-50 text-sm font-bold text-slate-700 flex items-center gap-2 border-b border-slate-100 transition"
+                      onClick={() => { handleBatchDownloadSinglePdf(); setShowDownloadMenu(false); }}
+                      disabled={isZipping || filteredAndSortedReports.length === 0}
+                      className="w-full text-left px-4 py-3 hover:bg-slate-50 text-sm font-bold text-slate-700 flex items-center gap-2 border-b border-slate-100 transition disabled:opacity-50"
                     >
-                      <Printer size={16} className="text-slate-400" /> 列印紙本 (合併 PDF)
+                      <Printer size={16} className="text-slate-400" /> 下載合併 PDF (單一檔)
                     </button>
                     <button
                       onClick={() => { handleBatchDownloadZip(); setShowDownloadMenu(false); }}
@@ -993,24 +1019,6 @@ export default function SalaryPage() {
             </div>
           </div>
         )}
-      </div>
-
-      {/* 🟢 終極解決列印背景殘留：插入全域 CSS 強制隱藏其他元素 */}
-      <style dangerouslySetInnerHTML={{__html: `
-        @media print {
-          body * { visibility: hidden; }
-          #batch-print-container, #batch-print-container * { visibility: visible; }
-          #batch-print-container { position: absolute; left: 0; top: 0; width: 100%; }
-        }
-      `}} />
-
-      {/* 批次列印專用的隱藏容器 (供 window.print 使用) */}
-      <div id="batch-print-container" className="hidden print:block w-full bg-white absolute top-0 left-0 z-[100]">
-        {filteredAndSortedReports.map((rpt, idx) => (
-          <div key={`print-${idx}`} style={{ pageBreakAfter: 'always', width: '100%', padding: '20px' }}>
-            <PrintContent report={rpt} yearMonth={selectedMonth} clinicName={entityList.find((e) => e.id === rpt.staff_entity)?.name || '診所'} />
-          </div>
-        ))}
       </div>
 
       {/* 🟢 ZIP 專用的隱形渲染區：固定 800px 寬度並丟到畫面外，確保 html2canvas 截圖不會排版崩潰 */}
