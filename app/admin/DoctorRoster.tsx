@@ -426,7 +426,21 @@ export default function DoctorRosterView() {
                             <div><label className="block text-xs font-bold text-slate-500 mb-1">執業醫師</label><select className="w-full border p-2 rounded bg-slate-50 font-bold text-slate-700" value={assignForm.doctorId} onChange={(e) => setAssignForm({ ...assignForm, doctorId: e.target.value })}><option value="" disabled>請選擇...</option>{doctors.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select></div>
                             <div className="grid grid-cols-2 gap-4"><div><label className="block text-xs font-bold text-slate-500 mb-1">開始</label><input type="time" className="w-full border p-2 rounded font-mono text-center bg-slate-50" value={assignForm.startTime} onChange={(e) => setAssignForm({ ...assignForm, startTime: e.target.value })} /></div><div><label className="block text-xs font-bold text-slate-500 mb-1">結束</label><input type="time" className="w-full border p-2 rounded font-mono text-center bg-slate-50" value={assignForm.endTime} onChange={(e) => setAssignForm({ ...assignForm, endTime: e.target.value })} /></div></div>
                             <div className="flex gap-4 border-t border-b py-3"><label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={assignForm.isDedicated} onChange={e => setAssignForm({ ...assignForm, isDedicated: e.target.checked })} className="w-4 h-4 text-purple-600" /><span className="text-sm font-bold text-purple-700">專診</span></label><label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={assignForm.isSubstitution} onChange={e => setAssignForm({ ...assignForm, isSubstitution: e.target.checked })} className="w-4 h-4 text-orange-600" /><span className="text-sm font-bold text-orange-700">異動/代診</span></label></div>
-                            <div><label className="block text-xs font-bold text-slate-500 mb-2">特殊門診</label><div className="flex flex-wrap gap-2">{specialTypes.map(t => (<button key={t} onClick={() => toggleSpecialTag(t)} className={`text-xs px-3 py-1.5 rounded-full border transition flex items-center gap-1 ${assignForm.specialTags.includes(t) ? 'bg-pink-100 border-pink-300 text-pink-700 font-bold' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}`}>{assignForm.specialTags.includes(t) && <Check size={12} />} {t}</button>))}</div></div>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 mb-2">特殊門診</label>
+                                <div className="flex flex-wrap gap-2">
+                                    {/* 🟢 動態合併：將全域專診與該班表「已存在的歷史專診」合併，確保舊名稱能顯示並允許取消 */}
+                                    {Array.from(new Set([...specialTypes, ...(assignForm.specialTags || [])])).map(t => (
+                                        <button 
+                                            key={t} 
+                                            onClick={() => toggleSpecialTag(t)} 
+                                            className={`text-xs px-3 py-1.5 rounded-full border transition flex items-center gap-1 ${assignForm.specialTags.includes(t) ? 'bg-pink-100 border-pink-300 text-pink-700 font-bold' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}`}
+                                        >
+                                            {assignForm.specialTags.includes(t) && <Check size={12} />} {t}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
                             <div className="pt-4 flex gap-2">
                                 {editingId && (<button onClick={() => removeRoster(editingId)} className="bg-red-50 text-red-600 py-3 px-4 rounded-lg font-bold hover:bg-red-100 transition"><Trash2 size={20} /></button>)}
                                 <button onClick={handleSubmitAssign} className="flex-1 bg-teal-600 text-white py-3 rounded-lg font-bold hover:bg-teal-700 transition shadow-md">{editingId ? '更新儲存' : '確認排班'}</button>

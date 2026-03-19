@@ -15,6 +15,18 @@ export default function BasicInfoPanel({ data, onChange, jobTitles, entities }: 
             {jobTitles?.map((t: any) => <option key={t.name} value={t.name}>{t.name}</option>)}
           </select>
         </div>
+        {/* 🟢 新增：聘僱類別 (正職/兼職) */}
+        <div>
+          <label className="block text-xs font-bold text-slate-500 mb-1">聘僱類別 (勞基法)</label>
+          <select
+            value={data.employment_type || 'full_time'}
+            onChange={e => onChange('employment_type', e.target.value)}
+            className="w-full border p-2 rounded bg-white text-blue-700 font-bold"
+          >
+            <option value="full_time">正職 (全時勞工)</option>
+            <option value="part_time">兼職 (部分工時)</option>
+          </select>
+        </div>
         <div>
           <label className="block text-xs font-bold text-slate-500 mb-1 flex items-center gap-1"><Building2 size={12}/> 歸屬單位</label>
           <select value={data.entity || ''} onChange={e => onChange('entity', e.target.value)} className="w-full border p-2 rounded bg-white">

@@ -49,8 +49,8 @@ export default function LeaveRequestsList({
 
   return (
     <>
-      {/* 工具列 */}
-      <div className="flex flex-wrap justify-between items-center mb-6 bg-white p-4 rounded-xl shadow-sm border gap-4">
+      {/* 🟢 升級：吸頂浮動的工具列 (Sticky Toolbar) */}
+      <div className="sticky top-2 z-40 bg-white/95 backdrop-blur-md p-3 rounded-xl shadow-[0_4px_15px_-3px_rgba(0,0,0,0.05)] border border-slate-200 flex flex-wrap justify-between items-center gap-3 transition-all mb-4">
         <div className="flex items-center gap-4 flex-wrap">
           <button
             onClick={() => updateFilters({ useDateFilter: !useDateFilter })}

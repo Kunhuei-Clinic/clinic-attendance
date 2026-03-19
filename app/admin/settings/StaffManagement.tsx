@@ -18,39 +18,51 @@ export default function StaffManagement() {
   const fetchStaff = async () => {
     setLoadingStaff(true);
     try {
-      const response = await fetch('/api/staff');
-      const result = await response.json();
-      if (result.data && Array.isArray(result.data)) {
-        // 權重排序：依照職類分組排序
-        const roleWeight: Record<string, number> = { 
-          '醫師': 1, 
-          '主管': 2, 
-          '櫃台': 3, 
-          '護理師': 4, 
-          '營養師': 5, 
-          '診助': 6, 
-          '藥師': 7, 
-          '藥局助理': 8 
-        };
-        const sorted = [...result.data].sort((a, b) => {
+      // 🟢 雙管齊下：同時抓取「員工名單」與「全域系統設定（取得職稱順序）」
+      const [staffRes, settingsRes] = await Promise.all([
+        fetch('/api/staff'),
+        fetch('/api/settings')
+      ]);
+      
+      const staffResult = await staffRes.json();
+      const settingsResult = await settingsRes.json();
+
+      // 1. 抽取出全域設定中的職稱陣列
+      let jobTitles: any[] = [];
+      if (settingsResult.data) {
+        const titlesSetting = settingsResult.data.find((item: any) => item.key === 'job_titles');
+        if (titlesSetting) {
           try {
-            const aWeight = roleWeight[a?.role || ''] ?? 999;
-            const bWeight = roleWeight[b?.role || ''] ?? 999;
-            if (aWeight !== bWeight) return aWeight - bWeight;
-            // 同職類內按姓名排序
-            return (a?.name || '').localeCompare(b?.name || '');
-          } catch (e) {
-            console.error('Sort error:', e, a, b);
-            return 0;
-          }
+            const raw = JSON.parse(titlesSetting.value);
+            jobTitles = Array.isArray(raw) ? raw : [];
+          } catch (e) {}
+        }
+      }
+
+      if (staffResult.data && Array.isArray(staffResult.data)) {
+        // 2. 建立動態權重函數：依據全域設定中的陣列 Index 決定排序
+        const getRoleWeight = (roleName: string) => {
+          const index = jobTitles.findIndex((j: any) => {
+            const name = typeof j === 'string' ? j : j.name;
+            return name === roleName;
+          });
+          return index === -1 ? 999 : index; // 找不到的放最後面
+        };
+
+        // 3. 執行排序
+        const sorted = [...staffResult.data].sort((a, b) => {
+          const aWeight = getRoleWeight(a.role || '');
+          const bWeight = getRoleWeight(b.role || '');
+          if (aWeight !== bWeight) return aWeight - bWeight;
+          // 同職類內按姓名排序
+          return (a.name || '').localeCompare(b.name || '');
         });
-        setStaffList(sorted || []);
-      } else {
-        setStaffList([]);
+        
+        setStaffList(sorted);
       }
     } catch (error) {
       console.error('Fetch staff error:', error);
-      setStaffList([]);
+      alert('載入員工列表失敗');
     } finally {
       setLoadingStaff(false);
     }
