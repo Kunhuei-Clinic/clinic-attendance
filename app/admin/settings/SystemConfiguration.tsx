@@ -181,6 +181,13 @@ export default function SystemConfiguration() {
           const loadedBh =
             clinicResult.data?.settings?.business_hours ?? clinicResult.data.business_hours;
 
+          if (process.env.NODE_ENV !== 'production') {
+            console.log('[SystemConfiguration] clinicResult.data keys:', Object.keys(clinicResult.data || {}));
+            console.log('[SystemConfiguration] settings.business_hours:', clinicResult.data?.settings?.business_hours);
+            console.log('[SystemConfiguration] business_hours:', clinicResult.data?.business_hours);
+            console.log('[SystemConfiguration] loadedBh typeof:', typeof loadedBh);
+          }
+
           if (loadedBh) {
             let upgradeBh: any = loadedBh;
             if (typeof upgradeBh === 'string') {
@@ -205,6 +212,11 @@ export default function SystemConfiguration() {
               }
             } else {
               parsedShifts = DEFAULT_SHIFTS;
+            }
+
+            if (process.env.NODE_ENV !== 'production') {
+              console.log('[SystemConfiguration] upgradeBh:', upgradeBh);
+              console.log('[SystemConfiguration] parsedShifts:', parsedShifts);
             }
 
             setBusinessHours({
