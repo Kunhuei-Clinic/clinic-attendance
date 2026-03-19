@@ -4,18 +4,27 @@ import { getClinicIdFromRequest } from '@/lib/clinicHelper';
 
 export const dynamic = 'force-dynamic';
 
-// 勞基法特休額度計算 (週年制)
-function getLeaveQuota(yearsOfService: number, isHalfYear: boolean): number {
-  if (isHalfYear) return 3; // 滿半年
-  if (yearsOfService < 1) return 0;
-  if (yearsOfService < 2) return 7;  // 滿1年
-  if (yearsOfService < 3) return 10; // 滿2年
-  if (yearsOfService < 5) return 14; // 滿3-4年
-  if (yearsOfService < 10) return 15; // 滿5-9年
-  
-  // 10年以上: 16 + (N-10)，上限30
-  const extra = Math.floor(yearsOfService - 10) + 1;
-  return Math.min(30, 15 + extra);
+// 🟢 勞基法特休額度計算 (週年制 + 支援兼職比例)
+function getLeaveQuota(yearsOfService: number, isHalfYear: boolean, staff: any): number {
+  let baseQuota = 0;
+  if (isHalfYear) baseQuota = 3; // 滿半年
+  else if (yearsOfService < 1) baseQuota = 0;
+  else if (yearsOfService < 2) baseQuota = 7;  // 滿1年
+  else if (yearsOfService < 3) baseQuota = 10; // 滿2年
+  else if (yearsOfService < 5) baseQuota = 14; // 滿3-4年
+  else if (yearsOfService < 10) baseQuota = 15; // 滿5-9年
+  else {
+    const extra = Math.floor(yearsOfService - 10) + 1;
+    baseQuota = Math.min(30, 15 + extra);
+  }
+
+  // 🟢 兼職 (部分工時) 按比例換算
+  if (staff?.employment_type === 'part_time') {
+    const weeklyHours = Number(staff.part_time_weekly_hours) || 20;
+    return Number(((weeklyHours / 40) * baseQuota).toFixed(2));
+  }
+
+  return baseQuota;
 }
 
 // 🛡️ 安全的日期轉字串函式 (防呆)
@@ -46,7 +55,7 @@ export async function GET(request: NextRequest) {
     // 2. 讀取員工基本資料
     const { data: staff, error: staffError } = await supabaseAdmin
       .from('staff')
-      .select('id, name, role, start_date, base_salary, salary_mode') // 🟢 補上薪資欄位
+      .select('id, name, role, start_date, base_salary, salary_mode, employment_type, part_time_weekly_hours') // 🟢 補上薪資欄位 + 勞基法兼職欄位
       .eq('id', staffId)
       .eq('clinic_id', clinicId)
       .single();
@@ -104,7 +113,8 @@ export async function GET(request: NextRequest) {
 
         const used = calculateUsed(allRequests, cycleStart, cycleEnd);
         const settled = calculateSettled(allSettlements, cycleStart, cycleEnd, 0.5);
-        const quota = 3; 
+        // 🟢 改為動態呼叫，支援兼職打折
+        const quota = getLeaveQuota(0.5, true, staff);
 
         cycles.push({
             year: 0.5,
@@ -136,7 +146,8 @@ export async function GET(request: NextRequest) {
         cycleEnd.setFullYear(startDate.getFullYear() + currentYear + 1);
         cycleEnd.setDate(cycleEnd.getDate() - 1);
 
-        const quota = getLeaveQuota(currentYear, false);
+        // 🟢 補上 staff 參數
+        const quota = getLeaveQuota(currentYear, false, staff);
         const used = calculateUsed(allRequests, cycleStart, cycleEnd);
         const settled = calculateSettled(allSettlements, cycleStart, cycleEnd, currentYear);
         const balance = quota - used - settled;

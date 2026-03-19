@@ -4,16 +4,27 @@ import { getClinicIdFromRequest } from '@/lib/clinicHelper';
 
 export const dynamic = 'force-dynamic';
 
-// 勞基法特休額度計算 (週年制)
-function getLeaveQuota(yearsOfService: number, isHalfYear: boolean): number {
-  if (isHalfYear) return 3;
-  if (yearsOfService < 1) return 0;
-  if (yearsOfService < 2) return 7;
-  if (yearsOfService < 3) return 10;
-  if (yearsOfService < 5) return 14;
-  if (yearsOfService < 10) return 15;
-  const extra = Math.floor(yearsOfService - 10) + 1;
-  return Math.min(30, 15 + extra);
+// 🟢 勞基法特休額度計算 (週年制 + 支援兼職比例)
+function getLeaveQuota(yearsOfService: number, isHalfYear: boolean, staff: any): number {
+  let baseQuota = 0;
+  if (isHalfYear) baseQuota = 3;
+  else if (yearsOfService < 1) baseQuota = 0;
+  else if (yearsOfService < 2) baseQuota = 7;
+  else if (yearsOfService < 3) baseQuota = 10;
+  else if (yearsOfService < 5) baseQuota = 14;
+  else if (yearsOfService < 10) baseQuota = 15;
+  else {
+    const extra = Math.floor(yearsOfService - 10) + 1;
+    baseQuota = Math.min(30, 15 + extra);
+  }
+
+  // 🟢 兼職 (部分工時) 按比例換算
+  if (staff?.employment_type === 'part_time') {
+    const weeklyHours = Number(staff.part_time_weekly_hours) || 20; // 防呆預設 20
+    return Number(((weeklyHours / 40) * baseQuota).toFixed(2));
+  }
+
+  return baseQuota;
 }
 
 // 輔助計算已休天數
@@ -51,7 +62,7 @@ export async function GET(request: NextRequest) {
     // 1. 抓取全院有效員工
     const { data: staffList } = await supabaseAdmin
       .from('staff')
-      .select('id, name, start_date, is_active, base_salary, salary_mode') // 🟢 補上薪資欄位
+      .select('id, name, start_date, is_active, base_salary, salary_mode, employment_type, part_time_weekly_hours') // 🟢 補上薪資欄位 + 勞基法兼職欄位
       .eq('clinic_id', clinicId)
       .eq('is_active', true);
 
@@ -98,7 +109,7 @@ export async function GET(request: NextRequest) {
         halfYearEnd.setDate(halfYearEnd.getDate() - 1);
 
         if (now >= halfYearStart) {
-          const quota = getLeaveQuota(0.5, true);
+          const quota = getLeaveQuota(0.5, true, staff);
           const used = calculateUsed(staffRequests, halfYearStart, halfYearEnd);
           const settled = calculateSettled(staffSettlements, 0);
           const balance = quota - used - settled;
@@ -117,7 +128,7 @@ export async function GET(request: NextRequest) {
           cycleEnd.setFullYear(cycleStart.getFullYear() + 1);
           cycleEnd.setDate(cycleEnd.getDate() - 1);
 
-          const quota = getLeaveQuota(y, false);
+          const quota = getLeaveQuota(y, false, staff);
           const used = calculateUsed(staffRequests, cycleStart, cycleEnd);
           const settled = calculateSettled(staffSettlements, y);
           const balance = quota - used - settled;
