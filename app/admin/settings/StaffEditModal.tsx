@@ -21,10 +21,23 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
   const [editData, setEditData] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<'basic' | 'salary' | 'security'>('basic');
   const [isSaving, setIsSaving] = useState(false);
+  const [systemJobTitles, setSystemJobTitles] = useState(DEFAULT_JOB_TITLES);
+  const [systemEntities, setSystemEntities] = useState(FALLBACK_ENTITIES);
 
   // 初始化資料
   useEffect(() => {
     if (isOpen) {
+      // 🟢 抓取系統設定的職稱與部門
+      fetch('/api/settings').then(res => res.json()).then((json) => {
+        if (json.data) {
+          const titles = json.data.find((item: any) => item.key === 'job_titles');
+          if (titles && titles.value) setSystemJobTitles(JSON.parse(titles.value));
+          
+          const ents = json.data.find((item: any) => item.key === 'org_entities');
+          if (ents && ents.value) setSystemEntities(JSON.parse(ents.value));
+        }
+      });
+
       if (initialData) {
         setEditData({ 
           ...initialData,
@@ -109,7 +122,7 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
         {/* 🟢 加入 min-h-[550px] 固定高度，防止切換 Tab 時忽大忽小 */}
         <div className="flex-1 overflow-y-auto p-6 bg-slate-50 min-h-[550px]">
           {activeTab === 'basic' && (
-            <BasicInfoPanel data={editData} onChange={handleChange} jobTitles={DEFAULT_JOB_TITLES} entities={FALLBACK_ENTITIES} />
+            <BasicInfoPanel data={editData} onChange={handleChange} jobTitles={systemJobTitles} entities={systemEntities} />
           )}
           {activeTab === 'salary' && (
             <div className="space-y-6">
