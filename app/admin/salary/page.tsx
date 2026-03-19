@@ -9,6 +9,7 @@ import {
   History,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Printer,
   FileSpreadsheet,
 } from 'lucide-react';
@@ -41,6 +42,7 @@ export default function SalaryPage() {
   );
   const [printReport, setPrintReport] = useState<any | null>(null);
   const [isZipping, setIsZipping] = useState(false);
+  const [showDownloadMenu, setShowDownloadMenu] = useState(false); // 🟢 新增下拉選單狀態
   const [entityList, setEntityList] = useState<Entity[]>([]);
   const [authChecked, setAuthChecked] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -57,55 +59,30 @@ export default function SalaryPage() {
   // 新增：獎懲調整 Modal 狀態
   const [adjModalStaff, setAdjModalStaff] = useState<any | null>(null);
 
-  // 🟢 批次產生獨立 PDF 並打包成 ZIP
+  // 🟢 批次產生獨立 PDF 並打包成 ZIP (完美版)
   const handleBatchDownloadZip = async () => {
     setIsZipping(true);
     try {
       const zip = new JSZip();
-      const printContainer = document.getElementById('batch-print-container');
+      for (let i = 0; i < filteredAndSortedReports.length; i++) {
+        const rpt = filteredAndSortedReports[i];
+        // 改抓我們專門為 ZIP 準備的固定寬度隱藏容器
+        const el = document.getElementById(`zip-capture-${i}`);
+        if (el) {
+          const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+          const imgData = canvas.toDataURL('image/png');
+          const pdf = new jsPDF('p', 'mm', 'a4');
+          const pdfWidth = pdf.internal.pageSize.getWidth();
+          const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+          pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
 
-      if (printContainer) {
-        // 為了讓 html2canvas 能截圖，必須短暫讓隱藏的元素出現在畫面外
-        const prevPosition = printContainer.style.position;
-        const prevTop = printContainer.style.top;
-        const prevLeft = printContainer.style.left;
-        const prevDisplay = printContainer.style.display;
-        const hadHiddenClass = printContainer.classList.contains('hidden');
-
-        printContainer.classList.remove('hidden');
-        printContainer.style.position = 'fixed';
-        printContainer.style.top = '-9999px';
-        printContainer.style.left = '0';
-        printContainer.style.display = 'block';
-
-        for (let i = 0; i < filteredAndSortedReports.length; i++) {
-          const rpt = filteredAndSortedReports[i];
-          const el = document.getElementById(`payslip-capture-${i}`);
-          if (el) {
-            const canvas = await html2canvas(el, { scale: 2, useCORS: true });
-            const imgData = canvas.toDataURL('image/png');
-            const pdf = new jsPDF('p', 'mm', 'a4');
-            const pdfWidth = pdf.internal.pageSize.getWidth();
-            const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-            pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-
-            const pdfBlob = pdf.output('blob');
-            const safeName =
-              (rpt.staff_name || '').replace(/\s+/g, '_') || 'staff';
-            zip.file(`${safeName}_${selectedMonth}_薪資單.pdf`, pdfBlob);
-          }
+          const pdfBlob = pdf.output('blob');
+          const safeName = (rpt.staff_name || '').replace(/\s+/g, '_');
+          zip.file(`${safeName}_${selectedMonth}_薪資單.pdf`, pdfBlob);
         }
-
-        // 復原原本的隱藏狀態
-        if (hadHiddenClass) printContainer.classList.add('hidden');
-        printContainer.style.position = prevPosition;
-        printContainer.style.top = prevTop;
-        printContainer.style.left = prevLeft;
-        printContainer.style.display = prevDisplay;
-
-        const content = await zip.generateAsync({ type: 'blob' });
-        saveAs(content, `${selectedMonth}_薪資單批次下載.zip`);
       }
+      const content = await zip.generateAsync({ type: 'blob' });
+      saveAs(content, `${selectedMonth}_薪資單批次下載.zip`);
     } catch (error) {
       console.error('ZIP 產生失敗:', error);
       alert('打包 ZIP 時發生錯誤');
@@ -768,121 +745,91 @@ export default function SalaryPage() {
             </div>
           </div>
         )}
-        <div className="flex flex-col md:flex-row justify-between items-center bg-white p-5 rounded-2xl shadow-sm border border-slate-200 gap-4">
-          <div className="flex items-center gap-4">
-            <h2 className="text-2xl font-bold flex items-center gap-2 text-slate-800">
-              <DollarSign className="text-green-600" size={28} />
-              薪資結算系統
-            </h2>
-          </div>
+        <div className="max-w-7xl mx-auto space-y-6 print:hidden">
 
-          <div className="flex flex-col md:flex-row items-center gap-3">
-            {/* 月份切換器（對稱） */}
-            <div className="flex items-center bg-slate-50 rounded-xl border border-slate-200 p-1.5">
-              <button
-                onClick={() => changeMonth(-1)}
-                className="w-10 h-10 flex items-center justify-center hover:bg-white hover:shadow-sm rounded-lg text-slate-500 transition-colors"
-                title="上個月"
-              >
-                <ChevronLeft size={18} />
-              </button>
-              <div className="flex items-center gap-2 px-3 min-w-[140px] justify-center">
+          {/* 🟢 升級：吸頂浮動工具列 (Sticky Toolbar) */}
+          <div className="sticky top-2 z-40 bg-white/95 backdrop-blur-md p-3 rounded-xl shadow-[0_4px_15px_-3px_rgba(0,0,0,0.05)] border border-slate-200 flex flex-col xl:flex-row justify-between items-center gap-3 transition-all mb-4">
+
+            {/* 左側：標題與篩選器 */}
+            <div className="flex items-center gap-4 flex-wrap w-full xl:w-auto">
+              <h2 className="text-xl font-black text-slate-800 flex items-center gap-2 shrink-0">
+                <DollarSign className="text-emerald-600" /> 薪資結算
+              </h2>
+              <div className="h-6 w-px bg-slate-300 hidden xl:block"></div>
+
+              <div className="flex items-center gap-2 bg-slate-100 p-1.5 rounded-lg border border-slate-200">
+                <Calendar size={16} className="text-slate-500 ml-1" />
                 <input
                   type="month"
                   value={selectedMonth}
                   onChange={(e) => setSelectedMonth(e.target.value)}
-                  className="bg-transparent font-bold text-slate-700 outline-none w-32 text-center cursor-pointer"
+                  className="bg-transparent border-none outline-none text-sm font-bold text-slate-700 cursor-pointer"
                 />
               </div>
-              <button
-                onClick={() => changeMonth(1)}
-                className="w-10 h-10 flex items-center justify-center hover:bg-white hover:shadow-sm rounded-lg text-slate-500 transition-colors"
-                title="下個月"
-              >
-                <ChevronRight size={18} />
-              </button>
-            </div>
 
-            {/* 搜尋與職位篩選 */}
-            <div className="flex items-center gap-2 w-full md:w-auto">
-              <input
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="搜尋姓名..."
-                className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm w-full md:w-40 focus:outline-none focus:ring-1 focus:ring-slate-300"
-              />
               <select
                 value={filterRole}
                 onChange={(e) => setFilterRole(e.target.value)}
-                className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-slate-300"
+                className="border p-2 rounded-lg text-sm bg-white font-bold text-slate-600 outline-none"
               >
-                <option value="all">全部職位</option>
-                <option value="醫師">醫師</option>
-                <option value="主管">主管</option>
-                <option value="櫃台">櫃台</option>
-                <option value="護理師">護理師</option>
-                <option value="營養師">營養師</option>
-                <option value="診助">診助</option>
-                <option value="藥師">藥師</option>
-                <option value="藥局助理">藥局助理</option>
+                <option value="all">所有職類</option>
+                {Array.from(new Set(staffList.map((s) => s.role).filter(Boolean))).map((r) => (
+                  <option key={r} value={r}>{r}</option>
+                ))}
               </select>
+
+              <input
+                type="text"
+                placeholder="搜尋姓名..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="border p-2 rounded-lg text-sm w-32 focus:w-48 transition-all outline-none"
+              />
+            </div>
+
+            {/* 右側：資料筆數與操作按鈕 */}
+            <div className="flex items-center gap-3 w-full xl:w-auto justify-end">
+              <div className="text-sm font-bold text-slate-500 px-2">
+                共 <span className="text-blue-600 text-base">{filteredAndSortedReports.length}</span> 筆
+              </div>
+
+              {/* 🟢 下拉式下載選單 */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowDownloadMenu(!showDownloadMenu)}
+                  className="flex items-center gap-2 px-4 py-2 bg-slate-800 text-white rounded-lg text-sm font-bold hover:bg-black transition shadow-sm"
+                >
+                  下載 / 列印 <ChevronDown size={16} />
+                </button>
+                {showDownloadMenu && (
+                  <div className="absolute right-0 mt-2 w-56 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden">
+                    <button
+                      onClick={() => { window.print(); setShowDownloadMenu(false); }}
+                      className="w-full text-left px-4 py-3 hover:bg-slate-50 text-sm font-bold text-slate-700 flex items-center gap-2 border-b border-slate-100 transition"
+                    >
+                      <Printer size={16} className="text-slate-400" /> 列印紙本 (合併 PDF)
+                    </button>
+                    <button
+                      onClick={() => { handleBatchDownloadZip(); setShowDownloadMenu(false); }}
+                      disabled={isZipping || filteredAndSortedReports.length === 0}
+                      className="w-full text-left px-4 py-3 hover:bg-slate-50 text-sm font-bold text-slate-700 flex items-center gap-2 transition disabled:opacity-50"
+                    >
+                      <FileSpreadsheet size={16} className="text-blue-500" /> {isZipping ? 'ZIP 打包中...' : '批次下載 (獨立 ZIP)'}
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <button
+                onClick={() => setShowBatchLockModal(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold hover:bg-emerald-700 transition shadow-sm"
+              >
+                <History size={16} /> 結算與封存
+              </button>
             </div>
           </div>
-        </div>
 
-        {/* 🟢 表格控制列 */}
-        <div className="flex justify-between items-end mb-4 px-2 mt-6">
-          <div>
-            <h3 className="text-lg font-bold text-slate-800">薪資結算明細</h3>
-            <p className="text-xs text-slate-500">
-              共 {liveReports.length} 筆資料
-            </p>
-          </div>
-          <div className="flex gap-2">
-            {/* 🟢 一鍵批次列印按鈕 */}
-            <button
-              onClick={() => {
-                if (liveReports.length === 0)
-                  return alert('本月尚無薪資資料可列印');
-                // 觸發瀏覽器列印，利用 CSS 隱藏非列印區域
-                window.print();
-              }}
-              disabled={liveReports.length === 0}
-              className="flex items-center gap-2 bg-slate-800 text-white px-4 py-2 rounded-lg font-bold hover:bg-black transition shadow-sm disabled:opacity-50"
-            >
-              <Printer size={16} /> 批次列印 (單一檔)
-            </button>
-
-            {/* 🟢 新增的 ZIP 下載按鈕 */}
-            <button
-              onClick={handleBatchDownloadZip}
-              disabled={isZipping || filteredAndSortedReports.length === 0}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 transition shadow-sm disabled:opacity-50"
-            >
-              <FileSpreadsheet size={16} />
-              {isZipping ? '打包中，請稍候...' : '批次下載 (獨立 ZIP)'}
-            </button>
-
-            <button
-              onClick={() => {
-                const unlockedIds = liveReports
-                  .filter((r) => !r.is_locked)
-                  .map((r) => String(r.staff_id));
-                if (unlockedIds.length === 0) {
-                  alert('本月所有薪資皆已封存！');
-                  return;
-                }
-                setSelectedLockIds(new Set(unlockedIds));
-                setShowBatchLockModal(true);
-              }}
-              disabled={
-                liveReports.length === 0 || liveReports.every((r) => r.is_locked)
-              }
-              className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-emerald-700 transition shadow-sm disabled:opacity-50"
-            >
-              🔒 批次封存
-            </button>
-          </div>
+          {/* 往下保留 <SalaryTable ... /> 等原始表格區塊 */}
         </div>
 
         <SalaryTable
@@ -1048,26 +995,29 @@ export default function SalaryPage() {
         )}
       </div>
 
-      {/* 🟢 批次列印專用的隱藏容器 (平時隱藏，只有在觸發 window.print() 時顯示) */}
-      <div
-        id="batch-print-container"
-        className="hidden print:block w-full bg-white absolute top-0 left-0 z-[100]"
-      >
+      {/* 🟢 終極解決列印背景殘留：插入全域 CSS 強制隱藏其他元素 */}
+      <style dangerouslySetInnerHTML={{__html: `
+        @media print {
+          body * { visibility: hidden; }
+          #batch-print-container, #batch-print-container * { visibility: visible; }
+          #batch-print-container { position: absolute; left: 0; top: 0; width: 100%; }
+        }
+      `}} />
+
+      {/* 批次列印專用的隱藏容器 (供 window.print 使用) */}
+      <div id="batch-print-container" className="hidden print:block w-full bg-white absolute top-0 left-0 z-[100]">
         {filteredAndSortedReports.map((rpt, idx) => (
-          <div
-            key={idx}
-            id={`payslip-capture-${idx}`}
-            style={{
-              pageBreakAfter: 'always',
-              width: '100%',
-              padding: '20px',
-            }}
-          >
-            <PrintContent 
-              report={rpt} 
-              yearMonth={selectedMonth} 
-              clinicName={entityList.find((e) => e.id === rpt.staff_entity)?.name || '診所'} 
-            />
+          <div key={`print-${idx}`} style={{ pageBreakAfter: 'always', width: '100%', padding: '20px' }}>
+            <PrintContent report={rpt} yearMonth={selectedMonth} clinicName={entityList.find((e) => e.id === rpt.staff_entity)?.name || '診所'} />
+          </div>
+        ))}
+      </div>
+
+      {/* 🟢 ZIP 專用的隱形渲染區：固定 800px 寬度並丟到畫面外，確保 html2canvas 截圖不會排版崩潰 */}
+      <div className="absolute top-[-9999px] left-[-9999px] w-[800px] bg-white print:hidden">
+        {filteredAndSortedReports.map((rpt, idx) => (
+          <div key={`zip-${idx}`} id={`zip-capture-${idx}`} style={{ width: '100%', padding: '40px', backgroundColor: 'white' }}>
+            <PrintContent report={rpt} yearMonth={selectedMonth} clinicName={entityList.find((e) => e.id === rpt.staff_entity)?.name || '診所'} />
           </div>
         ))}
       </div>

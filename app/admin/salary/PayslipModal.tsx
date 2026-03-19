@@ -120,6 +120,12 @@ export function PrintContent({ report, yearMonth, clinicName }: any) {
             </div>
             <div className="text-right">
               <div className="text-2xl font-bold text-blue-900">{year} 年 {month} 月</div>
+              <div className="text-slate-500 font-bold mb-1">
+                <span className={report.employment_type === 'part_time' ? 'text-orange-600' : 'text-blue-600'}>
+                  {report.employment_type === 'part_time' ? '兼職' : '正職'}
+                </span>
+                {' | '}{report.staff_role} | {report.work_rule} | {report.salary_mode === 'monthly' ? '月薪制' : '時薪制'}
+              </div>
               <div className="text-base font-bold mt-1">{report.staff_role}：{report.staff_name}</div>
               <div className="text-xs text-slate-500 mt-1 flex flex-col items-end gap-0.5">
               <span className="bg-slate-100 px-2 py-0.5 rounded">工時制: {getWorkRuleLabel(report.work_rule)}</span>

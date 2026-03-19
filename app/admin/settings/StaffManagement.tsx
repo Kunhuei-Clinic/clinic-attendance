@@ -161,16 +161,20 @@ export default function StaffManagement() {
                       !staff.is_active ? 'bg-gray-100/80 grayscale opacity-70' : ''
                     }`}
                   >
-                    <td className="p-4 text-center">
-                      {!staff.is_active ? (
-                        <span className="inline-flex items-center px-2 py-1 rounded text-xs font-bold bg-gray-200 text-gray-500">
-                          離職
+                    <td className="p-3">
+                      <div className="flex items-center gap-2">
+                        <span className={`px-2 py-1 rounded text-xs font-bold ${
+                          staff.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                        }`}>
+                          {staff.is_active ? '在職' : '離職'}
                         </span>
-                      ) : (
-                        <span className="inline-flex items-center px-2 py-1 rounded text-xs font-bold bg-green-100 text-green-700">
-                          在職
-                        </span>
-                      )}
+                        {/* 🟢 新增：兼職小標籤 */}
+                        {staff.employment_type === 'part_time' && (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-orange-700 border border-orange-200" title="兼職 (部分工時)">
+                            兼
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="p-4 font-bold text-slate-800 flex items-center gap-2">
                       {staff.role === '醫師' ? (

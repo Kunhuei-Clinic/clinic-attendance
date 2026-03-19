@@ -17,6 +17,7 @@ export type DailyRecord = {
 export type SalaryResult = {
   staff_name: string;
   staff_role: string;
+  employment_type: string;
   salary_mode: string;
   work_rule: string;
   
@@ -88,6 +89,7 @@ export const calculateStaffSalary = (
   const result: SalaryResult = {
     staff_name: staff.name,
     staff_role: staff.role || '員工',
+    employment_type: staff.employment_type || 'full_time',
     salary_mode: staff.salary_mode,
     work_rule: staff.work_rule,
     
