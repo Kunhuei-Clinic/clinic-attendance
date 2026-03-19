@@ -28,31 +28,37 @@ export default function SalaryReportView() {
 
     const fetchStaffList = async () => {
         try {
-            const response = await fetch('/api/staff');
-            const result = await response.json();
-            if (result.data) {
-                // 權重排序：依照職類分組排序
-                const roleWeight: Record<string, number> = { 
-                  '醫師': 1, 
-                  '主管': 2, 
-                  '櫃台': 3, 
-                  '護理師': 4, 
-                  '營養師': 5, 
-                  '診助': 6, 
-                  '藥師': 7, 
-                  '藥局助理': 8 
+            const [staffRes, settingsRes] = await Promise.all([
+                fetch('/api/staff'),
+                fetch('/api/settings')
+            ]);
+            const staffResult = await staffRes.json();
+            const settingsResult = await settingsRes.json();
+
+            let jobTitles: any[] = [];
+            if (settingsResult.data) {
+                const titlesSetting = settingsResult.data.find((item: any) => item.key === 'job_titles');
+                if (titlesSetting && titlesSetting.value) {
+                    try { jobTitles = JSON.parse(titlesSetting.value); } catch(e) {}
+                }
+            }
+
+            if (staffResult.data) {
+                const getRoleWeight = (roleName: string) => {
+                    const index = jobTitles.findIndex((j: any) => (typeof j === 'string' ? j : j.name) === roleName);
+                    return index === -1 ? 999 : index;
                 };
-                const sorted = [...result.data].sort((a, b) => {
-                  const aWeight = roleWeight[a.role || ''] ?? 999;
-                  const bWeight = roleWeight[b.role || ''] ?? 999;
-                  if (aWeight !== bWeight) return aWeight - bWeight;
-                  // 同職類內按姓名排序
-                  return (a.name || '').localeCompare(b.name || '');
+
+                const sorted = [...staffResult.data].sort((a: any, b: any) => {
+                    const aWeight = getRoleWeight(a.role || '');
+                    const bWeight = getRoleWeight(b.role || '');
+                    if (aWeight !== bWeight) return aWeight - bWeight;
+                    return (a.name || '').localeCompare(b.name || '');
                 });
                 setStaffList(sorted.map((s: any) => ({ id: s.id, name: s.name, role: s.role })));
             }
         } catch (error) {
-            console.error('Fetch staff list error:', error);
+            console.error(error);
         }
     };
 

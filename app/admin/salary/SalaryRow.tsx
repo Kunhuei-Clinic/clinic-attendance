@@ -65,30 +65,39 @@ export default function SalaryRow({
       >
         {/* 員工資訊 */}
         <td className="p-4 pl-6 align-top min-w-[200px]">
-          <div className="flex items-center gap-2 mb-1">
-            <div className="font-bold text-slate-800 text-lg">
-              {rpt.staff_name}
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 font-bold shadow-inner shrink-0">
+              {rpt.staff_name.slice(0, 1)}
             </div>
-            {isLocked ? (
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-bold border border-emerald-200">
-                已核對/封存
-              </span>
-            ) : (
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 font-bold border border-amber-200">
-                草稿
-              </span>
-            )}
-            {!isLocked && onOpenSettings && staffId && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onOpenSettings(String(staffId));
-                }}
-                className="opacity-0 group-hover:opacity-100 transition p-1 hover:bg-slate-200 rounded text-slate-400 hover:text-blue-600"
-              >
-                <Settings size={14} />
-              </button>
-            )}
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <div className="flex items-center gap-2">
+                  <div className="font-bold text-slate-800 text-base">
+                    {rpt.staff_name}
+                  </div>
+                  {/* 🟢 新增：快速呼叫薪資設定的按鈕 */}
+                  {onOpenSettings && (
+                    <button
+                      onClick={() => onOpenSettings(rpt.staff_id)}
+                      className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+                      title="快速調整薪資設定"
+                    >
+                      <Settings size={14} />
+                    </button>
+                  )}
+                </div>
+                {isLocked ? (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-bold border border-emerald-200 whitespace-nowrap">
+                    已核對/封存
+                  </span>
+                ) : (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 font-bold border border-amber-200 whitespace-nowrap">
+                    草稿
+                  </span>
+                )}
+              </div>
+              {/* 往下保留其他原本的代碼 */}
+            </div>
           </div>
           <div className="inline-block px-2 py-0.5 rounded bg-slate-100 text-slate-500 text-xs font-bold mb-1">
             {rpt.salary_mode === 'monthly' ? '月薪' : '時薪'} •{' '}

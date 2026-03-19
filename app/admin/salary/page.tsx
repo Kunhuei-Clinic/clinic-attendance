@@ -121,14 +121,49 @@ export default function SalaryPage() {
 
   const fetchStaffSettings = async () => {
     try {
-      const res = await fetch('/api/staff');
-      const json = await res.json();
-      // 過濾掉醫師
-      if (json.data) {
-        json.data = json.data.filter((s: any) => s.role !== '醫師');
+      // 🟢 同時抓員工與系統設定（用系統職稱順序排序）
+      const [staffRes, settingsRes] = await Promise.all([
+        fetch('/api/staff'),
+        fetch('/api/settings'),
+      ]);
+      const staffResult = await staffRes.json();
+      const settingsResult = await settingsRes.json();
+
+      let jobTitles: any[] = [];
+      if (settingsResult.data) {
+        const titlesSetting = settingsResult.data.find(
+          (item: any) => item.key === 'job_titles'
+        );
+        if (titlesSetting && titlesSetting.value) {
+          try {
+            jobTitles = JSON.parse(titlesSetting.value);
+          } catch (e) {}
+        }
       }
-      if (json.data) {
-        const formatted = json.data.map((s: any) => ({
+
+      // 過濾掉醫師
+      if (staffResult.data) {
+        staffResult.data = staffResult.data.filter(
+          (s: any) => s.role !== '醫師'
+        );
+      }
+
+      if (staffResult.data) {
+        const getRoleWeight = (roleName: string) => {
+          const index = jobTitles.findIndex(
+            (j: any) => (typeof j === 'string' ? j : j.name) === roleName
+          );
+          return index === -1 ? 999 : index;
+        };
+
+        const sorted = [...staffResult.data].sort((a: any, b: any) => {
+          const aWeight = getRoleWeight(a.role || '');
+          const bWeight = getRoleWeight(b.role || '');
+          if (aWeight !== bWeight) return aWeight - bWeight;
+          return (a.name || '').localeCompare(b.name || '');
+        });
+
+        const formatted = sorted.map((s: any) => ({
           ...s,
           entity: s.entity || 'clinic',
           salary_mode: s.salary_mode || 'hourly',
@@ -144,8 +179,8 @@ export default function SalaryPage() {
         }));
         setStaffList(formatted);
       }
-    } catch (error: any) {
-      console.error('Error fetching staff settings:', error);
+    } catch (error) {
+      console.error('Fetch data error', error);
     }
   };
 
@@ -655,239 +690,288 @@ export default function SalaryPage() {
 
   return (
     <div className="w-full animate-fade-in relative space-y-6">
-      {/* 🟢 全局載入遮罩 */}
-      {isLoading && (
-        <div className="absolute inset-0 z-40 bg-white/50 backdrop-blur-sm flex items-center justify-center rounded-2xl transition-all min-h-[500px]">
-          <div className="flex flex-col items-center gap-4 bg-white/95 p-8 rounded-2xl shadow-2xl border border-slate-100">
-            <div className="w-12 h-12 border-4 border-slate-200 border-t-blue-600 rounded-full animate-spin"></div>
-            <span className="text-slate-700 font-bold animate-pulse text-lg">資料讀取與薪資試算中...</span>
-          </div>
-        </div>
-      )}
-      <div className="flex flex-col md:flex-row justify-between items-center bg-white p-5 rounded-2xl shadow-sm border border-slate-200 gap-4">
-        <div className="flex items-center gap-4">
-          <h2 className="text-2xl font-bold flex items-center gap-2 text-slate-800">
-            <DollarSign className="text-green-600" size={28} />
-            薪資結算系統
-          </h2>
-        </div>
-
-        <div className="flex flex-col md:flex-row items-center gap-3">
-          {/* 月份切換器（對稱） */}
-          <div className="flex items-center bg-slate-50 rounded-xl border border-slate-200 p-1.5">
-            <button
-              onClick={() => changeMonth(-1)}
-              className="w-10 h-10 flex items-center justify-center hover:bg-white hover:shadow-sm rounded-lg text-slate-500 transition-colors"
-              title="上個月"
-            >
-              <ChevronLeft size={18} />
-            </button>
-            <div className="flex items-center gap-2 px-3 min-w-[140px] justify-center">
-              <input
-                type="month"
-                value={selectedMonth}
-                onChange={(e) => setSelectedMonth(e.target.value)}
-                className="bg-transparent font-bold text-slate-700 outline-none w-32 text-center cursor-pointer"
-              />
-            </div>
-            <button
-              onClick={() => changeMonth(1)}
-              className="w-10 h-10 flex items-center justify-center hover:bg-white hover:shadow-sm rounded-lg text-slate-500 transition-colors"
-              title="下個月"
-            >
-              <ChevronRight size={18} />
-            </button>
-          </div>
-
-          {/* 搜尋與職位篩選 */}
-          <div className="flex items-center gap-2 w-full md:w-auto">
-            <input
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="搜尋姓名..."
-              className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm w-full md:w-40 focus:outline-none focus:ring-1 focus:ring-slate-300"
-            />
-            <select
-              value={filterRole}
-              onChange={(e) => setFilterRole(e.target.value)}
-              className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-slate-300"
-            >
-              <option value="all">全部職位</option>
-              <option value="醫師">醫師</option>
-              <option value="主管">主管</option>
-              <option value="櫃台">櫃台</option>
-              <option value="護理師">護理師</option>
-              <option value="營養師">營養師</option>
-              <option value="診助">診助</option>
-              <option value="藥師">藥師</option>
-              <option value="藥局助理">藥局助理</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-      {/* 🟢 表格控制列 */}
-      <div className="flex justify-between items-end mb-4 px-2 mt-6">
-        <div>
-          <h3 className="text-lg font-bold text-slate-800">薪資結算明細</h3>
-          <p className="text-xs text-slate-500">共 {liveReports.length} 筆資料</p>
-        </div>
-        <div className="flex gap-2">
-          {/* 🟢 一鍵批次列印按鈕 */}
-          <button
-            onClick={() => {
-              if (liveReports.length === 0) return alert('本月尚無薪資資料可列印');
-              // 觸發瀏覽器列印，利用 CSS 隱藏非列印區域
-              window.print();
-            }}
-            disabled={liveReports.length === 0}
-            className="flex items-center gap-2 bg-slate-800 text-white px-4 py-2 rounded-lg font-bold hover:bg-black transition shadow-sm disabled:opacity-50"
-          >
-            🖨️ 批次列印全部
-          </button>
-
-          <button
-            onClick={() => {
-              const unlockedIds = liveReports.filter((r) => !r.is_locked).map((r) => String(r.staff_id));
-              if (unlockedIds.length === 0) {
-                alert('本月所有薪資皆已封存！');
-                return;
-              }
-              setSelectedLockIds(new Set(unlockedIds));
-              setShowBatchLockModal(true);
-            }}
-            disabled={liveReports.length === 0 || liveReports.every((r) => r.is_locked)}
-            className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-emerald-700 transition shadow-sm disabled:opacity-50"
-          >
-            🔒 批次封存
-          </button>
-        </div>
-      </div>
-
-      <SalaryTable
-        reports={filteredAndSortedReports}
-        staffList={staffList}
-        lockEmployee={lockEmployee}
-        unlockEmployee={unlockEmployee}
-        onOpenSettings={(staffId: string) => setSettingModalStaffId(staffId)}
-        onPrint={(rpt: any) => setPrintReport(rpt)}
-        setAdjModalStaff={setAdjModalStaff}
-      />
-
-      {liveReports.length === 0 && (
-        <div className="text-center py-20 text-slate-400 bg-white rounded-2xl border border-dashed border-slate-300">
-          <History size={48} className="mx-auto mb-4 opacity-20" />
-          <p>此月份尚無資料或尚未結算</p>
-        </div>
-      )}
-
-      {settingModalStaffId !== null && (
-        <SettingsModal
-          staff={staffList.find((s) => s.id === settingModalStaffId)}
-          updateStaff={updateStaff}
-          entityList={entityList}
-          onClose={() => setSettingModalStaffId(null)}
-          onSaveSuccess={() => fetchStaffSettings()}
-        />
-      )}
-
-      {printReport && (
-        <PayslipModal
-          report={printReport}
-          yearMonth={selectedMonth}
-          clinicName={
-            entityList.find((e) => e.id === printReport.staff_entity)?.name ||
-            '診所'
-          }
-          onClose={() => setPrintReport(null)}
-        />
-      )}
-
-      {adjModalStaff && (
-        <AdjustmentModal
-          staff={adjModalStaff}
-          adjustments={adjustments}
-          lastMonthAdjustments={lastMonthAdjustments}
-          selectedMonth={selectedMonth}
-          netPay={adjModalStaff.net_pay}
-          onSaveComplete={() => {
-            fetchAdjustments();
-            setAdjModalStaff(null);
-          }}
-          onClose={() => setAdjModalStaff(null)}
-        />
-      )}
-
-      {/* 🟢 批次封存選擇器 Modal */}
-      {showBatchLockModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[85vh]">
-            <div className="bg-emerald-700 text-white p-4 flex justify-between items-center shrink-0">
-              <h3 className="font-bold flex items-center gap-2">🔒 選擇要封存的薪資單</h3>
-              <button onClick={() => setShowBatchLockModal(false)} className="hover:bg-white/20 p-1 rounded-full text-white">✕</button>
-            </div>
-
-            <div className="p-4 bg-emerald-50 border-b border-emerald-100 flex justify-between items-center shrink-0">
-              <span className="text-sm font-bold text-emerald-800">
-                已選擇: <span className="text-emerald-600 text-lg">{selectedLockIds.size}</span> 人
+      {/* 🟢 加上 print:hidden，讓列印時這塊完全消失 */}
+      <div className="print:hidden">
+        {/* 🟢 全局載入遮罩 */}
+        {isLoading && (
+          <div className="absolute inset-0 z-40 bg-white/50 backdrop-blur-sm flex items-center justify-center rounded-2xl transition-all min-h-[500px]">
+            <div className="flex flex-col items-center gap-4 bg-white/95 p-8 rounded-2xl shadow-2xl border border-slate-100">
+              <div className="w-12 h-12 border-4 border-slate-200 border-t-blue-600 rounded-full animate-spin"></div>
+              <span className="text-slate-700 font-bold animate-pulse text-lg">
+                資料讀取與薪資試算中...
               </span>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setSelectedLockIds(new Set(liveReports.filter((r) => !r.is_locked).map((r) => String(r.staff_id))))}
-                  className="text-xs font-bold text-emerald-700 bg-white border border-emerald-300 px-3 py-1.5 rounded hover:bg-emerald-100"
-                >全選</button>
-                <button
-                  onClick={() => setSelectedLockIds(new Set())}
-                  className="text-xs font-bold text-emerald-700 bg-white border border-emerald-300 px-3 py-1.5 rounded hover:bg-emerald-100"
-                >取消全選</button>
+            </div>
+          </div>
+        )}
+        <div className="flex flex-col md:flex-row justify-between items-center bg-white p-5 rounded-2xl shadow-sm border border-slate-200 gap-4">
+          <div className="flex items-center gap-4">
+            <h2 className="text-2xl font-bold flex items-center gap-2 text-slate-800">
+              <DollarSign className="text-green-600" size={28} />
+              薪資結算系統
+            </h2>
+          </div>
+
+          <div className="flex flex-col md:flex-row items-center gap-3">
+            {/* 月份切換器（對稱） */}
+            <div className="flex items-center bg-slate-50 rounded-xl border border-slate-200 p-1.5">
+              <button
+                onClick={() => changeMonth(-1)}
+                className="w-10 h-10 flex items-center justify-center hover:bg-white hover:shadow-sm rounded-lg text-slate-500 transition-colors"
+                title="上個月"
+              >
+                <ChevronLeft size={18} />
+              </button>
+              <div className="flex items-center gap-2 px-3 min-w-[140px] justify-center">
+                <input
+                  type="month"
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(e.target.value)}
+                  className="bg-transparent font-bold text-slate-700 outline-none w-32 text-center cursor-pointer"
+                />
               </div>
+              <button
+                onClick={() => changeMonth(1)}
+                className="w-10 h-10 flex items-center justify-center hover:bg-white hover:shadow-sm rounded-lg text-slate-500 transition-colors"
+                title="下個月"
+              >
+                <ChevronRight size={18} />
+              </button>
             </div>
 
-            <div className="overflow-y-auto p-2 flex-1">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {liveReports.filter((r) => !r.is_locked).map((rpt, idx) => {
-                  const sid = String(rpt.staff_id);
-                  const isSelected = selectedLockIds.has(sid);
-                  return (
-                    <label
-                      key={idx}
-                      className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${isSelected ? 'bg-emerald-50 border-emerald-300 shadow-sm' : 'bg-white border-slate-200 hover:bg-slate-50 opacity-60'}`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={(e) => {
-                          const newSet = new Set(selectedLockIds);
-                          if (e.target.checked) newSet.add(sid);
-                          else newSet.delete(sid);
-                          setSelectedLockIds(newSet);
-                        }}
-                        className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <div className="font-bold text-slate-800 text-sm truncate">{rpt.staff_name}</div>
-                        <div className="text-[10px] text-slate-500 font-mono">實發: ${(rpt.net_pay ?? 0).toLocaleString()}</div>
-                      </div>
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="p-4 border-t border-slate-200 bg-white shrink-0 flex gap-3">
-              <button
-                onClick={() => setShowBatchLockModal(false)}
-                className="flex-1 py-3 rounded-xl font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition"
-              >取消</button>
-              <button
-                onClick={lockMultipleEmployees}
-                disabled={selectedLockIds.size === 0}
-                className="flex-[2] py-3 rounded-xl font-bold text-white bg-emerald-600 hover:bg-emerald-700 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
-              >確認封存 {selectedLockIds.size} 筆資料</button>
+            {/* 搜尋與職位篩選 */}
+            <div className="flex items-center gap-2 w-full md:w-auto">
+              <input
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="搜尋姓名..."
+                className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm w-full md:w-40 focus:outline-none focus:ring-1 focus:ring-slate-300"
+              />
+              <select
+                value={filterRole}
+                onChange={(e) => setFilterRole(e.target.value)}
+                className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-slate-300"
+              >
+                <option value="all">全部職位</option>
+                <option value="醫師">醫師</option>
+                <option value="主管">主管</option>
+                <option value="櫃台">櫃台</option>
+                <option value="護理師">護理師</option>
+                <option value="營養師">營養師</option>
+                <option value="診助">診助</option>
+                <option value="藥師">藥師</option>
+                <option value="藥局助理">藥局助理</option>
+              </select>
             </div>
           </div>
         </div>
-      )}
+
+        {/* 🟢 表格控制列 */}
+        <div className="flex justify-between items-end mb-4 px-2 mt-6">
+          <div>
+            <h3 className="text-lg font-bold text-slate-800">薪資結算明細</h3>
+            <p className="text-xs text-slate-500">
+              共 {liveReports.length} 筆資料
+            </p>
+          </div>
+          <div className="flex gap-2">
+            {/* 🟢 一鍵批次列印按鈕 */}
+            <button
+              onClick={() => {
+                if (liveReports.length === 0)
+                  return alert('本月尚無薪資資料可列印');
+                // 觸發瀏覽器列印，利用 CSS 隱藏非列印區域
+                window.print();
+              }}
+              disabled={liveReports.length === 0}
+              className="flex items-center gap-2 bg-slate-800 text-white px-4 py-2 rounded-lg font-bold hover:bg-black transition shadow-sm disabled:opacity-50"
+            >
+              🖨️ 批次列印全部
+            </button>
+
+            <button
+              onClick={() => {
+                const unlockedIds = liveReports
+                  .filter((r) => !r.is_locked)
+                  .map((r) => String(r.staff_id));
+                if (unlockedIds.length === 0) {
+                  alert('本月所有薪資皆已封存！');
+                  return;
+                }
+                setSelectedLockIds(new Set(unlockedIds));
+                setShowBatchLockModal(true);
+              }}
+              disabled={
+                liveReports.length === 0 || liveReports.every((r) => r.is_locked)
+              }
+              className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-emerald-700 transition shadow-sm disabled:opacity-50"
+            >
+              🔒 批次封存
+            </button>
+          </div>
+        </div>
+
+        <SalaryTable
+          reports={filteredAndSortedReports}
+          staffList={staffList}
+          lockEmployee={lockEmployee}
+          unlockEmployee={unlockEmployee}
+          onOpenSettings={(staffId: string) => setSettingModalStaffId(staffId)}
+          onPrint={(rpt: any) => setPrintReport(rpt)}
+          setAdjModalStaff={setAdjModalStaff}
+        />
+
+        {liveReports.length === 0 && (
+          <div className="text-center py-20 text-slate-400 bg-white rounded-2xl border border-dashed border-slate-300">
+            <History size={48} className="mx-auto mb-4 opacity-20" />
+            <p>此月份尚無資料或尚未結算</p>
+          </div>
+        )}
+
+        {settingModalStaffId !== null && (
+          <SettingsModal
+            staff={staffList.find((s) => s.id === settingModalStaffId)}
+            updateStaff={updateStaff}
+            entityList={entityList}
+            onClose={() => setSettingModalStaffId(null)}
+            onSaveSuccess={() => fetchStaffSettings()}
+          />
+        )}
+
+        {printReport && (
+          <PayslipModal
+            report={printReport}
+            yearMonth={selectedMonth}
+            clinicName={
+              entityList.find((e) => e.id === printReport.staff_entity)?.name ||
+              '診所'
+            }
+            onClose={() => setPrintReport(null)}
+          />
+        )}
+
+        {adjModalStaff && (
+          <AdjustmentModal
+            staff={adjModalStaff}
+            adjustments={adjustments}
+            lastMonthAdjustments={lastMonthAdjustments}
+            selectedMonth={selectedMonth}
+            netPay={adjModalStaff.net_pay}
+            onSaveComplete={() => {
+              fetchAdjustments();
+              setAdjModalStaff(null);
+            }}
+            onClose={() => setAdjModalStaff(null)}
+          />
+        )}
+
+        {/* 🟢 批次封存選擇器 Modal */}
+        {showBatchLockModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[85vh]">
+              <div className="bg-emerald-700 text-white p-4 flex justify-between items-center shrink-0">
+                <h3 className="font-bold flex items-center gap-2">
+                  🔒 選擇要封存的薪資單
+                </h3>
+                <button
+                  onClick={() => setShowBatchLockModal(false)}
+                  className="hover:bg-white/20 p-1 rounded-full text-white"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="p-4 bg-emerald-50 border-b border-emerald-100 flex justify-between items-center shrink-0">
+                <span className="text-sm font-bold text-emerald-800">
+                  已選擇:{' '}
+                  <span className="text-emerald-600 text-lg">
+                    {selectedLockIds.size}
+                  </span>{' '}
+                  人
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() =>
+                      setSelectedLockIds(
+                        new Set(
+                          liveReports
+                            .filter((r) => !r.is_locked)
+                            .map((r) => String(r.staff_id))
+                        )
+                      )
+                    }
+                    className="text-xs font-bold text-emerald-700 bg-white border border-emerald-300 px-3 py-1.5 rounded hover:bg-emerald-100"
+                  >
+                    全選
+                  </button>
+                  <button
+                    onClick={() => setSelectedLockIds(new Set())}
+                    className="text-xs font-bold text-emerald-700 bg-white border border-emerald-300 px-3 py-1.5 rounded hover:bg-emerald-100"
+                  >
+                    取消全選
+                  </button>
+                </div>
+              </div>
+
+              <div className="overflow-y-auto p-2 flex-1">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {liveReports
+                    .filter((r) => !r.is_locked)
+                    .map((rpt, idx) => {
+                      const sid = String(rpt.staff_id);
+                      const isSelected = selectedLockIds.has(sid);
+                      return (
+                        <label
+                          key={idx}
+                          className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
+                            isSelected
+                              ? 'bg-emerald-50 border-emerald-300 shadow-sm'
+                              : 'bg-white border-slate-200 hover:bg-slate-50 opacity-60'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={(e) => {
+                              const newSet = new Set(selectedLockIds);
+                              if (e.target.checked) newSet.add(sid);
+                              else newSet.delete(sid);
+                              setSelectedLockIds(newSet);
+                            }}
+                            className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="font-bold text-slate-800 text-sm truncate">
+                              {rpt.staff_name}
+                            </div>
+                            <div className="text-[10px] text-slate-500 font-mono">
+                              實發: ${(rpt.net_pay ?? 0).toLocaleString()}
+                            </div>
+                          </div>
+                        </label>
+                      );
+                    })}
+                </div>
+              </div>
+
+              <div className="p-4 border-t border-slate-200 bg-white shrink-0 flex gap-3">
+                <button
+                  onClick={() => setShowBatchLockModal(false)}
+                  className="flex-1 py-3 rounded-xl font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={lockMultipleEmployees}
+                  disabled={selectedLockIds.size === 0}
+                  className="flex-[2] py-3 rounded-xl font-bold text-white bg-emerald-600 hover:bg-emerald-700 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
+                >
+                  確認封存 {selectedLockIds.size} 筆資料
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* 🟢 批次列印專用的隱藏容器 (平時隱藏，只有在觸發 window.print() 時顯示) */}
       <div className="hidden print:block w-full bg-white absolute top-0 left-0 z-[100]">
