@@ -33,6 +33,25 @@ export default function SalaryRow({
   const [isExpanded, setIsExpanded] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
+  // 🟢 新增：抓取該員工完整資料並轉換為中文標籤
+  const staff = staffList.find((s: any) => s.id === rpt.staff_id) || {};
+  const empType = staff.employment_type === 'part_time' ? '兼職' : '正職';
+  const role = staff.role || '未設定職務';
+  const salaryMode = staff.salary_mode === 'monthly' ? '月薪制' : '時薪制';
+
+  const workRuleMap: Record<string, string> = {
+    normal: '一般工時',
+    '2week': '八週變形工時', // 依據勞基法常見設定，若有雙週可保留雙週
+    '4week': '四週變形工時',
+    '8week': '八週變形工時',
+    online_consultation: '線上諮詢時數制',
+    none: '責任制 / 無限制',
+  };
+  // 修正 2week 常見對應，這裡精準對應你的系統設定
+  if (staff.work_rule === '2week') workRuleMap['2week'] = '雙週變形工時';
+
+  const workRule = workRuleMap[staff.work_rule] || '一般工時';
+
   const handleLock = async () => {
     setIsProcessing(true);
     try {
@@ -50,11 +69,7 @@ export default function SalaryRow({
     }
   };
 
-  const staffId =
-    rpt.staff_id ||
-    staffList?.find((s: any) => s.name === rpt.staff_name)?.id;
   const isLocked = !!rpt.is_locked;
-  const hasWarning = rpt.warnings?.length > 0;
 
   return (
     <>
@@ -64,50 +79,46 @@ export default function SalaryRow({
         }`}
       >
         {/* 員工資訊 */}
-        <td className="p-4 pl-6 align-top min-w-[200px]">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 font-bold shadow-inner shrink-0">
-              {rpt.staff_name.slice(0, 1)}
-            </div>
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <div className="flex items-center gap-2">
-                  <div className="font-bold text-slate-800 text-base">
-                    {rpt.staff_name}
-                  </div>
-                  {/* 🟢 新增：快速呼叫薪資設定的按鈕 */}
-                  {onOpenSettings && (
-                    <button
-                      onClick={() => onOpenSettings(rpt.staff_id)}
-                      className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
-                      title="快速調整薪資設定"
-                    >
-                      <Settings size={14} />
-                    </button>
-                  )}
-                </div>
-                {isLocked ? (
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-bold border border-emerald-200 whitespace-nowrap">
-                    已核對/封存
-                  </span>
-                ) : (
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 font-bold border border-amber-200 whitespace-nowrap">
-                    草稿
-                  </span>
-                )}
+        <td className="p-4 pl-6">
+          <div className="flex flex-col gap-1.5">
+            {/* 第一排：姓名與快速設定按鈕 */}
+            <div className="flex items-center gap-2">
+              <div className="font-bold text-slate-800 text-base">
+                {rpt.staff_name}
               </div>
-              {/* 往下保留其他原本的代碼 */}
+              {onOpenSettings && (
+                <button
+                  onClick={() => onOpenSettings(rpt.staff_id)}
+                  className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+                  title="快速調整薪資設定"
+                >
+                  <Settings size={14} />
+                </button>
+              )}
+            </div>
+
+            {/* 第二排：🟢 加強版狀態列 */}
+            <div className="flex flex-wrap gap-1">
+              <span
+                className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                  empType === '兼職'
+                    ? 'bg-orange-100 text-orange-700'
+                    : 'bg-blue-100 text-blue-700'
+                }`}
+              >
+                {empType}
+              </span>
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                {role}
+              </span>
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                {salaryMode}
+              </span>
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
+                {workRule}
+              </span>
             </div>
           </div>
-          <div className="inline-block px-2 py-0.5 rounded bg-slate-100 text-slate-500 text-xs font-bold mb-1">
-            {rpt.salary_mode === 'monthly' ? '月薪' : '時薪'} •{' '}
-            {rpt.work_rule === 'normal' ? '正常工時' : rpt.work_rule}
-          </div>
-          {hasWarning && (
-            <div className="text-[10px] text-red-600 flex items-center gap-1 mt-1 font-bold animate-pulse">
-              <AlertTriangle size={10} /> 考勤異常
-            </div>
-          )}
         </td>
 
         {/* 應發項目 */}

@@ -9,8 +9,15 @@ import {
   History,
   ChevronLeft,
   ChevronRight,
+  Printer,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { addMonths, format, subMonths } from 'date-fns';
+
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
+import JSZip from 'jszip';
+import { saveAs } from 'file-saver';
 
 import SettingsModal from './SettingsModal';
 import PayslipModal, { PrintContent } from './PayslipModal';
@@ -33,6 +40,7 @@ export default function SalaryPage() {
     null
   );
   const [printReport, setPrintReport] = useState<any | null>(null);
+  const [isZipping, setIsZipping] = useState(false);
   const [entityList, setEntityList] = useState<Entity[]>([]);
   const [authChecked, setAuthChecked] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -48,6 +56,63 @@ export default function SalaryPage() {
 
   // 新增：獎懲調整 Modal 狀態
   const [adjModalStaff, setAdjModalStaff] = useState<any | null>(null);
+
+  // 🟢 批次產生獨立 PDF 並打包成 ZIP
+  const handleBatchDownloadZip = async () => {
+    setIsZipping(true);
+    try {
+      const zip = new JSZip();
+      const printContainer = document.getElementById('batch-print-container');
+
+      if (printContainer) {
+        // 為了讓 html2canvas 能截圖，必須短暫讓隱藏的元素出現在畫面外
+        const prevPosition = printContainer.style.position;
+        const prevTop = printContainer.style.top;
+        const prevLeft = printContainer.style.left;
+        const prevDisplay = printContainer.style.display;
+        const hadHiddenClass = printContainer.classList.contains('hidden');
+
+        printContainer.classList.remove('hidden');
+        printContainer.style.position = 'fixed';
+        printContainer.style.top = '-9999px';
+        printContainer.style.left = '0';
+        printContainer.style.display = 'block';
+
+        for (let i = 0; i < filteredAndSortedReports.length; i++) {
+          const rpt = filteredAndSortedReports[i];
+          const el = document.getElementById(`payslip-capture-${i}`);
+          if (el) {
+            const canvas = await html2canvas(el, { scale: 2, useCORS: true });
+            const imgData = canvas.toDataURL('image/png');
+            const pdf = new jsPDF('p', 'mm', 'a4');
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+            pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+
+            const pdfBlob = pdf.output('blob');
+            const safeName =
+              (rpt.staff_name || '').replace(/\s+/g, '_') || 'staff';
+            zip.file(`${safeName}_${selectedMonth}_薪資單.pdf`, pdfBlob);
+          }
+        }
+
+        // 復原原本的隱藏狀態
+        if (hadHiddenClass) printContainer.classList.add('hidden');
+        printContainer.style.position = prevPosition;
+        printContainer.style.top = prevTop;
+        printContainer.style.left = prevLeft;
+        printContainer.style.display = prevDisplay;
+
+        const content = await zip.generateAsync({ type: 'blob' });
+        saveAs(content, `${selectedMonth}_薪資單批次下載.zip`);
+      }
+    } catch (error) {
+      console.error('ZIP 產生失敗:', error);
+      alert('打包 ZIP 時發生錯誤');
+    } finally {
+      setIsZipping(false);
+    }
+  };
 
   // 認證檢查（雙重保護）
   useEffect(() => {
@@ -785,7 +850,17 @@ export default function SalaryPage() {
               disabled={liveReports.length === 0}
               className="flex items-center gap-2 bg-slate-800 text-white px-4 py-2 rounded-lg font-bold hover:bg-black transition shadow-sm disabled:opacity-50"
             >
-              🖨️ 批次列印全部
+              <Printer size={16} /> 批次列印 (單一檔)
+            </button>
+
+            {/* 🟢 新增的 ZIP 下載按鈕 */}
+            <button
+              onClick={handleBatchDownloadZip}
+              disabled={isZipping || filteredAndSortedReports.length === 0}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 transition shadow-sm disabled:opacity-50"
+            >
+              <FileSpreadsheet size={16} />
+              {isZipping ? '打包中，請稍候...' : '批次下載 (獨立 ZIP)'}
             </button>
 
             <button
@@ -974,9 +1049,20 @@ export default function SalaryPage() {
       </div>
 
       {/* 🟢 批次列印專用的隱藏容器 (平時隱藏，只有在觸發 window.print() 時顯示) */}
-      <div className="hidden print:block w-full bg-white absolute top-0 left-0 z-[100]">
+      <div
+        id="batch-print-container"
+        className="hidden print:block w-full bg-white absolute top-0 left-0 z-[100]"
+      >
         {filteredAndSortedReports.map((rpt, idx) => (
-          <div key={idx} style={{ pageBreakAfter: 'always', width: '100%' }}>
+          <div
+            key={idx}
+            id={`payslip-capture-${idx}`}
+            style={{
+              pageBreakAfter: 'always',
+              width: '100%',
+              padding: '20px',
+            }}
+          >
             <PrintContent 
               report={rpt} 
               yearMonth={selectedMonth} 
