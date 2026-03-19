@@ -16,18 +16,18 @@ export default function ShiftPanel({ businessHours, setBusinessHours, specialShi
       {/* 每週營業日 */}
       <div className="bg-slate-50 p-5 rounded-xl border border-slate-200">
         <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2 mb-4">
-          <CalendarDays className="text-slate-700" size={18} /> 每週營業日
+          <CalendarDays className="text-slate-700" size={18} /> 每週開診營業日
         </h3>
-        <p className="text-xs text-slate-500 mb-4">選擇哪些星期需要排班與考勤。</p>
+        <p className="text-xs text-slate-500 mb-4">選擇診所哪些星期需要排班與考勤。</p>
         <div className="flex gap-2">
           {WEEKDAYS.map((day, idx) => (
             <button
               key={idx}
               onClick={() => toggleDay(idx)}
-              className={`w-10 h-10 rounded-full font-bold transition ${
+              className={`w-10 h-10 rounded-full font-bold transition flex items-center justify-center ${
                 businessHours.openDays.includes(idx)
                   ? 'bg-blue-600 text-white shadow-md'
-                  : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
+                  : 'bg-white text-slate-400 border border-slate-200 hover:bg-slate-100'
               }`}
               type="button"
             >
@@ -37,15 +37,15 @@ export default function ShiftPanel({ businessHours, setBusinessHours, specialShi
         </div>
       </div>
 
-      {/* 班別時間設定 */}
+      {/* 常規診次 / 班別設定 */}
       <div className="bg-slate-50 p-5 rounded-xl border border-slate-200">
         <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2 mb-4">
-          <Clock className="text-emerald-600" size={18} /> 常規班別設定
+          <Clock className="text-emerald-600" size={18} /> 常規診次 / 班別設定
         </h3>
-        <p className="text-xs text-slate-500 mb-4">設定貴機構的標準排班時段（如：早班、午班、晚班）。</p>
+        <p className="text-xs text-slate-500 mb-4">設定貴診所的標準排班時段（如：早診、午診、晚診）。</p>
         <div className="space-y-3">
           {businessHours.shifts.map((shift: any, index: number) => (
-            <div key={index} className="flex items-center gap-3 bg-white p-2 rounded-lg border border-slate-200">
+            <div key={index} className="flex items-center gap-3 bg-white p-2 rounded-lg border border-slate-200 shadow-sm">
               <input
                 type="text"
                 value={shift.name}
@@ -54,18 +54,18 @@ export default function ShiftPanel({ businessHours, setBusinessHours, specialShi
                   newShifts[index].name = e.target.value;
                   setBusinessHours({ ...businessHours, shifts: newShifts });
                 }}
-                className="w-24 border p-2 rounded-lg text-sm outline-none font-bold"
-                placeholder="班別名稱"
+                className="w-24 border p-2 rounded-lg text-sm outline-none font-bold focus:border-emerald-400 transition"
+                placeholder="診次名稱"
               />
               <input
                 type="text"
                 value={shift.code}
                 onChange={(e) => {
                   const newShifts = [...businessHours.shifts];
-                  newShifts[index].code = e.target.value.toUpperCase().slice(0, 2);
+                  newShifts[index].code = e.target.value.toUpperCase();
                   setBusinessHours({ ...businessHours, shifts: newShifts });
                 }}
-                className="w-16 border p-2 rounded-lg text-sm text-center outline-none font-mono"
+                className="w-16 border p-2 rounded-lg text-sm text-center outline-none font-mono font-bold focus:border-emerald-400 transition"
                 placeholder="代號"
                 maxLength={2}
               />
@@ -77,7 +77,7 @@ export default function ShiftPanel({ businessHours, setBusinessHours, specialShi
                   newShifts[index].start = e.target.value;
                   setBusinessHours({ ...businessHours, shifts: newShifts });
                 }}
-                className="border p-2 rounded-lg text-sm outline-none font-mono"
+                className="border p-2 rounded-lg text-sm outline-none font-mono focus:border-emerald-400 transition"
               />
               <span className="text-slate-400">-</span>
               <input
@@ -88,14 +88,14 @@ export default function ShiftPanel({ businessHours, setBusinessHours, specialShi
                   newShifts[index].end = e.target.value;
                   setBusinessHours({ ...businessHours, shifts: newShifts });
                 }}
-                className="border p-2 rounded-lg text-sm outline-none font-mono"
+                className="border p-2 rounded-lg text-sm outline-none font-mono focus:border-emerald-400 transition"
               />
               <button
                 onClick={() => {
                   const newShifts = businessHours.shifts.filter((_: any, i: number) => i !== index);
                   setBusinessHours({ ...businessHours, shifts: newShifts });
                 }}
-                className="text-red-400 hover:text-red-600 p-2"
+                className="text-red-400 hover:text-red-600 p-2 transition"
                 type="button"
               >
                 <Trash2 size={18} />
@@ -108,32 +108,33 @@ export default function ShiftPanel({ businessHours, setBusinessHours, specialShi
                 ...businessHours,
                 shifts: [
                   ...businessHours.shifts,
-                  { id: Date.now().toString(), code: 'X', name: '新班別', start: '00:00', end: '00:00' }
+                  { id: Date.now().toString(), code: 'X', name: '新診次', start: '00:00', end: '00:00' }
                 ]
               })
             }
             className="text-xs flex items-center gap-1 text-emerald-600 font-bold hover:bg-emerald-50 px-3 py-2 rounded-lg transition mt-2"
             type="button"
           >
-            <Plus size={16} /> 新增班別
+            <Plus size={16} /> 新增診次
           </button>
         </div>
       </div>
 
-      {/* 特殊業務標籤 */}
+      {/* 特殊門診 / 專診設定 */}
       <div className="bg-slate-50 p-5 rounded-xl border border-slate-200">
         <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2 mb-4">
-          <Tag className="text-pink-600" size={18} /> 特殊業務標籤設定
+          <Tag className="text-pink-600" size={18} /> 特殊門診 / 專診設定
         </h3>
         <p className="text-xs text-slate-500 mb-4">
-          設定排班時可額外附加的業務標籤（例如：包廂服務、外燴、支援專案等）。
+          設定排班時可額外附加的門診標籤（例如：減重門診、疫苗診、無痛鏡檢）。
         </p>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-3">
           {specialShiftTypes.map((t: string, idx: number) => (
             <div
               key={idx}
-              className="flex items-center gap-1 bg-white border border-pink-200 text-pink-700 px-3 py-1.5 rounded-full text-sm font-bold shadow-sm"
+              className="flex items-center gap-2 bg-pink-50 border border-pink-200 text-pink-700 pl-3 pr-1 py-1 rounded-full shadow-sm"
             >
+              {/* 🟢 加長了 input 的寬度，拿掉了置中，讓你更好輸入！ */}
               <input
                 type="text"
                 value={t}
@@ -142,13 +143,14 @@ export default function ShiftPanel({ businessHours, setBusinessHours, specialShi
                   newTypes[idx] = e.target.value;
                   setSpecialShiftTypes(newTypes);
                 }}
-                className="bg-transparent border-none outline-none w-20 text-center"
+                className="bg-transparent border-none outline-none w-28 text-sm font-bold placeholder-pink-300"
+                placeholder="請輸入專診"
               />
               <button
                 onClick={() =>
                   setSpecialShiftTypes(specialShiftTypes.filter((_: any, i: number) => i !== idx))
                 }
-                className="text-pink-400 hover:text-pink-600 ml-1"
+                className="bg-white rounded-full p-1 text-pink-400 hover:text-pink-600 hover:bg-pink-100 transition shadow-sm"
                 type="button"
               >
                 <X size={14} />
@@ -156,11 +158,11 @@ export default function ShiftPanel({ businessHours, setBusinessHours, specialShi
             </div>
           ))}
           <button
-            onClick={() => setSpecialShiftTypes([...specialShiftTypes, '新標籤'])}
-            className="flex items-center gap-1 bg-pink-50 text-pink-600 px-3 py-1.5 rounded-full text-sm font-bold hover:bg-pink-100 transition"
+            onClick={() => setSpecialShiftTypes([...specialShiftTypes, '新專診'])}
+            className="flex items-center gap-1 bg-white border border-pink-200 text-pink-600 px-4 py-1.5 rounded-full text-sm font-bold hover:bg-pink-50 transition shadow-sm"
             type="button"
           >
-            <Plus size={14} /> 新增標籤
+            <Plus size={14} /> 新增專診
           </button>
         </div>
       </div>

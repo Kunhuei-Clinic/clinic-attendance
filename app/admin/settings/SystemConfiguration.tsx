@@ -90,14 +90,23 @@ export default function SystemConfiguration() {
         const clinicRes = await fetch('/api/settings?type=clinic');
         const clinicResult = await clinicRes.json();
         if (clinicResult.data) {
-          setClinicData(clinicResult.data);
+          // 🟢 確保 settings 被正確解析成物件，解決考勤與 GPS 無法讀取的問題
+          let settingsObj = clinicResult.data.settings || {};
+          if (typeof settingsObj === 'string') {
+            try {
+              settingsObj = JSON.parse(settingsObj);
+            } catch (e) {}
+          }
+
+          setClinicData({ ...clinicResult.data, settings: settingsObj });
+
           if (clinicResult.data.business_hours) {
             setBusinessHours(clinicResult.data.business_hours);
           }
-          const settings = clinicResult.data.settings || {};
-          if (settings.overtime_threshold !== undefined) setOvertimeThreshold(Number(settings.overtime_threshold));
-          if (settings.overtime_approval_required !== undefined) setOvertimeApprovalRequired(settings.overtime_approval_required);
-          if (settings.clock_ignore_gps !== undefined) setClockIgnoreGps(settings.clock_ignore_gps);
+
+          if (settingsObj.overtime_threshold !== undefined) setOvertimeThreshold(Number(settingsObj.overtime_threshold));
+          if (settingsObj.overtime_approval_required !== undefined) setOvertimeApprovalRequired(settingsObj.overtime_approval_required);
+          if (settingsObj.clock_ignore_gps !== undefined) setClockIgnoreGps(settingsObj.clock_ignore_gps);
         }
       } catch (error) {
         console.error('Fetch settings error:', error);
