@@ -27,6 +27,26 @@ export default function BasicInfoPanel({ data, onChange, jobTitles, entities }: 
             <option value="part_time">兼職 (部分工時)</option>
           </select>
         </div>
+
+        {/* 🟢 新增：當選擇兼職時，才浮現「約定每週工時」欄位 */}
+        {data.employment_type === 'part_time' && (
+          <div className="animate-fade-in border-l-2 border-orange-400 pl-3">
+            <label className="block text-xs font-bold text-orange-600 mb-1">約定每週工時 (算特休)</label>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                max="40"
+                min="1"
+                value={data.part_time_weekly_hours || ''}
+                onChange={e => onChange('part_time_weekly_hours', Number(e.target.value))}
+                className="w-full border border-orange-200 p-2 rounded bg-orange-50 font-mono focus:bg-white transition"
+                placeholder="例: 20"
+              />
+              <span className="text-xs text-slate-500 shrink-0">小時/週</span>
+            </div>
+            <p className="text-[10px] text-slate-400 mt-1">正職標準為 40 小時，系統將依此比例折算特休。</p>
+          </div>
+        )}
         <div>
           <label className="block text-xs font-bold text-slate-500 mb-1 flex items-center gap-1"><Building2 size={12}/> 歸屬單位</label>
           <select value={data.entity || ''} onChange={e => onChange('entity', e.target.value)} className="w-full border p-2 rounded bg-white">

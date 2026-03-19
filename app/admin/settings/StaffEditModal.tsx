@@ -35,6 +35,7 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
         setEditData({
           name: '', email: '', role: '護理師', entity: 'clinic',
           employment_type: 'full_time', // 預設為正職
+          part_time_weekly_hours: 20,
           salary_structure_type: 'standard', salary_mode: 'hourly',
           bonuses: [], default_deductions: []
         });
