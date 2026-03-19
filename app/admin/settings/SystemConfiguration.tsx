@@ -1,7 +1,11 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Save, Clock, CalendarDays, LayoutGrid, Stethoscope, Trash2, Plus, User, ChevronDown, ChevronUp } from 'lucide-react';
+import { Save, Clock, CalendarDays, LayoutGrid, Stethoscope, Trash2, Plus, User, ChevronDown, ChevronUp, Building, MapPin } from 'lucide-react';
+
+import OrganizationPanel from './system/OrganizationPanel';
+import ShiftPanel from './system/ShiftPanel';
+import AttendancePanel from './system/AttendancePanel';
 
 type Entity = { id: string; name: string };
 
@@ -99,7 +103,7 @@ const DEFAULT_JOB_TITLES: JobTitleConfig[] = [
   { name: '清潔', in_roster: false }
 ];
 
-export default function SystemConfiguration() {
+function LegacySystemConfiguration() {
   const [entities, setEntities] = useState<Entity[]>([]);
   const [jobTitles, setJobTitles] = useState<JobTitleConfig[]>([]);
   const [specialClinics, setSpecialClinics] = useState<string[]>([]);
@@ -407,7 +411,7 @@ export default function SystemConfiguration() {
                   設定系統中可用的職稱選項。這些職稱將出現在員工資料編輯表單的下拉選單中。
                 </p>
                 <p className="text-xs text-blue-700">
-                  勾選「加入排班表」的職稱，會出現在員工排班畫面中；例如「醫師」通常使用獨立醫師班表，因此預設不加入一般員工排班。
+                  勾選「加入排班表」的職稱，會出現在員工排班畫面中。
                 </p>
               </div>
               <div className="space-y-3">
@@ -788,6 +792,249 @@ export default function SystemConfiguration() {
             </div>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+export default function SystemConfiguration() {
+  const [activeTab, setActiveTab] = useState<'org' | 'shifts' | 'attendance'>('org');
+
+  const [entities, setEntities] = useState<Entity[]>([]);
+  const [jobTitles, setJobTitles] = useState<JobTitleConfig[]>([]);
+  const [specialClinics, setSpecialClinics] = useState<string[]>([]);
+  const [businessHours, setBusinessHours] = useState<BusinessHoursConfig>(DEFAULT_BUSINESS_HOURS);
+  const [overtimeThreshold, setOvertimeThreshold] = useState(9);
+  const [overtimeApprovalRequired, setOvertimeApprovalRequired] = useState(true);
+  const [clockIgnoreGps, setClockIgnoreGps] = useState(false);
+  const [clinicData, setClinicData] = useState<any | null>(null);
+
+  useEffect(() => {
+    fetchSystemSettings();
+    fetchClinicData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const fetchClinicData = async () => {
+    try {
+      const response = await fetch('/api/clinics', {
+        credentials: 'include'
+      });
+      const result = await response.json();
+
+      const data = Array.isArray(result.data) ? result.data[0] : result.data;
+      if (!data) return;
+      setClinicData(data);
+    } catch (error) {
+      console.error('Fetch clinic data error:', error);
+    }
+  };
+
+  const fetchSystemSettings = async () => {
+    try {
+      const response = await fetch('/api/settings');
+      const result = await response.json();
+      if (result.data) {
+        result.data.forEach((item: any) => {
+          if (item.key === 'org_entities') {
+            try {
+              setEntities(JSON.parse(item.value));
+            } catch (e) {
+              // ignore
+            }
+          }
+
+          if (item.key === 'job_titles') {
+            try {
+              const raw = JSON.parse(item.value);
+              if (Array.isArray(raw) && raw.length > 0) {
+                // 舊版：string[]
+                if (typeof raw[0] === 'string') {
+                  const converted: JobTitleConfig[] = (raw as string[]).map((name) => ({
+                    name,
+                    in_roster: name === '醫師' ? false : true
+                  }));
+                  setJobTitles(converted);
+                } else {
+                  // 新版：JobTitleConfig[] 或類似結構
+                  const converted: JobTitleConfig[] = raw
+                    .map((jt: any) => ({
+                      name: jt.name ?? '',
+                      in_roster: typeof jt.in_roster === 'boolean' ? jt.in_roster : jt.name === '醫師' ? false : true
+                    }))
+                    .filter((jt: JobTitleConfig) => jt.name);
+                  setJobTitles(converted.length > 0 ? converted : DEFAULT_JOB_TITLES);
+                }
+              } else {
+                setJobTitles(DEFAULT_JOB_TITLES);
+              }
+            } catch (e) {
+              setJobTitles(DEFAULT_JOB_TITLES);
+            }
+          }
+
+          if (item.key === 'special_clinic_types') {
+            try {
+              setSpecialClinics(JSON.parse(item.value));
+            } catch (e) {
+              // ignore
+            }
+          }
+        });
+
+        const hasJobTitles = result.data.some((item: any) => item.key === 'job_titles');
+        if (!hasJobTitles) setJobTitles(DEFAULT_JOB_TITLES);
+      } else {
+        setJobTitles(DEFAULT_JOB_TITLES);
+      }
+
+      // 取得診所設定（加班設定與班表）
+      const clinicResponse = await fetch('/api/settings?type=clinic');
+      const clinicResult = await clinicResponse.json();
+      if (clinicResult.data) {
+        setOvertimeThreshold(clinicResult.data.overtime_threshold ?? 9);
+        setOvertimeApprovalRequired(clinicResult.data.overtime_approval_required !== false);
+        setClockIgnoreGps(clinicResult.data.clock_ignore_gps === true);
+
+        // 讀取班表（相容舊資料）
+        if (clinicResult.data.business_hours) {
+          setBusinessHours(migrateBusinessHours(clinicResult.data.business_hours));
+        }
+
+        // 合併診所設定至 clinicData.settings（供 GPS 表單使用）
+        setClinicData((prev: any) => ({
+          ...(prev || {}),
+          settings: { ...(prev?.settings || {}), ...clinicResult.data }
+        }));
+      }
+    } catch (error) {
+      console.error('Fetch system settings error:', error);
+    }
+  };
+
+  const handleSaveAll = async () => {
+    try {
+      // system_settings（批次 upsert）
+      const systemPayload = [
+        { key: 'org_entities', value: JSON.stringify(entities) },
+        {
+          key: 'job_titles',
+          value: JSON.stringify(jobTitles.length > 0 ? jobTitles : DEFAULT_JOB_TITLES)
+        },
+        { key: 'special_clinic_types', value: JSON.stringify(specialClinics) }
+      ];
+
+      const systemRes = await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(systemPayload)
+      });
+      const systemResult = await systemRes.json();
+      if (!systemResult.success) throw new Error(systemResult.message || 'System save failed');
+
+      // clinics.settings
+      const currentSettings = clinicData?.settings || {};
+      const clinicSettingsPayload = {
+        business_hours: businessHours,
+        overtime_threshold: overtimeThreshold,
+        overtime_approval_required: overtimeApprovalRequired,
+        clock_ignore_gps: clockIgnoreGps,
+        gps_lat: currentSettings.gps_lat,
+        gps_lng: currentSettings.gps_lng,
+        gps_radius: currentSettings.gps_radius
+      };
+
+      const clinicRes = await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'clinic', settings: clinicSettingsPayload })
+      });
+      const clinicResult = await clinicRes.json();
+      if (!clinicResult.success) throw new Error(clinicResult.message || 'Clinic save failed');
+
+      alert('✅ 系統設定已儲存！');
+    } catch (e: any) {
+      alert('❌ 儲存失敗: ' + (e?.message || ''));
+    }
+  };
+
+  return (
+    <div className="w-full animate-fade-in relative pb-20">
+      <div className="flex gap-2 mb-6 border-b border-slate-200 pb-4">
+        <button
+          onClick={() => setActiveTab('org')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition ${
+            activeTab === 'org'
+              ? 'bg-blue-600 text-white shadow-md'
+              : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+          }`}
+          type="button"
+        >
+          <Building size={16} /> 組織與職稱
+        </button>
+        <button
+          onClick={() => setActiveTab('shifts')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition ${
+            activeTab === 'shifts'
+              ? 'bg-emerald-600 text-white shadow-md'
+              : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+          }`}
+          type="button"
+        >
+          <Clock size={16} /> 班別與業務標籤
+        </button>
+        <button
+          onClick={() => setActiveTab('attendance')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition ${
+            activeTab === 'attendance'
+              ? 'bg-orange-600 text-white shadow-md'
+              : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+          }`}
+          type="button"
+        >
+          <MapPin size={16} /> 考勤與加班規則
+        </button>
+      </div>
+
+      <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+        {activeTab === 'org' && (
+          <OrganizationPanel
+            entities={entities}
+            setEntities={setEntities}
+            jobTitles={jobTitles}
+            setJobTitles={setJobTitles}
+          />
+        )}
+        {activeTab === 'shifts' && (
+          <ShiftPanel
+            businessHours={businessHours}
+            setBusinessHours={setBusinessHours}
+            specialShiftTypes={specialClinics}
+            setSpecialShiftTypes={setSpecialClinics}
+          />
+        )}
+        {activeTab === 'attendance' && (
+          <AttendancePanel
+            overtimeThreshold={overtimeThreshold}
+            setOvertimeThreshold={setOvertimeThreshold}
+            overtimeApprovalRequired={overtimeApprovalRequired}
+            setOvertimeApprovalRequired={setOvertimeApprovalRequired}
+            clockIgnoreGps={clockIgnoreGps}
+            setClockIgnoreGps={setClockIgnoreGps}
+            clinicData={clinicData}
+            setClinicData={setClinicData}
+          />
+        )}
+      </div>
+
+      <div className="fixed bottom-6 right-8 z-50">
+        <button
+          onClick={handleSaveAll}
+          className="flex items-center gap-2 bg-slate-900 text-white px-8 py-4 rounded-full text-base font-bold hover:bg-black transition shadow-2xl hover:scale-105 transform"
+          type="button"
+        >
+          <Save size={20} /> 儲存系統設定
+        </button>
       </div>
     </div>
   );
