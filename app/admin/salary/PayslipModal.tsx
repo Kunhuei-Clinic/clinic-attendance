@@ -192,7 +192,10 @@ export function PrintContent({ report, yearMonth, clinicName }: any) {
                   )}
                   <Row label="固定津貼" amount={report.fixed_bonus_pay} />
                   {report.fixed_bonus_details?.map((item: any, i: number) => (
-                    <tr key={`fb-${i}`} className="text-xs text-slate-500"><td className="pl-2 py-0.5">• {item.name}</td><td className="text-right py-0.5">${fmt(item.amount)}</td></tr>
+                    <tr key={`fb-${i}`} className="text-xs text-slate-500">
+                      <td className="pl-2 py-1.5">• {item.name}</td>
+                      <td className="text-right py-1.5">${fmt(item.amount)}</td>
+                    </tr>
                   ))}
                   <Row label="變動獎金" amount={report.temp_bonus_pay} highlight />
                   {report.temp_bonus_details?.map((item: any, i: number) => {
@@ -202,13 +205,13 @@ export function PrintContent({ report, yearMonth, clinicName }: any) {
                     return (
                       <React.Fragment key={`tb-${i}`}>
                         <tr className="text-xs text-blue-600">
-                          <td className="pl-2 py-0.5">
+                          <td className="pl-2 py-1.5">
                             ↳ {item.name}
                             {isOnlineConsult && hoursNum != null && (
                               <span className="block text-slate-600 font-medium mt-0.5">線上諮詢時數: {hoursNum} 小時（勞檢備查）</span>
                             )}
                           </td>
-                          <td className="text-right py-0.5">${fmt(item.amount)}</td>
+                          <td className="text-right py-1.5 align-bottom">${fmt(item.amount)}</td>
                         </tr>
                       </React.Fragment>
                     );
@@ -231,12 +234,18 @@ export function PrintContent({ report, yearMonth, clinicName }: any) {
                   <Row label="健保自付" amount={report.insurance_health} />
                   <Row label="固定扣項" amount={report.fixed_deduction_pay} />
                   {report.fixed_deduction_details?.map((item: any, i: number) => (
-                    <tr key={`fd-${i}`} className="text-xs text-slate-500"><td className="pl-2 py-0.5">• {item.name}</td><td className="text-right py-0.5 text-red-400">-${fmt(item.amount)}</td></tr>
+                    <tr key={`fd-${i}`} className="text-xs text-slate-500">
+                      <td className="pl-2 py-1.5">• {item.name}</td>
+                      <td className="text-right py-1.5 text-red-400">-${fmt(item.amount)}</td>
+                    </tr>
                   ))}
                   <Row label="請假扣款" amount={report.leave_deduction} sub="事假/病假" isDeduction />
                   <Row label="變動扣款" amount={report.temp_deduction_pay} isDeduction />
                   {report.temp_deduction_details?.map((item: any, i: number) => (
-                    <tr key={`td-${i}`} className="text-xs text-red-600"><td className="pl-2 py-0.5">↳ {item.name}</td><td className="text-right py-0.5 text-red-400">-${fmt(item.amount)}</td></tr>
+                    <tr key={`td-${i}`} className="text-xs text-red-600">
+                      <td className="pl-2 py-1.5">↳ {item.name}</td>
+                      <td className="text-right py-1.5 text-red-400">-${fmt(item.amount)}</td>
+                    </tr>
                   ))}
                 </tbody>
                 <tfoot>
@@ -343,11 +352,13 @@ function Row({ label, amount, sub, isDeduction, highlight }: any) {
   if (amount === 0 && !highlight) return null;
   return (
     <tr className="border-b border-dashed border-slate-200">
-      <td className="py-1.5 pr-2">
+      {/* 🟢 py-1.5 改為 py-3，讓虛線不壓字 */}
+      <td className="py-3 pr-2">
         <div className="font-medium text-slate-700">{label}</div>
-        {sub && <div className="text-[10px] text-slate-400">{sub}</div>}
+        {/* 🟢 加上 mt-1 讓小字不會太貼近標題 */}
+        {sub && <div className="text-[10px] text-slate-400 mt-1">{sub}</div>}
       </td>
-      <td className={`py-1.5 text-right font-mono font-bold ${isDeduction ? 'text-red-500' : 'text-slate-700'}`}>
+      <td className={`py-3 text-right font-mono font-bold align-bottom ${isDeduction ? 'text-red-500' : 'text-slate-700'}`}>
         {isDeduction ? '-' : ''}{Math.round(amount).toLocaleString()}
       </td>
     </tr>
