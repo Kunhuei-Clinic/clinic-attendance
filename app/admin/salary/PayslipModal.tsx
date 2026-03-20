@@ -37,15 +37,19 @@ export default function PayslipModal({ report, yearMonth, clinicName, onClose }:
       
       if (page1) {
         const canvas1 = await html2canvas(page1, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
-        const imgData1 = canvas1.toDataURL('image/png');
-        pdf.addImage(imgData1, 'PNG', 0, 0, pdfWidth, pdfWidth * (canvas1.height / canvas1.width));
+        // 🟢 修改：改用 JPEG 並設定 0.8 (80%) 畫質壓縮
+        const imgData1 = canvas1.toDataURL('image/jpeg', 0.8);
+        // 🟢 修改：格式從 PNG 改為 JPEG
+        pdf.addImage(imgData1, 'JPEG', 0, 0, pdfWidth, pdfWidth * (canvas1.height / canvas1.width));
       }
       
       if (page2) {
         pdf.addPage();
         const canvas2 = await html2canvas(page2, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
-        const imgData2 = canvas2.toDataURL('image/png');
-        pdf.addImage(imgData2, 'PNG', 0, 0, pdfWidth, pdfWidth * (canvas2.height / canvas2.width));
+        // 🟢 修改：改用 JPEG 並設定 0.8 (80%) 畫質壓縮
+        const imgData2 = canvas2.toDataURL('image/jpeg', 0.8);
+        // 🟢 修改：格式從 PNG 改為 JPEG
+        pdf.addImage(imgData2, 'JPEG', 0, 0, pdfWidth, pdfWidth * (canvas2.height / canvas2.width));
       }
       
       const safeName = (report.staff_name || '').replace(/\s+/g, '_');

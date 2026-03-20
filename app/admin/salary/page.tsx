@@ -81,15 +81,17 @@ export default function SalaryPage() {
         if (page1) {
           if (!isFirstPage) pdf.addPage();
           const canvas1 = await html2canvas(page1, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
-          const imgData1 = canvas1.toDataURL('image/png');
-          pdf.addImage(imgData1, 'PNG', 0, 0, pdfWidth, pdfWidth * (canvas1.height / canvas1.width));
+          // 🟢 修改為 JPEG 與壓縮
+          const imgData1 = canvas1.toDataURL('image/jpeg', 0.8);
+          pdf.addImage(imgData1, 'JPEG', 0, 0, pdfWidth, pdfWidth * (canvas1.height / canvas1.width));
           isFirstPage = false;
         }
         if (page2) {
           pdf.addPage();
           const canvas2 = await html2canvas(page2, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
-          const imgData2 = canvas2.toDataURL('image/png');
-          pdf.addImage(imgData2, 'PNG', 0, 0, pdfWidth, pdfWidth * (canvas2.height / canvas2.width));
+          // 🟢 修改為 JPEG 與壓縮
+          const imgData2 = canvas2.toDataURL('image/jpeg', 0.8);
+          pdf.addImage(imgData2, 'JPEG', 0, 0, pdfWidth, pdfWidth * (canvas2.height / canvas2.width));
         }
       }
       pdf.save(`${selectedMonth}_薪資單_合併列印.pdf`);
@@ -125,14 +127,16 @@ export default function SalaryPage() {
 
         if (page1) {
           const canvas1 = await html2canvas(page1, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
-          const imgData1 = canvas1.toDataURL('image/png');
-          pdf.addImage(imgData1, 'PNG', 0, 0, pdfWidth, pdfWidth * (canvas1.height / canvas1.width));
+          // 🟢 修改為 JPEG 與壓縮
+          const imgData1 = canvas1.toDataURL('image/jpeg', 0.8);
+          pdf.addImage(imgData1, 'JPEG', 0, 0, pdfWidth, pdfWidth * (canvas1.height / canvas1.width));
         }
         if (page2) {
           pdf.addPage();
           const canvas2 = await html2canvas(page2, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
-          const imgData2 = canvas2.toDataURL('image/png');
-          pdf.addImage(imgData2, 'PNG', 0, 0, pdfWidth, pdfWidth * (canvas2.height / canvas2.width));
+          // 🟢 修改為 JPEG 與壓縮
+          const imgData2 = canvas2.toDataURL('image/jpeg', 0.8);
+          pdf.addImage(imgData2, 'JPEG', 0, 0, pdfWidth, pdfWidth * (canvas2.height / canvas2.width));
         }
 
         const pdfBlob = pdf.output('blob');
