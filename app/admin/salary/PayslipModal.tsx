@@ -260,7 +260,8 @@ export function PrintContent({ report, yearMonth, clinicName }: any) {
                <span className="block text-lg font-bold text-slate-700">實發金額 (Net Pay)</span>
                <span className="text-xs text-slate-400">請確認金額無誤後簽收</span>
             </div>
-            <span className="text-4xl font-extrabold text-slate-900 border-b-4 border-double border-slate-400 pb-1">${fmt(report.net_pay)}</span>
+            {/* 🟢 拿掉 border-b-4 border-double border-slate-400 pb-1 */}
+            <span className="text-4xl font-extrabold text-slate-900">${fmt(report.net_pay)}</span>
           </div>
         </div>
 
@@ -352,13 +353,13 @@ function Row({ label, amount, sub, isDeduction, highlight }: any) {
   if (amount === 0 && !highlight) return null;
   return (
     <tr className="border-b border-dashed border-slate-200">
-      {/* 🟢 py-1.5 改為 py-3，讓虛線不壓字 */}
-      <td className="py-3 pr-2">
+      {/* 🟢 py-3 改為 py-2 (折衷的間距) */}
+      <td className="py-2 pr-2">
         <div className="font-medium text-slate-700">{label}</div>
-        {/* 🟢 加上 mt-1 讓小字不會太貼近標題 */}
-        {sub && <div className="text-[10px] text-slate-400 mt-1">{sub}</div>}
+        {/* 🟢 mt-1 改為 mt-0.5，讓小字不要離標題太遠 */}
+        {sub && <div className="text-[10px] text-slate-400 mt-0.5">{sub}</div>}
       </td>
-      <td className={`py-3 text-right font-mono font-bold align-bottom ${isDeduction ? 'text-red-500' : 'text-slate-700'}`}>
+      <td className={`py-2 text-right font-mono font-bold align-bottom ${isDeduction ? 'text-red-500' : 'text-slate-700'}`}>
         {isDeduction ? '-' : ''}{Math.round(amount).toLocaleString()}
       </td>
     </tr>
