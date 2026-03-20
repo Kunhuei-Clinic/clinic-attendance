@@ -77,7 +77,7 @@ export default function ClinicSwitcher() {
       >
         {clinics.map((c) => (
           <option key={c.id} value={c.id}>
-            {c.name} {c.role === 'owner' ? '(負責人)' : ''}
+            {c.name} {c.role === 'owner' ? '主控台' : ''}
           </option>
         ))}
       </select>

@@ -877,7 +877,7 @@ export default function SalaryPage() {
                       }}
                       className="w-full text-left px-4 py-3 hover:bg-slate-50 text-sm font-bold text-slate-700 flex items-center gap-2 border-b border-slate-100 transition"
                     >
-                      <Printer size={16} className="text-slate-400" /> 下載合併PDF(單一檔)
+                      <Printer size={16} className="text-slate-400" /> 合併單一檔案
                     </button>
                     <button
                       onClick={() => {
@@ -886,7 +886,7 @@ export default function SalaryPage() {
                       }}
                       className="w-full text-left px-4 py-3 hover:bg-slate-50 text-sm font-bold text-slate-700 flex items-center gap-2 transition"
                     >
-                      <FileSpreadsheet size={16} className="text-blue-500" /> 所有檔案批次下載(打包成ZIP)
+                      <FileSpreadsheet size={16} className="text-blue-500" /> 批次下載打包成ZIP
                     </button>
                   </div>
                 )}
