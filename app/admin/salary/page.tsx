@@ -400,10 +400,6 @@ export default function SalaryPage() {
           (sum: number, b: any) => sum + Number(b.amount),
           0
         );
-        const fixedDeduction = (staff.default_deductions || []).reduce(
-          (sum: number, b: any) => sum + Number(b.amount),
-          0
-        );
         const myAdj = adjustments[staff.id] || [];
         const tempBonus = myAdj
           .filter((a: any) => a.type === 'bonus')
@@ -419,6 +415,37 @@ export default function SalaryPage() {
           fixedBonus +
           tempBonus +
           calc.leave_addition;
+
+        // 應發總額 gross 算出後：二代健保 / 預扣所得稅依門檻動態計算，其餘固定扣款沿用設定金額
+        const fixed_deduction_details = (staff.default_deductions || []).map(
+          (d: any) => {
+            let finalAmount = Number(d.amount) || 0;
+            const label = typeof d.name === 'string' ? d.name : '';
+
+            if (label === '二代健保' || label.includes('二代健保')) {
+              if (gross >= 27470) {
+                finalAmount = Math.round(gross * 0.0211);
+              } else {
+                finalAmount = 0;
+              }
+            }
+
+            if (label === '預扣所得稅' || label.includes('預扣所得稅')) {
+              if (gross >= 40000) {
+                finalAmount = Math.round(gross * 0.05);
+              } else {
+                finalAmount = 0;
+              }
+            }
+
+            return { name: d.name, amount: finalAmount };
+          }
+        );
+        const fixedDeduction = fixed_deduction_details.reduce(
+          (sum: number, d: any) => sum + d.amount,
+          0
+        );
+
         const deduction =
           staff.insurance_labor +
           staff.insurance_health +
@@ -469,7 +496,7 @@ export default function SalaryPage() {
           cash_amount,
           fixed_bonus_details: staff.bonuses || [],
           temp_bonus_details: myAdj.filter((a: any) => a.type === 'bonus' && Number(a.amount) !== 0),
-          fixed_deduction_details: staff.default_deductions || [],
+          fixed_deduction_details,
           temp_deduction_details: myAdj.filter((a: any) => a.type === 'deduction' && Number(a.amount) !== 0),
         };
 
