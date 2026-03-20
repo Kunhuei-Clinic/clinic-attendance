@@ -127,27 +127,27 @@ export function PrintContent({ report, yearMonth, clinicName }: any) {
       {/* 🟢 第一頁：固定寬高鎖定 A4 比例 */}
       <div className="pdf-page-1 bg-white p-10 shadow-sm shrink-0 flex flex-col justify-between" style={{ width: '800px', minHeight: '1131px' }}>
         <div>
-          <div className="border-b-2 border-slate-900 pb-4 mb-6 flex justify-between items-start">
+        <div className="border-b-2 border-slate-900 pb-4 mb-6 flex justify-between items-start">
             <div>
-              <div className="text-sm text-slate-500 mb-1">{clinicName || '診所名稱'}</div>
+              {/* 🟢 修改：將字體從 text-sm 稍微放大到 text-base，並加粗 */}
+              <div className="text-base font-bold text-slate-600 mb-1">{clinicName || '診所名稱'}</div>
               <h1 className="text-3xl font-extrabold text-slate-900">薪 資 明 細 單</h1>
-              <p className="text-slate-400 text-xs mt-1">Pay Slip</p>
+              {/* 🟢 修改：拿掉 Pay Slip 以保持版面乾淨 */}
             </div>
             <div className="text-right">
               <div className="text-2xl font-bold text-blue-900">{year} 年 {month} 月</div>
-              {/* 🟢 美化與精簡的狀態列 */}
+              
+              {/* 🟢 修改：格式改為 "正職 櫃台 | 八週變形工時 時薪制" */}
               <div className="text-slate-600 font-bold mb-1 flex items-center justify-end gap-2 text-sm">
-                <span>{report.employment_type === 'part_time' ? '兼職' : '正職'}</span>
+                <span>{report.employment_type === 'part_time' ? '兼職' : '正職'} {report.staff_role}</span>
                 <span className="text-slate-300">|</span>
-                <span>{report.staff_role}</span>
-                <span className="text-slate-300">|</span>
-                <span>{getWorkRuleLabel(report.work_rule)}</span>
-                <span className="text-slate-300">|</span>
-                <span>{report.salary_mode === 'monthly' ? '月薪制' : '時薪制'}</span>
+                <span>{getWorkRuleLabel(report.work_rule)} {report.salary_mode === 'monthly' ? '月薪制' : '時薪制'}</span>
               </div>
-              <div className="text-base font-bold mt-1">{report.staff_role}：{report.staff_name}</div>
+              
+              {/* 🟢 修改：拿掉職稱，只顯示姓名 */}
+              <div className="text-base font-bold mt-1">{report.staff_name}</div>
+              
               <div className="text-xs text-slate-500 mt-1 flex flex-col items-end gap-0.5">
-                {/* 🟢 已刪除重複的工時制標籤，僅保留特休資訊 */}
                 <span className="text-slate-400">
                   到職日: {report.hire_date || '未設定'} | 
                   今年特休總額: {report.annual_leave_days ?? 0} 天 | 

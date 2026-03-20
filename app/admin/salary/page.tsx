@@ -59,9 +59,13 @@ export default function SalaryPage() {
   // 新增：獎懲調整 Modal 狀態
   const [adjModalStaff, setAdjModalStaff] = useState<any | null>(null);
 
-  // 🟢 批次產生合併為「單一檔案」的 PDF
+  // 🟢 批次產生合併為「單一檔案」的 PDF (支援雙頁 A4)
   const handleBatchDownloadSinglePdf = async () => {
-    setIsZipping(true); 
+    setIsZipping(true);
+    // 💡 截圖前：把隱形容器叫出來
+    const renderContainer = document.getElementById('hidden-render-container');
+    if (renderContainer) renderContainer.classList.remove('hidden');
+
     try {
       const pdf = new jsPDF('p', 'mm', 'a4');
       const pdfWidth = pdf.internal.pageSize.getWidth();
@@ -70,10 +74,10 @@ export default function SalaryPage() {
       for (let i = 0; i < filteredAndSortedReports.length; i++) {
         const el = document.getElementById(`zip-capture-${i}`);
         if (!el) continue;
-        
+
         const page1 = el.querySelector('.pdf-page-1') as HTMLElement;
         const page2 = el.querySelector('.pdf-page-2') as HTMLElement;
-        
+
         if (page1) {
           if (!isFirstPage) pdf.addPage();
           const canvas1 = await html2canvas(page1, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
@@ -93,23 +97,29 @@ export default function SalaryPage() {
       console.error('PDF 產生失敗:', error);
       alert('合併 PDF 時發生錯誤');
     } finally {
+      // 💡 截圖後：立刻把容器隱藏回去，恢復乾淨的畫面
+      if (renderContainer) renderContainer.classList.add('hidden');
       setIsZipping(false);
     }
   };
 
-  // 🟢 批次產生獨立 PDF 並打包成 ZIP (完美版)
+  // 🟢 批次產生獨立 PDF 並打包成 ZIP (支援雙頁 A4)
   const handleBatchDownloadZip = async () => {
     setIsZipping(true);
+    // 💡 截圖前：把隱形容器叫出來
+    const renderContainer = document.getElementById('hidden-render-container');
+    if (renderContainer) renderContainer.classList.remove('hidden');
+
     try {
       const zip = new JSZip();
       for (let i = 0; i < filteredAndSortedReports.length; i++) {
         const rpt = filteredAndSortedReports[i];
-        const el = document.getElementById(`zip-capture-${i}`); 
+        const el = document.getElementById(`zip-capture-${i}`);
         if (!el) continue;
-        
+
         const page1 = el.querySelector('.pdf-page-1') as HTMLElement;
         const page2 = el.querySelector('.pdf-page-2') as HTMLElement;
-        
+
         const pdf = new jsPDF('p', 'mm', 'a4');
         const pdfWidth = pdf.internal.pageSize.getWidth();
 
@@ -124,7 +134,7 @@ export default function SalaryPage() {
           const imgData2 = canvas2.toDataURL('image/png');
           pdf.addImage(imgData2, 'PNG', 0, 0, pdfWidth, pdfWidth * (canvas2.height / canvas2.width));
         }
-        
+
         const pdfBlob = pdf.output('blob');
         const safeName = (rpt.staff_name || '').replace(/\s+/g, '_');
         zip.file(`${safeName}_${selectedMonth}_薪資單.pdf`, pdfBlob);
@@ -135,6 +145,8 @@ export default function SalaryPage() {
       console.error('ZIP 產生失敗:', error);
       alert('打包 ZIP 時發生錯誤');
     } finally {
+      // 💡 截圖後：立刻把容器隱藏回去
+      if (renderContainer) renderContainer.classList.add('hidden');
       setIsZipping(false);
     }
   };
@@ -841,29 +853,40 @@ export default function SalaryPage() {
                 共 <span className="text-blue-600 text-base">{filteredAndSortedReports.length}</span> 筆
               </div>
 
-              {/* 🟢 下拉式下載選單 */}
+              {/* 🟢 下拉式下載選單 (加上狀態回饋) */}
               <div className="relative">
                 <button
-                  onClick={() => setShowDownloadMenu(!showDownloadMenu)}
-                  className="flex items-center gap-2 px-4 py-2 bg-slate-800 text-white rounded-lg text-sm font-bold hover:bg-black transition shadow-sm"
+                  onClick={() => !isZipping && setShowDownloadMenu(!showDownloadMenu)}
+                  disabled={isZipping || filteredAndSortedReports.length === 0}
+                  className="flex items-center gap-2 px-4 py-2 bg-slate-800 text-white rounded-lg text-sm font-bold hover:bg-black transition shadow-sm disabled:opacity-50"
                 >
-                  下載 / 列印 <ChevronDown size={16} />
+                  {/* 根據 isZipping 狀態切換主按鈕文字 */}
+                  {isZipping ? (
+                    <>打包中，請稍候... <span className="animate-pulse">⏳</span></>
+                  ) : (
+                    <>薪資單批次下載 <ChevronDown size={16} /></>
+                  )}
                 </button>
-                {showDownloadMenu && (
+
+                {showDownloadMenu && !isZipping && (
                   <div className="absolute right-0 mt-2 w-56 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden">
                     <button
-                      onClick={() => { handleBatchDownloadSinglePdf(); setShowDownloadMenu(false); }}
-                      disabled={isZipping || filteredAndSortedReports.length === 0}
-                      className="w-full text-left px-4 py-3 hover:bg-slate-50 text-sm font-bold text-slate-700 flex items-center gap-2 border-b border-slate-100 transition disabled:opacity-50"
+                      onClick={() => {
+                        setShowDownloadMenu(false);
+                        handleBatchDownloadSinglePdf();
+                      }}
+                      className="w-full text-left px-4 py-3 hover:bg-slate-50 text-sm font-bold text-slate-700 flex items-center gap-2 border-b border-slate-100 transition"
                     >
-                      <Printer size={16} className="text-slate-400" /> 下載合併 PDF (單一檔)
+                      <Printer size={16} className="text-slate-400" /> 下載合併PDF(單一檔)
                     </button>
                     <button
-                      onClick={() => { handleBatchDownloadZip(); setShowDownloadMenu(false); }}
-                      disabled={isZipping || filteredAndSortedReports.length === 0}
-                      className="w-full text-left px-4 py-3 hover:bg-slate-50 text-sm font-bold text-slate-700 flex items-center gap-2 transition disabled:opacity-50"
+                      onClick={() => {
+                        setShowDownloadMenu(false);
+                        handleBatchDownloadZip();
+                      }}
+                      className="w-full text-left px-4 py-3 hover:bg-slate-50 text-sm font-bold text-slate-700 flex items-center gap-2 transition"
                     >
-                      <FileSpreadsheet size={16} className="text-blue-500" /> {isZipping ? 'ZIP 打包中...' : '批次下載 (獨立 ZIP)'}
+                      <FileSpreadsheet size={16} className="text-blue-500" /> 所有檔案批次下載(打包成ZIP)
                     </button>
                   </div>
                 )}
@@ -873,30 +896,29 @@ export default function SalaryPage() {
                 onClick={() => setShowBatchLockModal(true)}
                 className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold hover:bg-emerald-700 transition shadow-sm"
               >
-                <History size={16} /> 結算與封存
+                <History size={16} /> 批次結算封存
               </button>
             </div>
           </div>
 
-          {/* 往下保留 <SalaryTable ... /> 等原始表格區塊 */}
+          {/* 與 Toolbar 同一滾動區塊，sticky 才能相對整頁內容吸頂 */}
+          <SalaryTable
+            reports={filteredAndSortedReports}
+            staffList={staffList}
+            lockEmployee={lockEmployee}
+            unlockEmployee={unlockEmployee}
+            onOpenSettings={(staffId: string) => setSettingModalStaffId(staffId)}
+            onPrint={(rpt: any) => setPrintReport(rpt)}
+            setAdjModalStaff={setAdjModalStaff}
+          />
+
+          {liveReports.length === 0 && (
+            <div className="text-center py-20 text-slate-400 bg-white rounded-2xl border border-dashed border-slate-300">
+              <History size={48} className="mx-auto mb-4 opacity-20" />
+              <p>此月份尚無資料或尚未結算</p>
+            </div>
+          )}
         </div>
-
-        <SalaryTable
-          reports={filteredAndSortedReports}
-          staffList={staffList}
-          lockEmployee={lockEmployee}
-          unlockEmployee={unlockEmployee}
-          onOpenSettings={(staffId: string) => setSettingModalStaffId(staffId)}
-          onPrint={(rpt: any) => setPrintReport(rpt)}
-          setAdjModalStaff={setAdjModalStaff}
-        />
-
-        {liveReports.length === 0 && (
-          <div className="text-center py-20 text-slate-400 bg-white rounded-2xl border border-dashed border-slate-300">
-            <History size={48} className="mx-auto mb-4 opacity-20" />
-            <p>此月份尚無資料或尚未結算</p>
-          </div>
-        )}
 
         {settingModalStaffId !== null && (
           <SettingsModal
@@ -1044,14 +1066,28 @@ export default function SalaryPage() {
         )}
       </div>
 
-      {/* 🟢 ZIP 專用的隱形渲染區：固定 800px 寬度並丟到畫面外，確保 html2canvas 截圖不會排版崩潰 */}
-      <div className="absolute top-[-9999px] left-[-9999px] w-[800px] bg-white print:hidden">
+      {/* 🟢 隱藏渲染區：平時加上 hidden 徹底消失，解決白板無限下拉的問題 */}
+      <div id="hidden-render-container" className="hidden absolute top-[0px] left-[-9999px] w-[800px] bg-white print:hidden">
         {filteredAndSortedReports.map((rpt, idx) => (
           <div key={`zip-${idx}`} id={`zip-capture-${idx}`} style={{ width: '100%', padding: '40px', backgroundColor: 'white' }}>
             <PrintContent report={rpt} yearMonth={selectedMonth} clinicName={entityList.find((e) => e.id === rpt.staff_entity)?.name || '診所'} />
           </div>
         ))}
       </div>
+
+      {/* 🟢 全域 Loading 遮罩：極致的 UX 回饋 */}
+      {isZipping && (
+        <div className="fixed inset-0 z-[9999] bg-slate-900/70 backdrop-blur-sm flex flex-col items-center justify-center text-white animate-fade-in">
+          <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-6 shadow-lg"></div>
+          <h2 className="text-3xl font-black tracking-widest mb-2">圖檔轉換與打包中</h2>
+          <p className="text-slate-300 font-bold">
+            正在為您產生高畫質 PDF，請勿關閉或切換視窗...
+          </p>
+          <div className="mt-8 text-sm text-slate-400 font-mono bg-slate-800/50 px-4 py-2 rounded-full">
+            處理時間依員工人數而定，請耐心等候
+          </div>
+        </div>
+      )}
     </div>
   );
 }
