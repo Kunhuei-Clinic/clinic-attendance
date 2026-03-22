@@ -23,6 +23,33 @@ export default function AttendancePanel({
         </p>
 
         <div className="space-y-4">
+          {/* 🟢 開放手機定位打卡開關（存於 clinics.settings.allow_mobile_clockin） */}
+          <div className="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-xl shadow-sm">
+            <div>
+              <div className="font-bold text-slate-700">開放手機定位 (直接) 打卡</div>
+              <div className="text-xs text-slate-500 mt-1">
+                若關閉，員工手機前台將隱藏打卡按鈕，僅能使用實體打卡機或掃描現場 QR Code。
+              </div>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                className="sr-only peer"
+                checked={clinicData?.settings?.allow_mobile_clockin !== false}
+                onChange={(e) =>
+                  setClinicData((prev: any) => ({
+                    ...(prev || {}),
+                    settings: {
+                      ...(prev?.settings || {}),
+                      allow_mobile_clockin: e.target.checked,
+                    },
+                  }))
+                }
+              />
+              <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600" />
+            </label>
+          </div>
+
           <div>
             <label className="block text-sm font-bold text-slate-700 mb-2">加班門檻 (小時)</label>
             <input

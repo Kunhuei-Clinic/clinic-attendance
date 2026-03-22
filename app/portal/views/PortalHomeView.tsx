@@ -16,6 +16,8 @@ interface HomeViewProps {
   onScanClock?: () => void;
   bypassMode: boolean;
   setBypassMode: (val: boolean) => void;
+  /** 未傳或 true：顯示手機定位打卡；false：僅提示使用 QR／實體機 */
+  allowMobileClockin?: boolean;
 }
 
 function getGreeting() {
@@ -54,6 +56,7 @@ export default function PortalHomeView(props: HomeViewProps) {
     onScanClock,
     bypassMode,
     setBypassMode,
+    allowMobileClockin,
   } = props;
 
   const [detailModal, setDetailModal] = useState<'attendance' | 'leaves' | 'anomalies' | null>(null);
@@ -91,68 +94,102 @@ export default function PortalHomeView(props: HomeViewProps) {
             )}
           </p>
 
-          {/* 單一巨大打卡按鈕：依 isWorking 顯示上班或下班，防連點 */}
-          <button
-            type="button"
-            onClick={isWorking ? onClockOut : onClockIn}
-            disabled={gpsStatus === 'locating' || isPunching}
-            className={`w-full h-14 rounded-xl font-bold text-white flex items-center justify-center gap-2 shadow-md active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none transition ${
-              isWorking
-                ? 'bg-amber-500 hover:bg-amber-600 border border-amber-600/20'
-                : 'bg-teal-500 hover:bg-teal-600 border border-teal-600/20'
-            }`}
-          >
-            <Clock size={24} />
-            <span>{isPunching ? '處理中...' : isWorking ? '下班打卡' : '上班打卡'}</span>
-          </button>
-
-          {/* 掃碼打卡按鈕（小一號，置於主按鈕下方） */}
-          {onScanClock && (
-            <button
-              type="button"
-              onClick={onScanClock}
-              className="flex items-center justify-center gap-2 w-full h-12 mt-3 bg-slate-800 text-white rounded-xl font-bold shadow-lg hover:bg-slate-700 active:scale-[0.98] transition"
-            >
-              <QrCode size={20} /> 掃描診所 QR 打卡
-            </button>
-          )}
-
-          {/* GPS 狀態文字（按鈕下方小字） */}
-          <p className="text-xs text-slate-500 mt-3 text-center">
-            {gpsStatusText}
-          </p>
-
-          {isWorking && latestLog?.clock_in_time && (
-            <p className="text-center text-xs text-slate-400 mt-1">
-              已工作{' '}
-              {(
-                (Date.now() - new Date(latestLog.clock_in_time).getTime()) /
-                3600000
-              ).toFixed(1)}{' '}
-              小時
-            </p>
-          )}
-
-          {/* 救援模式（全體適用） */}
-          <div className="mt-4 pt-4 border-t border-slate-100 text-center">
-            {!bypassMode ? (
+          {allowMobileClockin !== false ? (
+            <>
+              {/* 單一巨大打卡按鈕：依 isWorking 顯示上班或下班，防連點 */}
               <button
                 type="button"
-                onClick={() => {
-                  if (window.confirm('啟用救援模式？將標記為異常打卡')) {
-                    setBypassMode(true);
-                  }
-                }}
-                className="text-xs text-slate-500 underline hover:text-slate-700"
+                onClick={isWorking ? onClockOut : onClockIn}
+                disabled={gpsStatus === 'locating' || isPunching}
+                className={`w-full h-14 rounded-xl font-bold text-white flex items-center justify-center gap-2 shadow-md active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none transition ${
+                  isWorking
+                    ? 'bg-amber-500 hover:bg-amber-600 border border-amber-600/20'
+                    : 'bg-teal-500 hover:bg-teal-600 border border-teal-600/20'
+                }`}
               >
-                GPS 定位不到？開啟救援模式
+                <Clock size={24} />
+                <span>{isPunching ? '處理中...' : isWorking ? '下班打卡' : '上班打卡'}</span>
               </button>
-            ) : (
-              <div className="inline-flex items-center gap-1.5 bg-red-50 text-red-600 px-3 py-2 rounded-xl text-xs font-medium border border-red-100">
-                <AlertCircle size={12} /> 救援模式已啟用（異常標記）
+
+              {/* 掃碼打卡按鈕（小一號，置於主按鈕下方） */}
+              {onScanClock && (
+                <button
+                  type="button"
+                  onClick={onScanClock}
+                  className="flex items-center justify-center gap-2 w-full h-12 mt-3 bg-slate-800 text-white rounded-xl font-bold shadow-lg hover:bg-slate-700 active:scale-[0.98] transition"
+                >
+                  <QrCode size={20} /> 掃描診所 QR 打卡
+                </button>
+              )}
+
+              {/* GPS 狀態文字（按鈕下方小字） */}
+              <p className="text-xs text-slate-500 mt-3 text-center">{gpsStatusText}</p>
+
+              {isWorking && latestLog?.clock_in_time && (
+                <p className="text-center text-xs text-slate-400 mt-1">
+                  已工作{' '}
+                  {(
+                    (Date.now() - new Date(latestLog.clock_in_time).getTime()) /
+                    3600000
+                  ).toFixed(1)}{' '}
+                  小時
+                </p>
+              )}
+
+              {/* 救援模式（全體適用） */}
+              <div className="mt-4 pt-4 border-t border-slate-100 text-center">
+                {!bypassMode ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (window.confirm('啟用救援模式？將標記為異常打卡')) {
+                        setBypassMode(true);
+                      }
+                    }}
+                    className="text-xs text-slate-500 underline hover:text-slate-700"
+                  >
+                    GPS 定位不到？開啟救援模式
+                  </button>
+                ) : (
+                  <div className="inline-flex items-center gap-1.5 bg-red-50 text-red-600 px-3 py-2 rounded-xl text-xs font-medium border border-red-100">
+                    <AlertCircle size={12} /> 救援模式已啟用（異常標記）
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+            </>
+          ) : (
+            <>
+              <div className="text-center py-8 px-6 bg-slate-50 rounded-3xl border border-slate-100 shadow-inner my-6">
+                <div className="w-16 h-16 bg-slate-200 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <QrCode size={32} className="text-slate-500" />
+                </div>
+                <h3 className="font-black text-slate-700 text-lg mb-2">本診所不開放手機直接打卡</h3>
+                <p className="text-sm text-slate-500 leading-relaxed">
+                  請使用現場的<strong className="text-slate-700">實體打卡機</strong>，<br />
+                  或點擊下方掃描現場的 QR Code 完成打卡。
+                </p>
+              </div>
+              {onScanClock && (
+                <button
+                  type="button"
+                  onClick={onScanClock}
+                  className="flex items-center justify-center gap-2 w-full h-12 bg-slate-800 text-white rounded-xl font-bold shadow-lg hover:bg-slate-700 active:scale-[0.98] transition"
+                >
+                  <QrCode size={20} /> 掃描診所 QR 打卡
+                </button>
+              )}
+              {isWorking && latestLog?.clock_in_time && (
+                <p className="text-center text-xs text-slate-400 mt-3">
+                  已工作{' '}
+                  {(
+                    (Date.now() - new Date(latestLog.clock_in_time).getTime()) /
+                    3600000
+                  ).toFixed(1)}{' '}
+                  小時
+                </p>
+              )}
+            </>
+          )}
         </div>
       </section>
 

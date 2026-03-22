@@ -423,6 +423,7 @@ export default function EmployeePortal() {
           onScanClock={clocking.onScanClock}
           bypassMode={clocking.bypassMode}
           setBypassMode={clocking.setBypassMode}
+          allowMobileClockin={portalData?.clinicSettings?.allow_mobile_clockin}
         />
       )}
 
