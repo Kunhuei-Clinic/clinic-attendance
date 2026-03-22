@@ -1,9 +1,77 @@
 'use client';
 
-import React from 'react';
-import { BookOpen, AlertTriangle, Calculator, Calendar, Clock, Plane, Scale } from 'lucide-react';
+import React, { useState } from 'react';
+import { BookOpen, AlertTriangle, Calculator, Calendar, Clock, Plane, Scale, ChevronDown, ChevronUp } from 'lucide-react';
 
 export default function LaborRulesView() {
+  const [expandedRule, setExpandedRule] = useState<string | null>(null);
+
+  const toggleRule = (rule: string) => {
+    setExpandedRule(expandedRule === rule ? null : rule);
+  };
+
+  const workRules = [
+    {
+      id: 'normal',
+      title: '正常工時 (一般員工)',
+      color: 'bg-slate-50',
+      textColor: 'text-slate-800',
+      content: (
+        <ul className="list-disc pl-5 space-y-1 text-slate-700 mt-2">
+          <li><span className="font-bold">法源依據：</span>勞基法第 30 條第 1 項。</li>
+          <li><span className="font-bold">工時上限：</span>每日正常工時不得超過 8 小時，每週不得超過 40 小時。</li>
+          <li><span className="font-bold">休假規定：</span>每 7 日中至少應有 1 日之例假、1 日之休息日。</li>
+          <li><span className="font-bold">排班限制：</span><span className="text-red-600 font-bold">不得連續工作超過 6 天</span>。</li>
+        </ul>
+      )
+    },
+    {
+      id: '2week',
+      title: '雙週變形工時',
+      color: 'bg-blue-50',
+      textColor: 'text-blue-900',
+      content: (
+        <ul className="list-disc pl-5 space-y-1 text-blue-900 mt-2">
+          <li><span className="font-bold">法源依據：</span>勞基法第 30 條第 2 項。</li>
+          <li><span className="font-bold">工時挪移：</span>可將 2 週內之 2 日正常工時 (16小時) 分配於其他工作日。分配後，每日正常工時上限提升至 10 小時。</li>
+          <li><span className="font-bold">工時上限：</span>每週總工時 (含加班) 不得超過 48 小時。</li>
+          <li><span className="font-bold">休假規定：</span>每 7 日至少 1 日例假；每 2 週內之例假及休息日至少應有 4 日。</li>
+          <li><span className="font-bold">排班限制：</span><span className="text-red-600 font-bold">不得連續工作超過 6 天</span>。</li>
+        </ul>
+      )
+    },
+    {
+      id: '4week',
+      title: '四週變形工時 (診所最常用)',
+      color: 'bg-purple-50',
+      textColor: 'text-purple-900',
+      content: (
+        <ul className="list-disc pl-5 space-y-1 text-purple-900 mt-2">
+          <li><span className="font-bold">法源依據：</span>勞基法第 30-1 條。經中央主管機關指定之行業（如醫療保健服務業）適用。</li>
+          <li><span className="font-bold">工時挪移：</span>可將 4 週內正常工時 (160小時) 自由分配。分配後，每日正常工時上限提升至 10 小時。</li>
+          <li><span className="font-bold">工時上限：</span>無單週正常工時上限。</li>
+          <li><span className="font-bold">休假規定：</span>每 2 週內至少應有 2 日之例假；每 4 週內之例假及休息日至少應有 8 日。</li>
+          <li><span className="font-bold">排班限制：</span>只要在每 2 週的頭尾排定例假，<span className="text-red-600 font-bold">最多得連續工作 12 天</span>。</li>
+        </ul>
+      )
+    },
+    {
+      id: '8week',
+      title: '八週變形工時',
+      color: 'bg-indigo-50',
+      textColor: 'text-indigo-900',
+      content: (
+        <ul className="list-disc pl-5 space-y-1 text-indigo-900 mt-2">
+          <li><span className="font-bold">法源依據：</span>勞基法第 30 條第 3 項。醫療保健服務業亦適用。</li>
+          <li><span className="font-bold">工時挪移：</span>可將 8 週內之正常工時 (320小時) 加以分配。</li>
+          <li><span className="font-bold">工時上限：</span>每日正常工時<span className="underline">不得超過 8 小時</span> (與四週變形不同)，每週正常工時不得超過 48 小時。</li>
+          <li><span className="font-bold">休假規定：</span>每 7 日中至少應有 1 日之例假；每 8 週內之例假及休息日至少應有 16 日。</li>
+          <li><span className="font-bold">排班限制：</span><span className="text-red-600 font-bold">不得連續工作超過 6 天</span>。適合淡旺季明顯、需長週期調配但每日不超時的診所。</li>
+        </ul>
+      )
+    }
+  ];
+
   return (
     <div className="max-w-6xl mx-auto p-4 animate-fade-in text-slate-800">
       
@@ -98,56 +166,29 @@ export default function LaborRulesView() {
         {/* 3. 變形工時 */}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 lg:col-span-2">
           <h3 className="text-lg font-bold flex items-center gap-2 mb-4 text-purple-700">
-            <Calendar size={20} /> 3. 變形工時排班規則 <span className="text-sm font-normal text-gray-400 ml-2">(勞基法第 30 條之 1)</span>
+            <Calendar size={20} /> 3. 各項工時制度排班規則 <span className="text-sm font-normal text-gray-400 ml-2">(點擊展開詳細說明)</span>
           </h3>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm text-left">
-              <thead className="bg-slate-100 text-slate-600 font-bold">
-                <tr>
-                  <th className="p-3 rounded-tl-lg">制度</th>
-                  <th className="p-3">適用對象</th>
-                  <th className="p-3">每日/總工時上限</th>
-                  <th className="p-3 rounded-tr-lg">休假與連鎖限制 (例假+休息日)</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                <tr>
-                  <td className="p-3 font-bold text-slate-800">正常工時</td>
-                  <td className="p-3">一般員工</td>
-                  <td className="p-3">8H / 40H (週)</td>
-                  <td className="p-3"><span className="text-red-600 font-bold">不得連續工作 &gt; 6 天</span> (每7日至少1例1休)</td>
-                </tr>
-                <tr>
-                  <td className="p-3 font-bold text-slate-800">2週變形</td>
-                  <td className="p-3">適用勞基法行業</td>
-                  <td className="p-3">10H / 80H (2週)</td>
-                  <td className="p-3"><span className="text-red-600 font-bold">不得連續工作 &gt; 6 天</span> (每2週至少2例2休)</td>
-                </tr>
-                <tr className="bg-purple-50">
-                  <td className="p-3 font-bold text-purple-900">4週變形</td>
-                  <td className="p-3 font-bold">醫療保健業 (診所)</td>
-                  <td className="p-3">10H / 160H (4週)</td>
-                  <td className="p-3"><span className="text-red-600 font-bold">不得連續工作 &gt; 12 天</span> (每2週至少2例假)</td>
-                </tr>
-                {/* 🟢 新增 八週變形工時 */}
-                <tr className="bg-indigo-50">
-                  <td className="p-3 font-bold text-indigo-900">8週變形</td>
-                  <td className="p-3 font-bold">醫療保健業 (診所)</td>
-                  <td className="p-3">8H / 320H (8週)</td>
-                  <td className="p-3"><span className="text-red-600 font-bold">不得連續工作 &gt; 6 天</span> (每8週至少8例8休)</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          {/* 🟢 新增 八週變形工時 詳細說明 */}
-          <div className="mt-4 bg-indigo-50 p-4 rounded-lg text-sm text-indigo-900 border border-indigo-200">
-            <h4 className="font-bold flex items-center gap-2 mb-2"><BookOpen size={16}/> 八週變形工時重點說明 (勞基法第 30 條第 3 項)</h4>
-            <ul className="list-disc pl-5 space-y-1">
-                <li><span className="font-bold">適用行業：</span>經中央主管機關指定之行業（如醫療保健服務業）。</li>
-                <li><span className="font-bold">工時挪移：</span>可將8週內之正常工作時數加以分配。但每日正常工時不得超過8小時，每週正常工時不得超過48小時。</li>
-                <li><span className="font-bold">休假規定：</span>每7日中至少應有1日之例假，每8週內之例假及休息日至少應有16日。</li>
-                <li><span className="font-bold">排班彈性：</span>雖然每日正常工時維持8小時上限，但可透過8週週期來調配每週工時，適合淡旺季明顯或需長週期排班之單位。</li>
-            </ul>
+          
+          <div className="space-y-3">
+            {workRules.map((rule) => (
+              <div key={rule.id} className={`border rounded-lg overflow-hidden transition-all ${rule.color} ${expandedRule === rule.id ? 'shadow-md border-slate-300' : 'border-slate-200'}`}>
+                <button 
+                  onClick={() => toggleRule(rule.id)}
+                  className="w-full p-4 flex justify-between items-center bg-white hover:bg-slate-50 transition"
+                >
+                  <span className={`font-bold ${rule.textColor} flex items-center gap-2`}>
+                    {rule.title}
+                  </span>
+                  {expandedRule === rule.id ? <ChevronUp size={20} className="text-slate-400" /> : <ChevronDown size={20} className="text-slate-400" />}
+                </button>
+                
+                {expandedRule === rule.id && (
+                  <div className={`p-4 border-t border-slate-200 text-sm ${rule.color}`}>
+                    {rule.content}
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
         </div>
 
@@ -158,7 +199,6 @@ export default function LaborRulesView() {
           </h3>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* 左邊：天數對照表 */}
             <div className="overflow-hidden rounded-lg border border-slate-200">
               <table className="w-full text-sm text-left">
                 <thead className="bg-teal-50 text-teal-900 font-bold">
@@ -178,7 +218,6 @@ export default function LaborRulesView() {
               </table>
             </div>
 
-            {/* 右邊：相關規定 */}
             <div className="space-y-4 text-sm text-slate-700">
               <div className="bg-slate-50 p-4 rounded-lg">
                 <div className="font-bold text-slate-900 mb-2 flex items-center gap-2">
@@ -225,7 +264,7 @@ export default function LaborRulesView() {
               <div className="font-bold text-yellow-800 mb-1">警告 (Warning) - 需注意</div>
               <ul className="list-disc list-inside text-yellow-700 space-y-1">
                 <li>輪班間隔 &lt; 11 小時 (勞基法第 34 條)</li>
-                <li>連續工作 4 小時無休息紀錄 (勞基法第 35 條)</li>
+                <li>勞工繼續工作 4 小時無休息紀錄 (勞基法第 35 條)</li>
                 <li>國定假日出勤未加倍薪資 (勞基法第 39 條)</li>
               </ul>
             </div>
