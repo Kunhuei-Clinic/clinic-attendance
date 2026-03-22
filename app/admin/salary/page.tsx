@@ -293,6 +293,9 @@ export default function SalaryPage() {
             : [],
           insurance_labor: s.insurance_labor || 0,
           insurance_health: s.insurance_health || 0,
+          income_type: s.income_type || 'salary',
+          enable_nhi_2nd: s.enable_nhi_2nd ?? false,
+          enable_tax_withhold: s.enable_tax_withhold ?? false,
         }));
         setStaffList(formatted);
       }
@@ -390,6 +393,15 @@ export default function SalaryPage() {
 
       const reports: any[] = [];
 
+      // 🟢 SaaS 全域法定常數 (未來可移至環境變數或系統設定)
+      const STATUTORY = {
+        nhi_2nd_rate: 0.0211,
+        nhi_2nd_threshold: 27470, // 2024 基本工資
+        tax_rate: 0.05,
+        tax_threshold_salary: 40000, // 薪資所得預扣門檻
+        tax_threshold_professional: 20000, // 執行業務所得預扣門檻
+      };
+
       staffList.forEach((staff) => {
         const myLogs =
           logs?.filter(
@@ -431,42 +443,41 @@ export default function SalaryPage() {
           tempBonus +
           calc.leave_addition;
 
-        // 應發總額 gross 算出後：二代健保 / 預扣所得稅依門檻動態計算，其餘固定扣款沿用設定金額
+        // 每月固定扣款（手動填寫金額）；二代健保／預扣稅改由下方身分開關與 STATUTORY 計算，避免重複
         const fixed_deduction_details = (staff.default_deductions || []).map(
-          (d: any) => {
-            let finalAmount = Number(d.amount) || 0;
-            const label = typeof d.name === 'string' ? d.name : '';
-
-            if (label === '二代健保' || label.includes('二代健保')) {
-              if (gross >= 27470) {
-                finalAmount = Math.round(gross * 0.0211);
-              } else {
-                finalAmount = 0;
-              }
-            }
-
-            if (label === '預扣所得稅' || label.includes('預扣所得稅')) {
-              if (gross >= 40000) {
-                finalAmount = Math.round(gross * 0.05);
-              } else {
-                finalAmount = 0;
-              }
-            }
-
-            return { name: d.name, amount: finalAmount };
-          }
+          (d: any) => ({
+            name: d.name,
+            amount: Number(d.amount) || 0,
+          })
         );
         const fixedDeduction = fixed_deduction_details.reduce(
           (sum: number, d: any) => sum + d.amount,
           0
         );
 
+        let nhi_2nd_fee = 0;
+        let tax_withheld = 0;
+
+        if (staff.enable_nhi_2nd && gross >= STATUTORY.nhi_2nd_threshold) {
+          nhi_2nd_fee = Math.round(gross * STATUTORY.nhi_2nd_rate);
+        }
+
+        const taxThreshold =
+          staff.income_type === 'professional'
+            ? STATUTORY.tax_threshold_professional
+            : STATUTORY.tax_threshold_salary;
+        if (staff.enable_tax_withhold && gross >= taxThreshold) {
+          tax_withheld = Math.round(gross * STATUTORY.tax_rate);
+        }
+
         const deduction =
           staff.insurance_labor +
           staff.insurance_health +
           fixedDeduction +
           tempDeduction +
-          calc.leave_deduction;
+          calc.leave_deduction +
+          nhi_2nd_fee +
+          tax_withheld;
 
         const net_pay = gross - deduction;
 
@@ -504,6 +515,9 @@ export default function SalaryPage() {
           insurance_health: staff.insurance_health,
           fixed_deduction_pay: fixedDeduction,
           temp_deduction_pay: tempDeduction,
+          nhi_2nd_fee,
+          tax_withheld,
+          income_type: staff.income_type || 'salary',
           gross_pay: gross,
           total_deduction: deduction,
           net_pay,

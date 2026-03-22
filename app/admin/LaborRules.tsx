@@ -79,7 +79,7 @@ export default function LaborRulesView() {
       <div className="bg-gradient-to-r from-slate-800 to-slate-700 text-white p-6 rounded-2xl shadow-lg mb-8">
         <h2 className="text-2xl font-bold flex items-center gap-3">
           <BookOpen className="text-yellow-400" />
-          勞動基準法 考勤與薪資規範 (通用版)
+          勞動基準法 考勤與薪資規範 
         </h2>
         <p className="text-slate-300 mt-2 text-sm">
           本頁面依據台灣《勞動基準法》編纂，適用於一般企業、餐飲、零售、服務業與醫療保健等行業，供排班與算薪參考。

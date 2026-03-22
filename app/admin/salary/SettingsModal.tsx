@@ -15,7 +15,10 @@ export default function SettingsModal({ staff, onClose, onSaveSuccess }: any) {
       setLocalStaff({
         ...staff,
         bonuses: staff.bonuses || [],
-        default_deductions: staff.default_deductions || []
+        default_deductions: staff.default_deductions || [],
+        income_type: staff.income_type || 'salary',
+        enable_nhi_2nd: staff.enable_nhi_2nd ?? false,
+        enable_tax_withhold: staff.enable_tax_withhold ?? false,
       });
     }
   }, [staff]);

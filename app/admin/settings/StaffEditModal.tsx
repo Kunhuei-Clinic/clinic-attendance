@@ -50,7 +50,10 @@ export default function StaffEditModal({ isOpen, onClose, initialData, onSave }:
           employment_type: 'full_time', // 預設為正職
           part_time_weekly_hours: 20,
           salary_structure_type: 'standard', salary_mode: 'hourly',
-          bonuses: [], default_deductions: []
+          bonuses: [], default_deductions: [],
+          income_type: 'salary',
+          enable_nhi_2nd: false,
+          enable_tax_withhold: false,
         });
       }
       setActiveTab('basic'); // 預設打開基本資料

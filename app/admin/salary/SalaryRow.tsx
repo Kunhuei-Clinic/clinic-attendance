@@ -424,6 +424,18 @@ export default function SalaryRow({
                     <span>健保自付:</span>
                     <span className="font-mono">${rpt.insurance_health}</span>
                   </li>
+                  {(rpt.nhi_2nd_fee ?? 0) > 0 && (
+                    <li className="flex justify-between font-bold text-red-600">
+                      <span>二代健保:</span>
+                      <span className="font-mono">-${(rpt.nhi_2nd_fee ?? 0).toLocaleString()}</span>
+                    </li>
+                  )}
+                  {(rpt.tax_withheld ?? 0) > 0 && (
+                    <li className="flex justify-between font-bold text-red-600">
+                      <span>預扣所得稅:</span>
+                      <span className="font-mono">-${(rpt.tax_withheld ?? 0).toLocaleString()}</span>
+                    </li>
+                  )}
                   <li className="flex justify-between">
                     <span>固定扣項:</span>
                     <span className="font-mono">

@@ -236,6 +236,18 @@ export function PrintContent({ report, yearMonth, clinicName }: any) {
                 <tbody>
                   <Row label="勞保自付" amount={report.insurance_labor} />
                   <Row label="健保自付" amount={report.insurance_health} />
+                  <Row
+                    label="二代健保代扣"
+                    amount={report.nhi_2nd_fee ?? 0}
+                    sub="依法代扣 2.11%"
+                    isDeduction
+                  />
+                  <Row
+                    label="預扣所得稅"
+                    amount={report.tax_withheld ?? 0}
+                    sub={report.income_type === 'professional' ? '執行業務所得(9A)' : '薪資所得(50)'}
+                    isDeduction
+                  />
                   <Row label="固定扣項" amount={report.fixed_deduction_pay} />
                   {report.fixed_deduction_details?.map((item: any, i: number) => (
                     <tr key={`fd-${i}`} className="text-xs text-slate-500">
