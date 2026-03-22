@@ -13,7 +13,7 @@ export default function LaborRulesView() {
   const workRules = [
     {
       id: 'normal',
-      title: '正常工時 (一般員工)',
+      title: '正常工時 (一般企業/多數員工)',
       color: 'bg-slate-50',
       textColor: 'text-slate-800',
       content: (
@@ -27,12 +27,12 @@ export default function LaborRulesView() {
     },
     {
       id: '2week',
-      title: '雙週變形工時',
+      title: '雙週變形工時 (製造業/批發零售等)',
       color: 'bg-blue-50',
       textColor: 'text-blue-900',
       content: (
         <ul className="list-disc pl-5 space-y-1 text-blue-900 mt-2">
-          <li><span className="font-bold">法源依據：</span>勞基法第 30 條第 2 項。</li>
+          <li><span className="font-bold">法源依據：</span>勞基法第 30 條第 2 項。需為勞動部指定適用之行業。</li>
           <li><span className="font-bold">工時挪移：</span>可將 2 週內之 2 日正常工時 (16小時) 分配於其他工作日。分配後，每日正常工時上限提升至 10 小時。</li>
           <li><span className="font-bold">工時上限：</span>每週總工時 (含加班) 不得超過 48 小時。</li>
           <li><span className="font-bold">休假規定：</span>每 7 日至少 1 日例假；每 2 週內之例假及休息日至少應有 4 日。</li>
@@ -42,31 +42,31 @@ export default function LaborRulesView() {
     },
     {
       id: '4week',
-      title: '四週變形工時 (診所最常用)',
+      title: '四週變形工時 (排班制服務業/醫療/餐飲等)',
       color: 'bg-purple-50',
       textColor: 'text-purple-900',
       content: (
         <ul className="list-disc pl-5 space-y-1 text-purple-900 mt-2">
-          <li><span className="font-bold">法源依據：</span>勞基法第 30-1 條。經中央主管機關指定之行業（如醫療保健服務業）適用。</li>
+          <li><span className="font-bold">法源依據：</span>勞基法第 30-1 條。需為勞動部指定適用之行業（如醫療保健、餐飲、保全等）。</li>
           <li><span className="font-bold">工時挪移：</span>可將 4 週內正常工時 (160小時) 自由分配。分配後，每日正常工時上限提升至 10 小時。</li>
           <li><span className="font-bold">工時上限：</span>無單週正常工時上限。</li>
           <li><span className="font-bold">休假規定：</span>每 2 週內至少應有 2 日之例假；每 4 週內之例假及休息日至少應有 8 日。</li>
-          <li><span className="font-bold">排班限制：</span>只要在每 2 週的頭尾排定例假，<span className="text-red-600 font-bold">最多得連續工作 12 天</span>。</li>
+          <li><span className="font-bold">排班限制：</span>只要在每 2 週的頭尾排定例假，<span className="text-red-600 font-bold">最多得連續工作 12 天</span>（但部分行業內規仍建議不超過連續 6 天以免過勞）。</li>
         </ul>
       )
     },
     {
       id: '8week',
-      title: '八週變形工時',
+      title: '八週變形工時 (運輸業/營造業/醫療行業等)',
       color: 'bg-indigo-50',
       textColor: 'text-indigo-900',
       content: (
         <ul className="list-disc pl-5 space-y-1 text-indigo-900 mt-2">
-          <li><span className="font-bold">法源依據：</span>勞基法第 30 條第 3 項。醫療保健服務業亦適用。</li>
+          <li><span className="font-bold">法源依據：</span>勞基法第 30 條第 3 項。需為勞動部指定適用之行業。</li>
           <li><span className="font-bold">工時挪移：</span>可將 8 週內之正常工時 (320小時) 加以分配。</li>
           <li><span className="font-bold">工時上限：</span>每日正常工時<span className="underline">不得超過 8 小時</span> (與四週變形不同)，每週正常工時不得超過 48 小時。</li>
           <li><span className="font-bold">休假規定：</span>每 7 日中至少應有 1 日之例假；每 8 週內之例假及休息日至少應有 16 日。</li>
-          <li><span className="font-bold">排班限制：</span><span className="text-red-600 font-bold">不得連續工作超過 6 天</span>。適合淡旺季明顯、需長週期調配但每日不超時的診所。</li>
+          <li><span className="font-bold">排班限制：</span><span className="text-red-600 font-bold">不得連續工作超過 6 天</span>。適合淡旺季明顯、需長週期調配但每日不超時的產業。</li>
         </ul>
       )
     }
@@ -75,14 +75,14 @@ export default function LaborRulesView() {
   return (
     <div className="max-w-6xl mx-auto p-4 animate-fade-in text-slate-800">
       
-      {/* 標題 */}
+      {/* 標題區塊 */}
       <div className="bg-gradient-to-r from-slate-800 to-slate-700 text-white p-6 rounded-2xl shadow-lg mb-8">
         <h2 className="text-2xl font-bold flex items-center gap-3">
           <BookOpen className="text-yellow-400" />
-          勞動基準法 考勤與薪資規範 (診所版)
+          勞動基準法 考勤與薪資規範 (通用版)
         </h2>
         <p className="text-slate-300 mt-2 text-sm">
-          本頁面依據台灣《勞動基準法》編纂，僅供排班與算薪參考。
+          本頁面依據台灣《勞動基準法》編纂，適用於一般企業、餐飲、零售、服務業與醫療保健等行業，供排班與算薪參考。
         </p>
       </div>
 

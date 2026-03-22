@@ -33,6 +33,17 @@ export default function SalaryPage() {
   const [selectedMonth, setSelectedMonth] = useState(
     format(new Date(), 'yyyy-MM')
   );
+
+  const handlePrevMonth = () => {
+    const d = new Date(`${selectedMonth}-01`);
+    setSelectedMonth(format(subMonths(d, 1), 'yyyy-MM'));
+  };
+
+  const handleNextMonth = () => {
+    const d = new Date(`${selectedMonth}-01`);
+    setSelectedMonth(format(addMonths(d, 1), 'yyyy-MM'));
+  };
+
   const [staffList, setStaffList] = useState<any[]>([]);
   const [liveReports, setLiveReports] = useState<any[]>([]);
   const [adjustments, setAdjustments] = useState<Record<string, any[]>>({});
@@ -848,14 +859,31 @@ export default function SalaryPage() {
               </h2>
               <div className="h-6 w-px bg-slate-300 hidden xl:block"></div>
 
-              <div className="flex items-center gap-2 bg-slate-100 p-1.5 rounded-lg border border-slate-200">
-                <Calendar size={16} className="text-slate-500 ml-1" />
+              {/* 🟢 升級：可左右切換的月份篩選器 */}
+              <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-lg border border-slate-200 text-sm animate-fade-in shadow-sm">
+                <button
+                  onClick={handlePrevMonth}
+                  className="p-1 hover:bg-slate-200 rounded transition-colors flex items-center justify-center text-slate-500 hover:text-slate-700"
+                  title="上個月"
+                  type="button"
+                >
+                  <ChevronLeft size={18} />
+                </button>
+                <span className="text-slate-500 font-bold pl-1">結算月份:</span>
                 <input
                   type="month"
                   value={selectedMonth}
                   onChange={(e) => setSelectedMonth(e.target.value)}
-                  className="bg-transparent border-none outline-none text-sm font-bold text-slate-700 cursor-pointer"
+                  className="bg-transparent border-none outline-none text-sm font-bold text-slate-800 cursor-pointer min-w-[120px] text-center"
                 />
+                <button
+                  onClick={handleNextMonth}
+                  className="p-1 hover:bg-slate-200 rounded transition-colors flex items-center justify-center text-slate-500 hover:text-slate-700"
+                  title="下個月"
+                  type="button"
+                >
+                  <ChevronRight size={18} />
+                </button>
               </div>
 
               <select
