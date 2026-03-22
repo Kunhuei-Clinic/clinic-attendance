@@ -393,14 +393,25 @@ export default function SalaryPage() {
 
       const reports: any[] = [];
 
-      // 🟢 SaaS 全域法定常數 (未來可移至環境變數或系統設定)
-      const STATUTORY = {
+      const DEFAULT_STATUTORY = {
         nhi_2nd_rate: 0.0211,
-        nhi_2nd_threshold: 27470, // 2024 基本工資
+        nhi_2nd_threshold: 27470,
         tax_rate: 0.05,
-        tax_threshold_salary: 40000, // 薪資所得預扣門檻
-        tax_threshold_professional: 20000, // 執行業務所得預扣門檻
+        tax_threshold_salary: 40000,
+        tax_threshold_professional: 20000,
       };
+      let STATUTORY = { ...DEFAULT_STATUTORY };
+      try {
+        const statRes = await fetch('/api/settings/statutory');
+        if (statRes.ok) {
+          const statJson = await statRes.json();
+          if (statJson.data && typeof statJson.data === 'object') {
+            STATUTORY = { ...DEFAULT_STATUTORY, ...statJson.data };
+          }
+        }
+      } catch {
+        // 資料表尚未建立或網路錯誤時沿用預設常數
+      }
 
       staffList.forEach((staff) => {
         const myLogs =
