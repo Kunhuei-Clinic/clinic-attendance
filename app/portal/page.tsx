@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import liff from '@line/liff';
 import { Clock, User, Lock } from 'lucide-react';
-import PortalSalaryView from './components/SalaryView';
+import PortalSalaryView from './views/PortalSalaryView';
 import BottomNav from './components/BottomNav';
 import PortalHomeView from './views/PortalHomeView';
 import PortalHistoryView from './views/PortalHistoryView';
