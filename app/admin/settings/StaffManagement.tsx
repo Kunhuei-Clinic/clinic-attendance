@@ -139,7 +139,7 @@ export default function StaffManagement() {
           <table className="w-full text-left text-sm">
             <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
               <tr>
-                <th className="p-4 w-20 text-center">狀態</th>
+                <th className="p-4 w-28 min-w-[7rem] text-center whitespace-nowrap">狀態</th>
                 <th className="p-4">姓名</th>
                 <th className="p-4">職稱</th>
                 <th className="p-4">到職日</th>
@@ -161,16 +161,21 @@ export default function StaffManagement() {
                       !staff.is_active ? 'bg-gray-100/80 grayscale opacity-70' : ''
                     }`}
                   >
-                    <td className="p-3">
-                      <div className="flex items-center gap-2">
-                        <span className={`px-2 py-1 rounded text-xs font-bold ${
-                          staff.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                        }`}>
+                    {/* 🟢 調整：加上 w-28 固定寬度與 whitespace-nowrap 防止標籤換行擠壓 */}
+                    <td className="p-3 w-28 whitespace-nowrap">
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className={`px-2 py-1 rounded text-xs font-bold ${
+                            staff.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                          }`}
+                        >
                           {staff.is_active ? '在職' : '離職'}
                         </span>
-                        {/* 🟢 新增：兼職小標籤 */}
                         {staff.employment_type === 'part_time' && (
-                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-orange-700 border border-orange-200" title="兼職 (部分工時)">
+                          <span
+                            className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-orange-700 border border-orange-200"
+                            title="兼職 (部分工時)"
+                          >
                             兼
                           </span>
                         )}
