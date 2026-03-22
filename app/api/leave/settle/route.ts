@@ -57,6 +57,9 @@ export async function POST(request: NextRequest) {
     }
 
     // 2. 自動化：將結算金額同步寫入當月薪資單的「加給項目」(salary_adjustments)
+    // year_month 必須為 YYYY-MM（與 /api/salary/adjustments、薪資頁 selectedMonth 一致）
+    let salaryAdjustmentSynced = false;
+    let salaryAdjustmentError: string | null = null;
     if (amount && amount > 0) {
       const { error: adjError } = await supabaseAdmin
         .from('salary_adjustments')
@@ -65,19 +68,28 @@ export async function POST(request: NextRequest) {
           clinic_id: clinicId,
           year_month: pay_month,
           type: 'bonus', // 標記為加項
-          name: `特休結算 (${days}天)`,
+          name: `當月補特休假獎金（特休結算 ${days}天）`,
           amount: Math.round(amount)
         });
 
       if (adjError) {
         console.error('[Settle API] 同步至薪資單失敗:', adjError);
-        // 注意：這裡不 throw error，避免薪資單連動失敗導致結算流程中斷
+        salaryAdjustmentError = adjError.message || 'salary_adjustments 寫入失敗';
+        // 注意：不 throw，結算紀錄已寫入；前端可提示使用者手動補登加給
+      } else {
+        salaryAdjustmentSynced = true;
       }
     }
 
     return NextResponse.json({
       success: true,
-      message: '結算完成，並已同步至當月薪資單'
+      message: salaryAdjustmentSynced
+        ? '結算完成，並已同步至當月薪資單'
+        : amount && amount > 0
+          ? '結算紀錄已建立，但變動獎金未寫入薪資加給，請查看訊息或手動補登'
+          : '結算完成（試算金額為 0，未寫入變動獎金）',
+      salary_adjustment_synced: salaryAdjustmentSynced,
+      salary_adjustment_error: salaryAdjustmentError
     });
   } catch (error: any) {
     console.error('[Settle API] Error:', error);

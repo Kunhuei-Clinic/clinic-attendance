@@ -280,7 +280,16 @@ export default function LeaveHistoryModal({
 
       const result = await response.json();
       if (result.success) {
-        alert('✅ 結算紀錄已建立，並已連動至當月薪資單！');
+        const msg =
+          result.message ||
+          (result.salary_adjustment_synced
+            ? '✅ 結算紀錄已建立，並已連動至當月薪資變動獎金！'
+            : '結算紀錄已建立');
+        alert(
+          result.salary_adjustment_error
+            ? `${msg}\n\n薪資加給同步：${result.salary_adjustment_error}`
+            : msg
+        );
         setShowSettleModal(false);
         setSelectedYearForSettle(null);
         // 重新載入摘要資料
@@ -687,7 +696,10 @@ export default function LeaveHistoryModal({
           }}
           onSubmit={handleSettle}
           defaultDays={selectedYearForSettle.balance}
-          defaultPayMonth={`${selectedYearForSettle.year}-${new Date().toISOString().slice(5, 7)}`}
+          defaultPayMonth={(() => {
+            const d = new Date();
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+          })()}
           targetYear={String(selectedYearForSettle.year)}
           maxDays={selectedYearForSettle.balance}
         />
