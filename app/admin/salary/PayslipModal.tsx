@@ -172,7 +172,7 @@ export function PrintContent({ report, yearMonth, clinicName }: any) {
                   {report.salary_mode === 'hourly' ? (
                     <>
                       <Row label="總計工時本薪" amount={report.base_pay} sub={`${report.total_work_hours ?? 0}hr (時薪 $${Math.round(report.base_pay / (report.total_work_hours || 1))})`} />
-                      {(report.ot_pay > 0) && <Row label="加班費加成" amount={report.ot_pay} sub={`1.34 (${total134}hr) / 1.67 (${total167}hr)`} />}
+                      {(report.ot_pay > 0) && <Row label="加班費加成 (Premium)" amount={report.ot_pay} sub={`+34% (${total134}hr) / +67% (${total167}hr)`} />}
                       {(report.holiday_pay > 0) && <Row label="國定假日加成" amount={report.holiday_pay} sub={`${holidayDates} (共 ${holidayHours}hr)`} />}
                     </>
                   ) : (
@@ -309,8 +309,8 @@ export function PrintContent({ report, yearMonth, clinicName }: any) {
                 <th className="p-1.5 text-left">打卡時間</th>
                 <th className="p-1.5 text-center">總計</th>
                 <th className="p-1.5 text-center bg-blue-50">正常</th>
-                <th className="p-1.5 text-center bg-orange-50 text-orange-700">x1.34</th>
-                <th className="p-1.5 text-center bg-orange-50 text-orange-700">x1.67</th>
+                <th className="p-1 text-center bg-orange-50 text-orange-700 print:bg-white print:text-black" title="前兩小時加班">延長(+34%)</th>
+                <th className="p-1 text-center bg-orange-50 text-orange-700 print:bg-white print:text-black" title="後兩小時加班">延長(+67%)</th>
                 <th className="p-1.5 text-left">備註</th>
               </tr>
             </thead>
